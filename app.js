@@ -16,6 +16,12 @@ let appState = {
 let mapInstance = null;
 let mapMarkers = [];
 
+// Signature drawing state
+let signaturePadCanvas = null;
+let signaturePadCtx = null;
+let isDrawingSignature = false;
+let isSignatureCanvasDrawn = false;
+
 // DOM Elements
 const elements = {
     corsToggle: document.getElementById('cors-toggle'),
@@ -72,7 +78,9 @@ const elements = {
     decisionMakerNotAvailable: document.getElementById('decision_maker_or_responsible_person_not_available'),
     detailHeaderCard: document.getElementById('detail-header-card'),
     detailIdVal: document.getElementById('detail-id-val'),
-    detailTitleVal: document.getElementById('detail-title-val')
+    detailTitleVal: document.getElementById('detail-title-val'),
+    signaturePad: document.getElementById('signature-pad'),
+    clearSignatureBtn: document.getElementById('clear-signature-btn')
 };
 
 // Initialize Application
@@ -433,6 +441,9 @@ function prepareDetailForm() {
     appState.currentImageBase64 = null;
     resetImagePreview();
     
+    // Setup signature canvas
+    initSignaturePad();
+    
     if (item) {
         // Edit Mode
         elements.detailIdVal.innerText = item.name.toUpperCase();
@@ -478,6 +489,19 @@ function prepareDetailForm() {
             // Check if full path or relative path
             const fullImgPath = item.picture.startsWith('http') ? item.picture : `${appState.apiBaseUrl}${item.picture}`;
             displayImagePreview(fullImgPath);
+        }
+        
+        // Signature display
+        if (item.signature) {
+            const img = new Image();
+            img.onload = function() {
+                signaturePadCtx.clearRect(0, 0, signaturePadCanvas.width, signaturePadCanvas.height);
+                signaturePadCtx.drawImage(img, 0, 0, signaturePadCanvas.width, signaturePadCanvas.height);
+                isSignatureCanvasDrawn = true;
+            };
+            img.src = item.signature.startsWith('data:') || item.signature.startsWith('http') 
+                ? item.signature 
+                : `${appState.apiBaseUrl}${item.signature}`;
         }
     } else {
         // Create Mode
@@ -550,6 +574,7 @@ async function saveEngagement() {
         decision_maker_or_responsible_person_not_available: elements.decisionMakerNotAvailable.checked ? 1 : 0,
         latitude: appState.currentLocation.lat || null,
         longitude: appState.currentLocation.lng || null,
+        signature: isSignatureCanvasDrawn ? signaturePadCanvas.toDataURL('image/png') : null
     };
 
     if (appState.currentImageBase64) {
@@ -787,4 +812,66 @@ async function updateLiveRecord(name, payload) {
     });
     if (!response.ok) throw new Error('Update call failed');
     return response.json();
+}
+
+// Signature Pad Canvas drawing logic
+function initSignaturePad() {
+    signaturePadCanvas = elements.signaturePad;
+    if (!signaturePadCanvas) return;
+    signaturePadCtx = signaturePadCanvas.getContext('2d');
+    
+    // Match dimensions to client display layout container
+    signaturePadCanvas.width = signaturePadCanvas.parentElement.clientWidth || 350;
+    signaturePadCanvas.height = 120;
+    
+    signaturePadCtx.strokeStyle = '#5856d6';
+    signaturePadCtx.lineWidth = 3;
+    signaturePadCtx.lineCap = 'round';
+    isSignatureCanvasDrawn = false;
+    
+    // Clear button event listener
+    elements.clearSignatureBtn.onclick = (e) => {
+        e.preventDefault();
+        signaturePadCtx.clearRect(0, 0, signaturePadCanvas.width, signaturePadCanvas.height);
+        isSignatureCanvasDrawn = false;
+    };
+    
+    // Drawing handlers
+    const getCoordinates = (e) => {
+        const rect = signaturePadCanvas.getBoundingClientRect();
+        return {
+            x: (e.clientX || e.touches[0].clientX) - rect.left,
+            y: (e.clientY || e.touches[0].clientY) - rect.top
+        };
+    };
+    
+    const startDraw = (e) => {
+        isDrawingSignature = true;
+        const coords = getCoordinates(e);
+        signaturePadCtx.beginPath();
+        signaturePadCtx.moveTo(coords.x, coords.y);
+    };
+    
+    const drawMove = (e) => {
+        if (!isDrawingSignature) return;
+        if (e.cancelable) e.preventDefault(); // prevent touch drag scroll
+        const coords = getCoordinates(e);
+        signaturePadCtx.lineTo(coords.x, coords.y);
+        signaturePadCtx.stroke();
+        isSignatureCanvasDrawn = true;
+    };
+    
+    const endDraw = () => {
+        isDrawingSignature = false;
+    };
+    
+    // Register events
+    signaturePadCanvas.onmousedown = startDraw;
+    signaturePadCanvas.onmousemove = drawMove;
+    signaturePadCanvas.onmouseup = endDraw;
+    signaturePadCanvas.onmouseleave = endDraw;
+    
+    signaturePadCanvas.ontouchstart = startDraw;
+    signaturePadCanvas.ontouchmove = drawMove;
+    signaturePadCanvas.ontouchend = endDraw;
 }

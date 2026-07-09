@@ -178,6 +178,16 @@
                     </div>
 
                     <div class="form-group">
+                        <label>Signature</label>
+                        <div style="background: var(--bg-input); border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; position: relative; height: 120px;">
+                            <canvas id="signature-pad" style="display: block; cursor: crosshair; background: #222;"></canvas>
+                            <button type="button" class="btn btn-secondary" id="clear-signature-btn" style="position: absolute; bottom: 8px; right: 8px; padding: 4px 8px; font-size: 0.75rem; width: auto; height: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.5);">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
                         <label>Sales Rep</label>
                         <select id="sales_rep" class="input-control" required>
                             <option value="">Select Rep...</option>
