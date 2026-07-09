@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP Profiling - COREnergy Engagement Test Environment</title>
+    
+    <!-- PWA Manifest & Styles -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#5856d6">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app-container">
+    <!-- Left Instructions Panel -->
+    <div class="info-panel">
+        <span class="info-badge">MCP Test Environment</span>
+        <h1>HCP Profiling Web App</h1>
+        <p>This interactive preview simulates a mobile device running the Flutter application. It runs directly in the browser and connects with the live ERPNext API.</p>
+        
+        <div class="credential-box">
+            <h3>🔑 API Test Credentials</h3>
+            <div style="margin-top: 10px;"><strong>Host:</strong> dev.pmii-marketing.com</div>
+            <div><strong>User:</strong> jptan@profinsights.biz</div>
+            <div><strong>Password:</strong> UEPCS101c!</div>
+        </div>
+
+        <p><strong>Note:</strong> Due to web browser security (CORS), requests to the live ERPNext server may be blocked in a local environment. Switch the bypass toggle below to use the built-in mock database representing real ERPNext records.</p>
+        
+        <div class="toggle-container">
+            <div>
+                <strong id="mode-text">Mock Data Mode</strong>
+                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;" id="mode-subtext">Running on cached records.</div>
+            </div>
+            <label class="switch">
+                <input type="checkbox" id="cors-toggle">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <!-- Right Phone Device -->
+    <div class="phone-wrapper">
+        <div class="phone-island"></div>
+        <div class="phone-home-indicator"></div>
+        
+        <div class="phone-screen">
+            <!-- Screen Header -->
+            <div class="screen-header" id="app-header" style="display: none;">
+                <button class="header-action" id="header-back" style="visibility: hidden;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    Back
+                </button>
+                <h2 id="header-title">MCP Profiling</h2>
+                <button class="header-action" id="header-save" style="visibility: hidden;">
+                    Save
+                </button>
+            </div>
+
+            <!-- Screen 1: Login Screen -->
+            <div class="screen active" id="screen-login">
+                <div class="login-container">
+                    <div class="brand-section">
+                        <div class="brand-logo">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12,6A6,6 0 0,0 6,12A6,6 0 0,0 12,18A6,6 0 0,0 18,12A6,6 0 0,0 12,6M12,8A4,4 0 0,1 16,12A4,4 0 0,1 12,16A4,4 0 0,1 8,12A4,4 0 0,1 12,8Z" />
+                            </svg>
+                        </div>
+                        <h1>ERPNext v15</h1>
+                        <p>Successful COREnergy Engagement</p>
+                    </div>
+
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label>Username</label>
+                            <div class="input-wrapper">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                                <input type="email" id="login-username" class="input-control" value="jptan@profinsights.biz" required>
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 25px;">
+                            <label>Password</label>
+                            <div class="input-wrapper">
+                                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                                <input type="password" id="login-password" class="input-control" value="UEPCS101c!" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn" id="login-btn">
+                            <span>Login to Environment</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Screen 2: List Screen -->
+            <div class="screen" id="screen-list">
+                <div class="search-filter-section">
+                    <div class="input-wrapper">
+                        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <input type="text" id="search-input" class="input-control" placeholder="Search by ID or Location...">
+                    </div>
+                    <div class="filter-row">
+                        <select id="filter-salesrep" class="filter-select">
+                            <option value="">All Sales Reps</option>
+                        </select>
+                        <select id="filter-status" class="filter-select">
+                            <option value="">All Statuses</option>
+                            <option value="successful">Successful</option>
+                            <option value="unsuccessful">Unsuccessful</option>
+                        </select>
+                    </div>
+                    <div class="api-status-indicator">
+                        <span class="status-dot online" id="status-dot"></span>
+                        <span id="status-text">Connected to Mock Data</span>
+                    </div>
+                </div>
+
+                <div class="records-list" id="records-list-container">
+                    <!-- Cards will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Screen 3: Detail Screen / Add Screen -->
+            <div class="screen" id="screen-detail">
+                <form id="engagement-form" class="detail-form">
+                    <div class="detail-header-card" id="detail-header-card">
+                        <div class="detail-id-label" id="detail-id-val">NEW REGISTRATION</div>
+                        <div class="detail-title-label" id="detail-title-val">Create Engagement</div>
+                    </div>
+
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="unsuccessful_call">
+                        <label for="unsuccessful_call">Unsuccessful Call</label>
+                    </div>
+
+                    <!-- Appears only if Unsuccessful Call is checked -->
+                    <div class="form-group" id="reason-unsuccessful-group" style="display: none;">
+                        <label>Reason for Unsuccessful Call</label>
+                        <select id="reason_for_unsuccessful_call" class="input-control">
+                            <option value="">Select Reason...</option>
+                            <option value="Company moved to different address">Company moved to different address</option>
+                            <option value="Prior appointment or letter needed">Prior appointment or letter needed</option>
+                            <option value="Decision maker not available">Decision maker not available</option>
+                            <option value="Closed / No longer in operations">Closed / No longer in operations</option>
+                            <option value="Refused to entertain">Refused to entertain</option>
+                            <option value="Other">Other Reason</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Company / Institution</label>
+                        <select id="company" class="input-control" required>
+                            <option value="">Select Company...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Picture</label>
+                        <div class="picture-uploader" id="picture-uploader-btn">
+                            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            <span id="uploader-label" style="font-size: 0.9rem; color: var(--text-muted);">Attach geotagged photo</span>
+                            <input type="file" id="picture-input" accept="image/*" style="display: none;">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Location Coordinates</label>
+                        <button type="button" class="btn btn-secondary" id="location-fetch-btn" style="padding: 10px; font-size: 0.9rem;">
+                            <svg style="width:16px;height:16px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                            Get Current Location
+                        </button>
+                        <div class="location-coord-box" id="location-display">
+                            <div>Lat: Not set</div>
+                            <div>Lng: Not set</div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Sales Rep</label>
+                        <select id="sales_rep" class="input-control" required>
+                            <option value="">Select Rep...</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>First Name</label>
+                        <input type="text" id="contact" class="input-control" placeholder="Contact First Name">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Last Name</label>
+                        <input type="text" id="last_name" class="input-control" placeholder="Contact Last Name">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Position or Role</label>
+                        <input type="text" id="position_or_role" class="input-control" placeholder="e.g. Procurement, MD">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Email Address</label>
+                        <input type="email" id="email_address" class="input-control" placeholder="name@company.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Contact Number</label>
+                        <input type="tel" id="contact_number" class="input-control" placeholder="e.g. +639170000000">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Date and Time of Sales Appointment</label>
+                        <input type="datetime-local" id="date_and_time_of_sales_appointment" class="input-control">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Timezone: Asia/Manila</div>
+                    </div>
+
+                    <div class="checkbox-group" style="margin-bottom: 20px;">
+                        <input type="checkbox" id="decision_maker_or_responsible_person_not_available">
+                        <label for="decision_maker_or_responsible_person_not_available">Decision maker or responsible person not available</label>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Screen 4: Map View Screen -->
+            <div class="screen" id="screen-map" style="padding: 0;">
+                <div id="map-container" class="map-canvas"></div>
+            </div>
+
+            <!-- Toast Messages Popup -->
+            <div class="toast-msg" id="toast-message">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span id="toast-text">Message goes here</span>
+            </div>
+
+            <!-- Bottom Nav Bar -->
+            <div class="bottom-nav" id="app-nav">
+                <div class="nav-tab active" id="tab-list">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+                    List
+                </div>
+                <div class="nav-tab" id="tab-map">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+                    Map
+                </div>
+                <div class="nav-tab" id="tab-add">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                    New Call
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Load mock data first, then Leaflet map library, then app logic -->
+<script src="mock_data.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script src="app.js"></script>
+<script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Service Worker registered successfully'))
+                .catch(err => console.error('Service Worker registration failed:', err));
+        });
+    }
+</script>
+</body>
+</html>
