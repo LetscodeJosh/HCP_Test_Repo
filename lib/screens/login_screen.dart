@@ -94,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   // App Titles
                   const Text(
                     'PIMS MCP',
-                    textAlign: Center,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 28,
@@ -105,7 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 6),
                   const Text(
                     'Successful COREnergy Engagement',
-                    textAlign: Center,
+                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: Color(0xFF8E8E93),
                       fontSize: 14,
@@ -213,7 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   if (_errorMessage != null) ...[
                     Text(
                       _errorMessage!,
-                      textAlign: Center,
+                      textAlign: TextAlign.center,
                       style: const TextStyle(color: Colors.redAccent, fontSize: 13),
                     ),
                     const SizedBox(height: 16),

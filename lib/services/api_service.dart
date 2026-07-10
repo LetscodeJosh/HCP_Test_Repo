@@ -5,6 +5,7 @@ import '../models/engagement.dart';
 class ApiService {
   final String baseUrl = 'https://dev.pmii-marketing.com';
   String? _sessionCookie;
+  String? loggedInEmail;
 
   bool get isAuthenticated => _sessionCookie != null;
 
@@ -25,20 +26,23 @@ class ApiService {
     final url = Uri.parse('$baseUrl/api/method/login');
     try {
       final response = await http.post(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        body: jsonEncode({
-          'usr': username,
-          'pwd': password,
-        }),
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'usr': username,
+            'pwd': password,
+          }),
       );
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         if (body['message'] == 'Logged In') {
+          // Store username as the logged-in email
+          loggedInEmail = username.trim();
+          
           // Parse cookie header to persist session (e.g. sid=xxxxxx)
           final rawCookie = response.headers['set-cookie'];
           if (rawCookie != null) {
@@ -61,6 +65,7 @@ class ApiService {
   /// Log out
   void logout() {
     _sessionCookie = null;
+    loggedInEmail = null;
   }
 
   /// Retrieve list of COREnergy engagements

@@ -29,6 +29,8 @@ class _ListScreenState extends State<ListScreen> {
   @override
   void initState() {
     super.initState();
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    _selectedSalesRep = apiService.loggedInEmail;
     _loadData();
   }
 
@@ -117,7 +119,7 @@ class _ListScreenState extends State<ListScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF121214),
       appBar: AppBar(
-        title: Text(_currentTabIndex == 0 ? 'COREnergy Engagement' : 'Coverage Map'),
+        title: Text(_currentTabIndex == 0 ? 'PIMS MCP' : 'Coverage Map'),
         backgroundColor: const Color(0xFF1C1C1E),
         elevation: 0,
         actions: [
@@ -324,7 +326,7 @@ class _ListScreenState extends State<ListScreen> {
                         borderRadius: BorderRadius.circular(16),
                         side: const BorderSide(color: Color(0xFF38383A)),
                       ),
-                      margin: const EdgeInsets.bottom(12),
+                      margin: const EdgeInsets.only(bottom: 12),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(16),
                         onTap: () async {
