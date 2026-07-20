@@ -100,8 +100,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         // Match active survey matching medrep's program
         if (templates.isNotEmpty) {
           _activeSurvey = templates.firstWhere(
-            (t) => t.isActive,
-            orElse: () => templates.first,
+            (t) => t.isActive && (t.accountOrProgram == apiService.selectedProgram || t.templateName.contains(apiService.selectedProgram)),
+            orElse: () => templates.firstWhere((t) => t.isActive, orElse: () => templates.first),
           );
           // Pre-populate survey answers map
           for (var q in _activeSurvey!.questions) {
@@ -206,6 +206,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       cityMunicipality: _selectedCity,
       barangayName: _selectedBarangay,
       institution: _selectedInstitution,
+      accountOrProgram: apiService.selectedProgram,
       surveyTemplate: _activeSurvey?.name,
       surveyTemplateTitle: _activeSurvey?.templateName,
       answers: answersList,
@@ -262,9 +263,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           return AlertDialog(
-            backgroundColor: const Color(0xFF1C1C1E),
+            backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Mandatory profile update waiver', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            title: const Text('Mandatory profile update waiver', style: TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold)),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -272,15 +273,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   const Text(
                     'You are editing an existing doctor\'s master profile details (workplaces, specializations, or contact details).\n\n'
                     'By signing below, the doctor confirms that all edited details are accurate and gives explicit consent to save these changes to the master list records.',
-                    style: TextStyle(color: Colors.white70, fontSize: 13),
+                    style: TextStyle(color: Color(0xFF636366), fontSize: 13),
                   ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
                       Checkbox(
-                        activeColor: const Color(0xFF5856D6),
+                        activeColor: const Color(0xFF0056B3),
                         checkColor: Colors.white,
-                        side: const BorderSide(color: Colors.white30),
+                        side: const BorderSide(color: Color(0xFF8E8E93)),
                         value: agreed,
                         onChanged: (val) {
                           setModalState(() {
@@ -291,21 +292,21 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       const Expanded(
                         child: Text(
                           'Dr. explicitly waives and confirms the changes.',
-                          style: TextStyle(color: Colors.white, fontSize: 13),
+                          style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 13),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  const Text('Waiver Signature:', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  const Text('Waiver Signature:', style: TextStyle(color: Color(0xFF636366), fontSize: 12)),
                   const SizedBox(height: 6),
                   Container(
                     height: 120,
                     width: double.infinity,
                     decoration: BoxDecoration(
-                      color: Colors.black,
+                      color: Colors.white,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white12),
+                      border: Border.all(color: const Color(0xFFD1D1D6)),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(8),
@@ -321,7 +322,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             _waiverSignaturePoints.value = [];
                           });
                         },
-                        child: const Text('Clear Signature', style: TextStyle(color: Color(0xFFE45656), fontSize: 11)),
+                        child: const Text('Clear Signature', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 11)),
                       ),
                     ],
                   ),
@@ -331,12 +332,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFF636366))),
               ),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5856D6),
-                  disabledBackgroundColor: const Color(0xFF2C2C2E),
+                  backgroundColor: const Color(0xFF0056B3),
+                  disabledBackgroundColor: const Color(0xFF0056B3).withValues(alpha: 0.5),
                 ),
                 onPressed: agreed && _waiverSignaturePoints.value.isNotEmpty
                     ? () => Navigator.pop(ctx, true)
@@ -358,22 +359,92 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     Navigator.pop(context);
   }
 
+  Widget _buildStepIndicator() {
+    return Container(
+      color: Colors.white,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: Color(0xFFE5E5EA))),
+      ),
+      child: Row(
+        children: List.generate(4, (index) {
+          final isCompleted = index < _currentStep;
+          final isActive = index == _currentStep;
+          
+          return Expanded(
+            child: Row(
+              children: [
+                // Step Circle
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: isActive 
+                        ? const Color(0xFF0056B3) 
+                        : (isCompleted ? const Color(0xFF34C759) : Colors.white),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isActive || isCompleted
+                          ? Colors.transparent
+                          : const Color(0xFFD1D1D6),
+                      width: 2,
+                    ),
+                  ),
+                  child: Center(
+                    child: isCompleted
+                        ? const Icon(Icons.check, size: 16, color: Colors.white)
+                        : Text(
+                            '${index + 1}',
+                            style: TextStyle(
+                              color: isActive ? Colors.white : const Color(0xFF8E8E93),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                  ),
+                ),
+                // Connecting line
+                if (index < 3)
+                  Expanded(
+                    child: Container(
+                      height: 3,
+                      margin: const EdgeInsets.symmetric(horizontal: 8),
+                      color: isCompleted
+                          ? const Color(0xFF34C759)
+                          : const Color(0xFFE5E5EA),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121214),
+      backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: Text('HCP Profiling - Step ${_currentStep + 1} of 4'),
-        backgroundColor: const Color(0xFF1C1C1E),
+        title: const Text('HCP Profiling Wizard'),
+        backgroundColor: const Color(0xFF0056B3),
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF5856D6)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056B3)),
               ),
             )
-          : _buildCurrentStepBody(),
+          : Column(
+              children: [
+                _buildStepIndicator(),
+                Expanded(child: _buildCurrentStepBody()),
+              ],
+            ),
       bottomNavigationBar: _buildBottomNav(),
     );
   }
@@ -399,30 +470,76 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Title matching ERPNext
           const Text(
-            'Obtain Mandatory Consent',
-            style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            'PRIVACY NOTICE AND CONSENT',
+            style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
+          const Text(
+            'Please read the agreement carefully and then sign or take a group photo as proof of consent.',
+            style: TextStyle(color: Color(0xFF636366), fontSize: 14, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 16),
+          // Full consent text container matching the ERPNext DocType
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF2C2C2E)),
+              border: Border.all(color: const Color(0xFFD1D1D6)),
             ),
-            child: const Text(
-              'By signing this, the Doctor/HCP agrees to share their professional details, contact information, workplaces, and feedback regarding PIMS product lines. All data will be processed securely in compliance with the Data Privacy Act of 2012 and stored in the central database.',
-              style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: const [
+                Text(
+                  'I agree that PROFESSIONAL INSIGHTS MARKETING SERVICES (PIMS), including its contracted third parties to contact me through the Contact Details that I provided to PIMS and/or its authorized representative(s) and to collect, store, process and share with PIMS contracted third parties, my Contact Details and my Professional Details for as long as reasonably necessary for the fulfillment of the said purposes:',
+                  style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 13, height: 1.6),
+                ),
+                SizedBox(height: 12),
+                Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: Text(
+                    'a. to communicate with me in the manner preferred by PIMS, including through PIMS PROFESSIONAL HEALTH SPECIALISTS REPRESENTATIVES, websites, email, call centers, postal mail, webcasts, and other channels\n\n'
+                    'b. to provide me with information that I have requested, including scientific data, promotional and marketing communications and/or other information about PIMS products, services and activities\n\n'
+                    'c. to plan and implement PIMS promotional activities directed to me, including identifying topics and activities that may be of interest to me\n\n'
+                    'd. to respond to my requests or queries or to seek my views, on PIMS products, services, and activities\n\n'
+                    'e. to improve PIMS level of service and the content of its communications\n\n'
+                    'f. for PIMS own administrative and quality assurance purposes\n\n'
+                    'g. any other purpose that is related to the above list of purposes.',
+                    style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 13, height: 1.5),
+                  ),
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'I further acknowledge that I may obtain more information on the processing by PIMS of my Contact Details and Professional Details by accessing PIMS Privacy Statement at http://pims-marketing.com/privacy',
+                  style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 13, height: 1.5),
+                ),
+                SizedBox(height: 12),
+                Padding(
+                  padding: EdgeInsets.only(left: 16),
+                  child: Text(
+                    '1. Contact Details: my name, contact number, email address, office address, and office number\n\n'
+                    '2. Professional Details: such as my PRC number, professional associations, and medical specialties',
+                    style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 13, height: 1.5),
+                  ),
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'Note: PIMS is registered with the National Privacy Commission. All Data and Personal Details voluntarily provided by data subject are protected under the Data Privacy Act.',
+                  style: TextStyle(color: Color(0xFF636366), fontSize: 12, height: 1.5, fontStyle: FontStyle.italic),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 20),
+          // Consent checkbox
           Row(
             children: [
               Checkbox(
-                activeColor: const Color(0xFF5856D6),
+                activeColor: const Color(0xFF0056B3),
                 checkColor: Colors.white,
-                side: const BorderSide(color: Colors.white30),
+                side: const BorderSide(color: Color(0xFF8E8E93)),
                 value: _consentGiven,
                 onChanged: (val) {
                   setState(() {
@@ -432,22 +549,22 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ),
               const Expanded(
                 child: Text(
-                  'The Doctor gives verbal/written consent.',
-                  style: TextStyle(color: Colors.white, fontSize: 14),
+                  'I understand and agree to the privacy notice above.',
+                  style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
-          const Text('Doctor Signature', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+          const Text('Doctor Signature', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Container(
             height: 160,
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.black,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF2C2C2E)),
+              border: Border.all(color: const Color(0xFFD1D1D6)),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
@@ -463,12 +580,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     _signaturePoints.value = [];
                   });
                 },
-                child: const Text('Clear Signature', style: TextStyle(color: Color(0xFFE45656))),
+                child: const Text('Clear Signature', style: TextStyle(color: Color(0xFFFF3B30))),
               ),
             ],
           ),
-          const Divider(color: Color(0xFF2C2C2E), height: 32),
-          const Text('Proof of Engagement / Meeting Photo', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+          const Divider(color: Color(0xFFD1D1D6), height: 32),
+          const Text('Proof of Engagement / Meeting Photo', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 14, fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           _consentPhotoFile != null
               ? ClipRRect(
@@ -482,12 +599,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 )
               : OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFF2C2C2E)),
+                    side: const BorderSide(color: Color(0xFF0056B3)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
                   ),
-                  icon: const Icon(Icons.camera_alt, color: Colors.white),
-                  label: const Text('Capture Meeting Photo', style: TextStyle(color: Colors.white)),
+                  icon: const Icon(Icons.camera_alt, color: Color(0xFF0056B3)),
+                  label: const Text('Capture Meeting Photo', style: TextStyle(color: Color(0xFF0056B3))),
                   onPressed: _capturePhoto,
                 ),
         ],
@@ -508,18 +625,19 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         children: [
           const Text(
             'Workplace & Geography',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           // Region Selector
           DropdownButtonFormField<String>(
             value: _selectedRegion,
-            dropdownColor: const Color(0xFF1C1C1E),
-            style: const TextStyle(color: Colors.white),
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Color(0xFF1C1C1E)),
             decoration: const InputDecoration(
               labelText: 'Region',
-              labelStyle: TextStyle(color: Colors.white54),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              labelStyle: TextStyle(color: Color(0xFF636366)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
             ),
             items: regionList.map((r) => DropdownMenuItem(value: r.name, child: Text(r.locationLabel))).toList(),
             onChanged: (val) {
@@ -535,12 +653,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           // Province Selector
           DropdownButtonFormField<String>(
             value: _selectedProvince,
-            dropdownColor: const Color(0xFF1C1C1E),
-            style: const TextStyle(color: Colors.white),
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Color(0xFF1C1C1E)),
             decoration: const InputDecoration(
               labelText: 'Province',
-              labelStyle: TextStyle(color: Colors.white54),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              labelStyle: TextStyle(color: Color(0xFF636366)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
             ),
             items: provinceList.map((p) => DropdownMenuItem(value: p.name, child: Text(p.locationLabel))).toList(),
             onChanged: (val) {
@@ -555,12 +674,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           // City Selector
           DropdownButtonFormField<String>(
             value: _selectedCity,
-            dropdownColor: const Color(0xFF1C1C1E),
-            style: const TextStyle(color: Colors.white),
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Color(0xFF1C1C1E)),
             decoration: const InputDecoration(
               labelText: 'City/Municipality',
-              labelStyle: TextStyle(color: Colors.white54),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              labelStyle: TextStyle(color: Color(0xFF636366)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
             ),
             items: cityList.map((c) => DropdownMenuItem(value: c.name, child: Text(c.locationLabel))).toList(),
             onChanged: (val) {
@@ -574,12 +694,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           // Barangay Selector
           DropdownButtonFormField<String>(
             value: _selectedBarangay,
-            dropdownColor: const Color(0xFF1C1C1E),
-            style: const TextStyle(color: Colors.white),
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Color(0xFF1C1C1E)),
             decoration: const InputDecoration(
               labelText: 'Barangay',
-              labelStyle: TextStyle(color: Colors.white54),
-              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+              labelStyle: TextStyle(color: Color(0xFF636366)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
             ),
             items: barangayList.map((b) => DropdownMenuItem(value: b.name, child: Text(b.locationLabel))).toList(),
             onChanged: (val) {
@@ -588,12 +709,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               });
             },
           ),
-          const Divider(color: Color(0xFF2C2C2E), height: 32),
+          const Divider(color: Color(0xFFD1D1D6), height: 32),
           // workplaces section
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Hospitals / Workplaces', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('Hospitals / Workplaces', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 16, fontWeight: FontWeight.bold)),
               IconButton(
                 icon: const Icon(Icons.add_circle, color: Color(0xFF34C759)),
                 onPressed: _showAddWorkplaceSelector,
@@ -602,20 +723,25 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           ),
           const SizedBox(height: 8),
           if (_selectedWorkplaces.isEmpty)
-            const Text('No workplaces linked. Click the button above to link hospitals.', style: TextStyle(color: Colors.white38, fontSize: 13))
+            const Text('No workplaces linked. Click the button above to link hospitals.', style: TextStyle(color: Color(0xFF636366), fontSize: 13))
           else
             ..._selectedWorkplaces.asMap().entries.map((entry) {
               final idx = entry.key;
               final workplace = entry.value;
               final nameMatch = _institutions.firstWhere((i) => i.name == workplace.workplace, orElse: () => Institution(name: workplace.workplace, institutionName: workplace.workplace));
               return Card(
-                color: const Color(0xFF1C1C1E),
+                color: Colors.white,
                 margin: const EdgeInsets.only(bottom: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Color(0xFFE5E5EA)),
+                ),
+                elevation: 0,
                 child: ListTile(
-                  title: Text(nameMatch.institutionName, style: const TextStyle(color: Colors.white)),
-                  subtitle: Text(workplace.isPrimary ? 'Primary Workplace' : 'Supporting Workplace', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                  title: Text(nameMatch.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.w600)),
+                  subtitle: Text(workplace.isPrimary ? 'Primary Workplace' : 'Supporting Workplace', style: const TextStyle(color: Color(0xFF636366), fontSize: 12)),
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Color(0xFFE45656)),
+                    icon: const Icon(Icons.delete, color: Color(0xFFFF3B30)),
                     onPressed: () {
                       setState(() {
                         _selectedWorkplaces.removeAt(idx);
@@ -625,12 +751,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 ),
               );
              }),
-          const Divider(color: Color(0xFF2C2C2E), height: 32),
+          const Divider(color: Color(0xFFD1D1D6), height: 32),
           // specialties section
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Specialties', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+              const Text('Specialties', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 16, fontWeight: FontWeight.bold)),
               IconButton(
                 icon: const Icon(Icons.add_circle, color: Color(0xFF34C759)),
                 onPressed: _showAddSpecialtySelector,
@@ -639,21 +765,26 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           ),
           const SizedBox(height: 8),
           if (_selectedSpecialties.isEmpty)
-            const Text('No specialties linked. Click the button above to link specialties.', style: TextStyle(color: Colors.white38, fontSize: 13))
+            const Text('No specialties linked. Click the button above to link specialties.', style: TextStyle(color: Color(0xFF636366), fontSize: 13))
           else
             ..._selectedSpecialties.asMap().entries.map((entry) {
               final idx = entry.key;
               final specialty = entry.value;
               return Card(
-                color: const Color(0xFF1C1C1E),
+                color: Colors.white,
                 margin: const EdgeInsets.only(bottom: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Color(0xFFE5E5EA)),
+                ),
+                elevation: 0,
                 child: ListTile(
-                  title: Text(specialty.hcpSpecialty, style: const TextStyle(color: Colors.white)),
+                  title: Text(specialty.hcpSpecialty, style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.w600)),
                   subtitle: specialty.subSpecialty != null && specialty.subSpecialty!.isNotEmpty
-                      ? Text(specialty.subSpecialty!, style: const TextStyle(color: Colors.white54, fontSize: 12))
+                      ? Text(specialty.subSpecialty!, style: const TextStyle(color: Color(0xFF636366), fontSize: 12))
                       : null,
                   trailing: IconButton(
-                    icon: const Icon(Icons.delete, color: Color(0xFFE45656)),
+                    icon: const Icon(Icons.delete, color: Color(0xFFFF3B30)),
                     onPressed: () {
                       setState(() {
                         _selectedSpecialties.removeAt(idx);
@@ -674,19 +805,24 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Link Hospital / Workplace', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Link Hospital / Workplace', style: TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold)),
         content: StatefulBuilder(
           builder: (context, setModalState) {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  dropdownColor: const Color(0xFF1C1C1E),
+                  dropdownColor: Colors.white,
                   value: selectedInst,
-                  hint: const Text('Choose Hospital', style: TextStyle(color: Colors.white54)),
-                  items: _institutions.map((i) => DropdownMenuItem(value: i.name, child: Text(i.institutionName))).toList(),
+                  style: const TextStyle(color: Color(0xFF1C1C1E)),
+                  hint: const Text('Choose Hospital', style: TextStyle(color: Color(0xFF8E8E93))),
+                  decoration: const InputDecoration(
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  ),
+                  items: _institutions.map((i) => DropdownMenuItem(value: i.name, child: Text(i.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E))))).toList(),
                   onChanged: (val) {
                     setModalState(() {
                       selectedInst = val;
@@ -697,7 +833,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 Row(
                   children: [
                     Checkbox(
-                      activeColor: const Color(0xFF5856D6),
+                      activeColor: const Color(0xFF0056B3),
                       value: isPrimary,
                       onChanged: (val) {
                         setModalState(() {
@@ -705,7 +841,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         });
                       },
                     ),
-                    const Text('Mark as Primary Workplace', style: TextStyle(color: Colors.white)),
+                    const Text('Mark as Primary Workplace', style: TextStyle(color: Color(0xFF1C1C1E))),
                   ],
                 ),
               ],
@@ -715,10 +851,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF636366))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5856D6)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0056B3)),
             onPressed: () {
               if (selectedInst != null) {
                 setState(() {
@@ -743,19 +879,24 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Link Specialty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Link Specialty', style: TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold)),
         content: StatefulBuilder(
           builder: (context, setModalState) {
             return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
-                  dropdownColor: const Color(0xFF1C1C1E),
+                  dropdownColor: Colors.white,
                   value: selectedSpec,
-                  hint: const Text('Choose Specialty', style: TextStyle(color: Colors.white54)),
-                  items: _specializations.where((s) => !s.isGroup).map((s) => DropdownMenuItem(value: s.specialty, child: Text(s.specialty))).toList(),
+                  style: const TextStyle(color: Color(0xFF1C1C1E)),
+                  hint: const Text('Choose Specialty', style: TextStyle(color: Color(0xFF8E8E93))),
+                  decoration: const InputDecoration(
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  ),
+                  items: _specializations.where((s) => !s.isGroup).map((s) => DropdownMenuItem(value: s.specialty, child: Text(s.specialty, style: const TextStyle(color: Color(0xFF1C1C1E))))).toList(),
                   onChanged: (val) {
                     setModalState(() {
                       selectedSpec = val;
@@ -764,10 +905,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  dropdownColor: const Color(0xFF1C1C1E),
+                  dropdownColor: Colors.white,
                   value: selectedSubSpec,
-                  hint: const Text('Choose Sub-Specialty (Optional)', style: TextStyle(color: Colors.white54)),
-                  items: _specializations.where((s) => !s.isGroup).map((s) => DropdownMenuItem(value: s.specialty, child: Text(s.specialty))).toList(),
+                  style: const TextStyle(color: Color(0xFF1C1C1E)),
+                  hint: const Text('Choose Sub-Specialty (Optional)', style: TextStyle(color: Color(0xFF8E8E93))),
+                  decoration: const InputDecoration(
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  ),
+                  items: _specializations.where((s) => !s.isGroup).map((s) => DropdownMenuItem(value: s.specialty, child: Text(s.specialty, style: const TextStyle(color: Color(0xFF1C1C1E))))).toList(),
                   onChanged: (val) {
                     setModalState(() {
                       selectedSubSpec = val;
@@ -781,10 +927,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF636366))),
           ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF5856D6)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0056B3)),
             onPressed: () {
               if (selectedSpec != null) {
                 setState(() {
@@ -806,7 +952,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   Widget _buildSurveyStep() {
     if (_activeSurvey == null) {
       return const Center(
-        child: Text('No active profiling survey template available.', style: TextStyle(color: Colors.white38)),
+        child: Text('No active profiling survey template available.', style: TextStyle(color: Color(0xFF636366))),
       );
     }
 
@@ -817,33 +963,33 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         children: [
           Text(
             _activeSurvey!.templateName,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 18, fontWeight: FontWeight.bold),
           ),
           if (_activeSurvey!.description != null) ...[
             const SizedBox(height: 6),
-            Text(_activeSurvey!.description!, style: const TextStyle(color: Colors.white38, fontSize: 13)),
+            Text(_activeSurvey!.description!, style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
           ],
-          const Divider(color: Color(0xFF2C2C2E), height: 32),
+          const Divider(color: Color(0xFFD1D1D6), height: 32),
           ..._activeSurvey!.questions.map((q) {
             return Padding(
               padding: const EdgeInsets.only(bottom: 20.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(q.question, style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(q.question, style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
                   q.questionType == 'Select'
                       ? DropdownButtonFormField<String>(
-                          dropdownColor: const Color(0xFF1C1C1E),
-                          style: const TextStyle(color: Colors.white),
+                          dropdownColor: Colors.white,
+                          style: const TextStyle(color: Color(0xFF1C1C1E)),
                           value: _surveyAnswers[q.question]!.isNotEmpty ? _surveyAnswers[q.question] : null,
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: const Color(0xFF1C1C1E),
-                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
-                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF5856D6)), borderRadius: BorderRadius.circular(8)),
+                            fillColor: Colors.white,
+                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD1D1D6)), borderRadius: BorderRadius.circular(8)),
+                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0056B3), width: 2), borderRadius: BorderRadius.circular(8)),
                           ),
-                          items: q.options?.split('\n').map((opt) => DropdownMenuItem(value: opt, child: Text(opt))).toList() ?? [],
+                          items: q.options?.split('\n').map((opt) => DropdownMenuItem(value: opt, child: Text(opt, style: const TextStyle(color: Color(0xFF1C1C1E))))).toList() ?? [],
                           onChanged: (val) {
                             setState(() {
                               _surveyAnswers[q.question] = val ?? '';
@@ -851,14 +997,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           },
                         )
                       : TextFormField(
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Color(0xFF1C1C1E)),
                           maxLines: q.questionType == 'Small Text' ? 3 : 1,
                           initialValue: _surveyAnswers[q.question],
                           decoration: InputDecoration(
                             filled: true,
-                            fillColor: const Color(0xFF1C1C1E),
-                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Colors.white24), borderRadius: BorderRadius.circular(8)),
-                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF5856D6)), borderRadius: BorderRadius.circular(8)),
+                            fillColor: Colors.white,
+                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFD1D1D6)), borderRadius: BorderRadius.circular(8)),
+                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0056B3), width: 2), borderRadius: BorderRadius.circular(8)),
                           ),
                           onChanged: (val) {
                             _surveyAnswers[q.question] = val;
@@ -879,33 +1025,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Profile Summary Review', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+          const Text('Profile Summary Review', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 20, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFD1D1D6)),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Doctor: Dr. ${widget.doctor.firstName} ${widget.doctor.lastName}', style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                Text('Doctor: Dr. ${widget.doctor.firstName} ${widget.doctor.lastName}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 15, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                Text('Practice: ${widget.doctor.hcpPractice}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                Text('Region: ${_selectedRegion ?? "Not selected"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                Text('Hospitals Linked: ${_selectedWorkplaces.length}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                Text('Specialties Linked: ${_selectedSpecialties.length}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                Text('Practice: ${widget.doctor.hcpPractice}', style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
+                Text('Region: ${_selectedRegion ?? "Not selected"}', style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
+                Text('Hospitals Linked: ${_selectedWorkplaces.length}', style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
+                Text('Specialties Linked: ${_selectedSpecialties.length}', style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
               ],
             ),
           ),
           const SizedBox(height: 20),
-          const Text('Survey Answers Summary', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          const Text('Survey Answers Summary', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           ..._surveyAnswers.entries.map((entry) => Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4.0),
-                child: Text('• ${entry.key}: ${entry.value.isNotEmpty ? entry.value : "N/A"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                child: Text('• ${entry.key}: ${entry.value.isNotEmpty ? entry.value : "N/A"}', style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
               )),
           const SizedBox(height: 32),
-          const Text('To save, double check all fields and tap "Submit Profile" below.', style: TextStyle(color: Colors.white38, fontSize: 12)),
+          const Text('To save, double check all fields and tap "Submit Profile" below.', style: TextStyle(color: Color(0xFF636366), fontSize: 12)),
         ],
       ),
     );
@@ -914,15 +1064,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   Widget _buildBottomNav() {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: const Color(0xFF1C1C1E),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Color(0xFFE5E5EA))),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _currentStep == 0
               ? OutlinedButton(
-                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFE45656))),
+                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFFFF3B30))),
                   onPressed: _archiveRefusedConsent,
-                  child: const Text('Doctor Refuses Consent / Exit', style: TextStyle(color: Color(0xFFE45656))),
+                  child: const Text('Doctor Refuses Consent / Exit', style: TextStyle(color: Color(0xFFFF3B30))),
                 )
               : TextButton(
                   onPressed: () {
@@ -930,12 +1083,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       _currentStep--;
                     });
                   },
-                  child: const Text('Previous', style: TextStyle(color: Color(0xFF8E8E93))),
+                  child: const Text('Previous', style: TextStyle(color: Color(0xFF636366))),
                 ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF5856D6),
-              disabledBackgroundColor: const Color(0xFF2C2C2E),
+              backgroundColor: const Color(0xFF0056B3),
+              disabledBackgroundColor: const Color(0xFF0056B3).withValues(alpha: 0.5),
             ),
             onPressed: _currentStep == 0 && (!_consentGiven || _signaturePoints.value.isEmpty)
                 ? null
@@ -999,7 +1152,7 @@ class SignaturePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     Paint paint = Paint()
-      ..color = Colors.white
+      ..color = Colors.black
       ..strokeCap = StrokeCap.round
       ..strokeWidth = 3.0;
 

@@ -3,6 +3,7 @@ class HcpAccount {
   final String accountName;
   final String? accountType;
   final bool isActive;
+  final String? hcp;
   final List<HcpAccountSpecialization> specialties;
   final List<HcpAccountWorkplace> workplaces;
   final List<HcpAccountContact> contacts;
@@ -12,6 +13,7 @@ class HcpAccount {
     required this.accountName,
     this.accountType,
     this.isActive = true,
+    this.hcp,
     this.specialties = const [],
     this.workplaces = const [],
     this.contacts = const [],
@@ -20,9 +22,10 @@ class HcpAccount {
   factory HcpAccount.fromJson(Map<String, dynamic> json) {
     return HcpAccount(
       name: json['name'],
-      accountName: json['account_name'] ?? '',
+      accountName: json['account_name'] ?? json['account_or_program'] ?? '',
       accountType: json['account_type'],
       isActive: json['is_active'] == 1 || json['is_active'] == true,
+      hcp: json['hcp'],
       specialties: (json['specialties'] as List?)
               ?.map((e) => HcpAccountSpecialization.fromJson(e))
               .toList() ?? [],
@@ -38,9 +41,10 @@ class HcpAccount {
   Map<String, dynamic> toJson() {
     return {
       if (name != null) 'name': name,
-      'account_name': accountName,
+      'account_or_program': accountName,
       if (accountType != null) 'account_type': accountType,
       'is_active': isActive ? 1 : 0,
+      if (hcp != null) 'hcp': hcp,
       'specialties': specialties.map((e) => e.toJson()).toList(),
       'workplaces': workplaces.map((e) => e.toJson()).toList(),
       'contacts': contacts.map((e) => e.toJson()).toList(),

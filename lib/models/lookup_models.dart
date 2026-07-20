@@ -189,17 +189,20 @@ class HcpSurveyQuestion {
 }
 
 class HcpType {
-  final String name;
+  final String name; // e.g. HCP-TYPE-01 — this is the Link value ERPNext validates
+  final String typeName; // e.g. "Physician" — human-readable display label
   final String? description;
 
   HcpType({
     required this.name,
+    required this.typeName,
     this.description,
   });
 
   factory HcpType.fromJson(Map<String, dynamic> json) {
     return HcpType(
       name: json['name'] ?? '',
+      typeName: json['hcp_type'] ?? json['type_name'] ?? json['name'] ?? '',
       description: json['description'],
     );
   }
@@ -207,6 +210,7 @@ class HcpType {
   Map<String, dynamic> toJson() {
     return {
       'name': name,
+      'type_name': typeName,
       if (description != null) 'description': description,
     };
   }

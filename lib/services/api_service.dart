@@ -1,12 +1,326 @@
 import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import '../models/engagement.dart';
 import '../models/hcp.dart';
 import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../models/hcp_account.dart';
+import '../models/corenergy_engage.dart';
+import 'db_helper.dart';
 
-class ApiService {
+class ApiService extends ChangeNotifier {
+  ApiService() {
+    checkOnlineStatus();
+    _startAutoSyncTimer();
+  }
+
+  String selectedProgram = 'COREnergy';
+  List<String> availablePrograms = ['COREnergy'];
+
+  // Offline Mode variables
+  bool _isOffline = false;
+  bool get isOffline => _isOffline;
+  bool _isSyncing = false;
+  bool get isSyncing => _isSyncing;
+
+  Timer? _autoSyncTimer;
+  String? _syncMessage;
+  String? get syncMessage => _syncMessage;
+
+  void clearSyncMessage() {
+    _syncMessage = null;
+  }
+
+  void _startAutoSyncTimer() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      try {
+        // Always check online status to keep the UI Mode indicator accurate
+        final isOnline = await checkOnlineStatus();
+        if (isOnline) {
+          final pending = await DbHelper.getPendingEngagements();
+          if (pending.isNotEmpty) {
+            await syncOfflineData();
+          }
+        }
+      } catch (e) {
+        print('Auto-sync timer error: $e');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoSyncTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<bool> checkOnlineStatus() async {
+    try {
+      final url = Uri.parse('$baseUrl/api/method/ping');
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
+      final online = response.statusCode == 200;
+      _isOffline = !online;
+      notifyListeners();
+      return online;
+    } catch (_) {
+      _isOffline = true;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // File cache helpers
+  Future<File> _getCacheFile(String filename) async {
+    final dir = await getApplicationDocumentsDirectory();
+    return File('${dir.path}/$filename');
+  }
+
+  Future<void> _writeToCache(String filename, String content) async {
+    try {
+      final file = await _getCacheFile(filename);
+      await file.writeAsString(content);
+    } catch (e) {
+      print('Error writing to cache $filename: $e');
+    }
+  }
+
+  Future<String?> _readFromCache(String filename) async {
+    try {
+      final file = await _getCacheFile(filename);
+      if (await file.exists()) {
+        return await file.readAsString();
+      }
+    } catch (e) {
+      print('Error reading from cache $filename: $e');
+    }
+    return null;
+  }
+
+  // Pending offline edits helpers (using SQLite)
+  Future<List<COREnergyEngage>> _readPendingCreates() async {
+    try {
+      final rows = await DbHelper.getPendingEngagements();
+      return rows
+          .where((row) => row['action_type'] == 'CREATE')
+          .map((row) => COREnergyEngage.fromJson(jsonDecode(row['data'])))
+          .toList();
+    } catch (e) {
+      print('Error reading pending creates from SQLite: $e');
+      return [];
+    }
+  }
+
+  Future<void> _addPendingCreate(COREnergyEngage engage) async {
+    try {
+      await DbHelper.insertPendingEngagement(engage, 'CREATE');
+    } catch (e) {
+      print('Error saving pending create to SQLite: $e');
+    }
+  }
+
+  Future<List<COREnergyEngage>> _readPendingUpdates() async {
+    try {
+      final rows = await DbHelper.getPendingEngagements();
+      return rows
+          .where((row) => row['action_type'] == 'UPDATE')
+          .map((row) => COREnergyEngage.fromJson(jsonDecode(row['data'])))
+          .toList();
+    } catch (e) {
+      print('Error reading pending updates from SQLite: $e');
+      return [];
+    }
+  }
+
+  Future<void> _addPendingUpdate(String name, COREnergyEngage engage) async {
+    try {
+      if (name.startsWith('OFFLINE-')) {
+        await DbHelper.insertPendingEngagement(engage, 'CREATE');
+      } else {
+        final pending = await DbHelper.getPendingEngagements();
+        final match = pending.where((r) => r['temp_id'] == name && r['action_type'] == 'CREATE');
+        if (match.isNotEmpty) {
+          await DbHelper.insertPendingEngagement(engage, 'CREATE');
+        } else {
+          await DbHelper.insertPendingEngagement(engage, 'UPDATE');
+        }
+      }
+    } catch (e) {
+      print('Error saving pending update to SQLite: $e');
+    }
+  }
+
+  Future<void> _saveDetailToCache(String name, COREnergyEngage engage) async {
+    final cache = await _readFromCache('engage_details_cache.json');
+    Map<String, dynamic> cacheMap = {};
+    if (cache != null) {
+      try {
+        cacheMap = Map<String, dynamic>.from(jsonDecode(cache));
+      } catch (_) {}
+    }
+    cacheMap[name] = engage.toJson();
+    await _writeToCache('engage_details_cache.json', jsonEncode(cacheMap));
+  }
+
+  Future<void> syncOfflineData() async {
+    if (_isSyncing) return;
+    _isSyncing = true;
+    notifyListeners();
+    bool somethingSynced = false;
+    try {
+      final pendingRows = await DbHelper.getPendingEngagements();
+      if (pendingRows.isEmpty) return;
+
+      for (var row in pendingRows) {
+        final String tempId = row['temp_id'];
+        final String actionType = row['action_type'];
+        final COREnergyEngage engage = COREnergyEngage.fromJson(jsonDecode(row['data']));
+
+        try {
+          if (actionType == 'CREATE') {
+            final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage');
+            final syncEngage = COREnergyEngage(
+              name: engage.name,
+              institutionName: engage.institutionName,
+              hospitalClinic: engage.hospitalClinic,
+              region: engage.region,
+              province: engage.province,
+              cityMunicipality: engage.cityMunicipality,
+              streetAddress: engage.streetAddress,
+              salesRep: engage.salesRep,
+              contacts: engage.contacts,
+              visits: engage.visits,
+              actionItems: engage.actionItems,
+            );
+            final payload = syncEngage.toJson();
+            payload.remove('name'); // Always remove name for CREATE requests to let server assign/determine naming
+            
+            final response = await http.post(
+              url,
+              headers: _headers,
+              body: jsonEncode(payload),
+            ).timeout(const Duration(seconds: 10));
+            
+            if (response.statusCode == 200 || response.statusCode == 201) {
+              final body = jsonDecode(response.body);
+              final created = COREnergyEngage.fromJson(body['data']);
+              await _saveDetailToCache(created.name, created);
+              somethingSynced = true;
+            } else if (response.statusCode == 409 || 
+                       response.body.contains('already exists') || 
+                       response.body.contains('DuplicateEntryError') || 
+                       response.body.contains('Duplicate')) {
+              // Self-healing: Convert CREATE to UPDATE if the record already exists on the server
+              print('Duplicate COREnergy Engage document detected during sync for ${engage.name}. Falling back to PUT update...');
+              final updateUrl = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/${engage.name}');
+              final updateResponse = await http.put(
+                updateUrl,
+                headers: _headers,
+                body: jsonEncode(payload),
+              ).timeout(const Duration(seconds: 10));
+              
+              if (updateResponse.statusCode == 200) {
+                final body = jsonDecode(updateResponse.body);
+                final updated = COREnergyEngage.fromJson(body['data']);
+                await _saveDetailToCache(engage.name, updated);
+                somethingSynced = true;
+              } else {
+                throw Exception('Sync fallback update failed: ${updateResponse.body}');
+              }
+            } else {
+              throw Exception('Sync create failed: ${response.body}');
+            }
+          } else if (actionType == 'UPDATE') {
+            final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/${engage.name}');
+            final payloadMap = engage.toJson();
+            payloadMap.remove('name');
+            final response = await http.put(
+              url,
+              headers: _headers,
+              body: jsonEncode(payloadMap),
+            ).timeout(const Duration(seconds: 10));
+            
+            if (response.statusCode == 200) {
+              final body = jsonDecode(response.body);
+              final updated = COREnergyEngage.fromJson(body['data']);
+              await _saveDetailToCache(engage.name, updated);
+              somethingSynced = true;
+            } else if (response.statusCode == 404 || 
+                       response.body.contains('DoesNotExistError') || 
+                       response.body.contains('not found')) {
+              print('COREnergy Engage document does not exist during sync for ${engage.name}. Falling back to POST create...');
+              final createUrl = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage');
+              final createResponse = await http.post(
+                createUrl,
+                headers: _headers,
+                body: jsonEncode(payloadMap),
+              ).timeout(const Duration(seconds: 10));
+              
+              if (createResponse.statusCode == 200 || createResponse.statusCode == 201) {
+                final body = jsonDecode(createResponse.body);
+                final created = COREnergyEngage.fromJson(body['data']);
+                await _saveDetailToCache(engage.name, created);
+                somethingSynced = true;
+              } else {
+                throw Exception('Sync fallback create failed: ${createResponse.body}');
+              }
+            } else {
+              throw Exception('Sync update failed: ${response.body}');
+            }
+          }
+          await DbHelper.deletePendingEngagement(tempId);
+          _syncMessage = 'Sync successful: "${engage.hospitalClinic ?? engage.name}" is now uploaded.';
+          notifyListeners();
+        } catch (e) {
+          print('Sync failed for offline row $tempId: $e');
+          _syncMessage = 'Sync failed for "${engage.hospitalClinic ?? engage.name}": $e';
+          notifyListeners();
+          break; // Stop syncing to avoid data loss
+        }
+      }
+      
+      if (somethingSynced && !_isOffline) {
+        await fetchCOREnergyEngages();
+      }
+    } catch (e) {
+      print('syncOfflineData SQLite error: $e');
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  void setProgram(String program) {
+    if (selectedProgram != program) {
+      selectedProgram = program;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchAvailablePrograms() async {
+    try {
+      final accounts = await hcpAccounts.list(fields: ['account_or_program']);
+      final names = accounts
+          .map((a) => a.accountName)
+          .where((name) => name.isNotEmpty)
+          .toSet()
+          .toList();
+      if (names.isNotEmpty) {
+        availablePrograms = names;
+        if (!availablePrograms.contains(selectedProgram)) {
+          selectedProgram = availablePrograms.first;
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error fetching available programs: $e');
+    }
+  }
   final String baseUrl = 'https://dev.pmii-marketing.com';
   String? _sessionCookie;
   String? loggedInEmail;
@@ -97,6 +411,11 @@ class ApiService {
 
   /// Authenticate against ERPNext v15
   Future<bool> login(String username, String password) async {
+    if (_isOffline) {
+      loggedInEmail = username.trim().isEmpty ? 'offline_user@pims-marketing.com' : username.trim();
+      await fetchAvailablePrograms();
+      return true;
+    }
     final url = Uri.parse('$baseUrl/api/method/login');
     try {
       final response = await http.post(
@@ -126,6 +445,7 @@ class ApiService {
                   orElse: () => '',
                 );
           }
+          await fetchAvailablePrograms();
           return true;
         }
       }
@@ -144,14 +464,25 @@ class ApiService {
 
   /// Retrieve list of COREnergy engagements
   Future<List<Engagement>> fetchEngagements() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('engagements_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          return dataList.map((json) => Engagement.fromJson(json)).toList();
+        } catch (_) {}
+      }
+      return [];
+    }
     final url = Uri.parse(
-      '$baseUrl/api/resource/Successful%20COREnergy%20Engagement?fields=["*"]&limit=100',
+      '$baseUrl/api/resource/Successful%20COREnergy%20Engagement?fields=["name","unsuccessful_call","company","latitude","longitude","location_accuracy","picture","sales_rep","contact","last_name","position_or_role","email_address","contact_number","date_and_time_of_sales_appointment","decision_maker_or_responsible_person_not_available","reason_for_unsuccessful_call","creation","modified"]&limit=5000',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
+        await _writeToCache('engagements_cache.json', jsonEncode(dataList));
         return dataList.map((json) => Engagement.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load engagements: ${response.statusCode}');
@@ -162,24 +493,328 @@ class ApiService {
     }
   }
 
-  /// Retrieve list of Company Institutions
+  /// Retrieve list of Company Institutions with region, province, city, and street address fields
   Future<List<Institution>> fetchInstitutions() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('institutions_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          return dataList.map((json) => Institution.fromJson(json)).toList();
+        } catch (_) {}
+      }
+      // Fallback to local asset
+      try {
+        final String localData = await rootBundle.loadString('assets/institutions.json');
+        final List<dynamic> dataList = jsonDecode(localData);
+        return dataList.map((json) => Institution.fromJson(json)).toList();
+      } catch (err) {
+        print('Failed to load local fallback institutions: $err');
+        return [];
+      }
+    }
     final url = Uri.parse(
-      '$baseUrl/api/resource/Institution?fields=["name","institution_name"]&limit=200',
+      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address"]&limit=5000',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
+        await _writeToCache('institutions_cache.json', jsonEncode(dataList));
         return dataList.map((json) => Institution.fromJson(json)).toList();
       } else {
-        throw Exception('Failed to load institutions: ${response.statusCode}');
+        throw Exception('Server returned ${response.statusCode}');
       }
     } catch (e) {
-      print('Fetch institutions error: $e');
-      rethrow;
+      print('Fetch institutions API error, loading local cached fallback: $e');
+      try {
+        final String localData = await rootBundle.loadString('assets/institutions.json');
+        final List<dynamic> dataList = jsonDecode(localData);
+        return dataList.map((json) => Institution.fromJson(json)).toList();
+      } catch (err) {
+        print('Failed to load local fallback institutions: $err');
+        rethrow;
+      }
     }
+  }
+
+  /// Retrieve list of COREnergy Engage logs
+  Future<List<COREnergyEngage>> fetchCOREnergyEngages() async {
+    List<COREnergyEngage> baseList = [];
+    bool fetchedOnline = false;
+
+    if (!_isOffline) {
+      final url = Uri.parse(
+        '$baseUrl/api/resource/COREnergy%20Engage?fields=["name","institution_name","region_name","province_name","city_municipality","street_address","sales_rep","creation","modified"]&limit=5000',
+      );
+      try {
+        final response = await http.get(url, headers: _headers).timeout(const Duration(seconds: 7));
+        if (response.statusCode == 200) {
+          final body = jsonDecode(response.body);
+          final List<dynamic> dataList = body['data'] ?? [];
+          await _writeToCache('corenergy_engages_cache.json', jsonEncode(dataList));
+          baseList = dataList.map((json) => COREnergyEngage.fromJson(json)).toList();
+          fetchedOnline = true;
+        }
+      } catch (e) {
+        print('Fetch COREnergy Engages online failed, reading from cache... error: $e');
+        _isOffline = true;
+        notifyListeners();
+      }
+    }
+
+    if (!fetchedOnline) {
+      final cache = await _readFromCache('corenergy_engages_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> jsonList = jsonDecode(cache);
+          baseList = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
+        } catch (_) {}
+      } else {
+        // Mock fallback if no cache exists yet
+        baseList = [
+          COREnergyEngage(
+            name: 'INST-04249',
+            institutionName: 'INST-04249',
+            hospitalClinic: 'Bayview Hotel Development Corp',
+            region: 'NCR',
+            province: 'Metro Manila-Manila',
+            cityMunicipality: 'Ermita',
+            streetAddress: '123 Roxas Blvd',
+            salesRep: loggedInEmail ?? 'jptan@profinsights.biz',
+            creation: '2026-07-01 10:00:00',
+          ),
+          COREnergyEngage(
+            name: 'INST-04644',
+            institutionName: 'INST-04644',
+            hospitalClinic: 'Dolmar Press Incorporated',
+            region: 'NCR',
+            province: 'Metro Manila-Manila',
+            cityMunicipality: 'Ermita',
+            streetAddress: '456 Taft Ave',
+            salesRep: 'kmtaotao@pims-marketing.com',
+            creation: '2026-07-02 11:30:00',
+          ),
+        ];
+      }
+    }
+
+    // Apply pending updates from SQLite over the baseList
+    final pendingUpdates = await _readPendingUpdates();
+    for (var update in pendingUpdates) {
+      final idx = baseList.indexWhere((e) => e.name == update.name);
+      if (idx != -1) {
+        baseList[idx] = update;
+      }
+    }
+
+    // Apply pending creations from SQLite over the baseList
+    final pendingCreates = await _readPendingCreates();
+    final existingNames = baseList.map((e) => e.name).toSet();
+    for (var create in pendingCreates) {
+      if (!existingNames.contains(create.name)) {
+        baseList.insert(0, create);
+      }
+    }
+
+    return baseList;
+  }
+
+  /// Retrieve full details of a single COREnergy Engage log (including child tables)
+  Future<COREnergyEngage> fetchCOREnergyEngageByName(String name) async {
+    // Check local SQLite queues first (if it's a pending create/update, SQLite details are most current)
+    final pendingCreates = await _readPendingCreates();
+    final matchCreate = pendingCreates.where((e) => e.name == name);
+    if (matchCreate.isNotEmpty) return matchCreate.first;
+
+    final pendingUpdates = await _readPendingUpdates();
+    final matchUpdate = pendingUpdates.where((e) => e.name == name);
+    if (matchUpdate.isNotEmpty) return matchUpdate.first;
+
+    if (_isOffline) {
+      final cache = await _readFromCache('engage_details_cache.json');
+      if (cache != null) {
+        try {
+          final Map<String, dynamic> cacheMap = jsonDecode(cache);
+          if (cacheMap.containsKey(name)) {
+            return COREnergyEngage.fromJson(cacheMap[name]);
+          }
+        } catch (_) {}
+      }
+
+      // Check main list
+      final mainList = await fetchCOREnergyEngages();
+      final matchMain = mainList.where((e) => e.name == name);
+      if (matchMain.isNotEmpty) return matchMain.first;
+
+      throw Exception('COREnergy Engage detail not found in offline cache.');
+    }
+
+    final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$name');
+    try {
+      final response = await http.get(url, headers: _headers).timeout(const Duration(seconds: 5));
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final detailedEngage = COREnergyEngage.fromJson(body['data']);
+        await _saveDetailToCache(name, detailedEngage);
+        return detailedEngage;
+      } else {
+        throw Exception('Failed to load COREnergy Engage detail: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Fetch detail online failed, reading from cache... error: $e');
+      final cache = await _readFromCache('engage_details_cache.json');
+      if (cache != null) {
+        try {
+          final Map<String, dynamic> cacheMap = jsonDecode(cache);
+          if (cacheMap.containsKey(name)) {
+            return COREnergyEngage.fromJson(cacheMap[name]);
+          }
+        } catch (_) {}
+      }
+      throw Exception('COREnergy Engage detail not found in offline cache.');
+    }
+  }
+
+  /// Create a new COREnergy Engage record
+  Future<COREnergyEngage> createCOREnergyEngage(COREnergyEngage engage) async {
+    if (_isOffline) {
+      return _saveCOREnergyEngageOffline(engage, isCreate: true);
+    }
+
+    final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage');
+    final payload = engage.toJson();
+    payload.remove('name'); // Always remove name for CREATE requests to let server assign/determine naming
+    try {
+      final response = await http.post(
+        url,
+        headers: _headers,
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 7));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        final created = COREnergyEngage.fromJson(body['data']);
+        await _saveDetailToCache(created.name, created);
+
+        // Update list cache
+        final cache = await _readFromCache('corenergy_engages_cache.json');
+        if (cache != null) {
+          try {
+            final List<dynamic> jsonList = jsonDecode(cache);
+            final list = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
+            if (!list.any((e) => e.name == created.name)) {
+              list.insert(0, created);
+              await _writeToCache('corenergy_engages_cache.json', jsonEncode(list.map((e) => e.toJson()).toList()));
+            }
+          } catch (_) {}
+        }
+
+        return created;
+      } else {
+        throw Exception('Failed to create COREnergy Engage: ${response.body}');
+      }
+    } catch (e) {
+      print('Create COREnergy Engage online failed: $e. Falling back to SQLite offline queue...');
+      _isOffline = true;
+      notifyListeners();
+      return _saveCOREnergyEngageOffline(engage, isCreate: true);
+    }
+  }
+
+  /// Update an existing COREnergy Engage record
+  Future<COREnergyEngage> updateCOREnergyEngage(String name, COREnergyEngage engage) async {
+    if (_isOffline) {
+      return _saveCOREnergyEngageOffline(engage, isCreate: false);
+    }
+
+    final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$name');
+    final payloadMap = engage.toJson();
+    payloadMap.remove('name');
+    try {
+      final response = await http.put(
+        url,
+        headers: _headers,
+        body: jsonEncode(payloadMap),
+      ).timeout(const Duration(seconds: 7));
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final updated = COREnergyEngage.fromJson(body['data']);
+        await _saveDetailToCache(name, updated);
+
+        // Update list cache
+        final cache = await _readFromCache('corenergy_engages_cache.json');
+        if (cache != null) {
+          try {
+            final List<dynamic> jsonList = jsonDecode(cache);
+            final list = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
+            final idx = list.indexWhere((e) => e.name == name);
+            if (idx != -1) {
+              list[idx] = updated;
+              await _writeToCache('corenergy_engages_cache.json', jsonEncode(list.map((e) => e.toJson()).toList()));
+            }
+          } catch (_) {}
+        }
+
+        return updated;
+      } else if (response.statusCode == 404 || 
+                 response.body.contains('DoesNotExistError') || 
+                 response.body.contains('not found')) {
+        print('COREnergy Engage document does not exist online for $name. Falling back to CREATE...');
+        return await createCOREnergyEngage(engage);
+      } else {
+        throw Exception('Failed to update COREnergy Engage: ${response.body}');
+      }
+    } catch (e) {
+      print('Update COREnergy Engage online failed: $e. Falling back to SQLite offline queue...');
+      _isOffline = true;
+      notifyListeners();
+      return _saveCOREnergyEngageOffline(engage, isCreate: false);
+    }
+  }
+
+  Future<COREnergyEngage> _saveCOREnergyEngageOffline(COREnergyEngage engage, {required bool isCreate}) async {
+    final name = engage.name.isEmpty ? (engage.institutionName ?? 'OFFLINE-${DateTime.now().millisecondsSinceEpoch}') : engage.name;
+    final localEngage = COREnergyEngage(
+      name: name,
+      institutionName: engage.institutionName ?? name,
+      hospitalClinic: engage.hospitalClinic,
+      region: engage.region,
+      province: engage.province,
+      cityMunicipality: engage.cityMunicipality,
+      streetAddress: engage.streetAddress,
+      salesRep: engage.salesRep,
+      contacts: engage.contacts,
+      visits: engage.visits,
+      actionItems: engage.actionItems,
+    );
+
+    if (isCreate) {
+      await _addPendingCreate(localEngage);
+    } else {
+      await _addPendingUpdate(localEngage.name, localEngage);
+    }
+    await _saveDetailToCache(localEngage.name, localEngage);
+
+    // Update list cache
+    final cache = await _readFromCache('corenergy_engages_cache.json');
+    if (cache != null) {
+      try {
+        final List<dynamic> jsonList = jsonDecode(cache);
+        final list = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
+        final idx = list.indexWhere((e) => e.name == localEngage.name);
+        if (idx != -1) {
+          list[idx] = localEngage;
+        } else {
+          list.insert(0, localEngage);
+        }
+        await _writeToCache('corenergy_engages_cache.json', jsonEncode(list.map((e) => e.toJson()).toList()));
+      } catch (_) {}
+    }
+
+    return localEngage;
   }
 
   /// Create a new engagement record
@@ -192,7 +827,7 @@ class ApiService {
         body: jsonEncode(engagement.toJson()),
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final body = jsonDecode(response.body);
         return Engagement.fromJson(body['data']);
       } else {
@@ -374,20 +1009,38 @@ class ApiService {
 
   /// Retrieve list of PSGC Locations
   Future<List<PsgcLocation>> fetchPsgcLocations() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('psgc_locations_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          return dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+        } catch (_) {}
+      }
+      return [];
+    }
     final url = Uri.parse(
-      '$baseUrl/api/resource/PSGC%20Location?fields=["name","location_label","location_type","parent_psgc_location","psgc_code","is_group"]&limit=1000',
+      '$baseUrl/api/resource/PSGC%20Location?fields=["name","location_label","location_type","parent_psgc_location","psgc_code","is_group"]&filters=[["location_type","in",["Region","Province","City"]]]&limit=3000',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
+        await _writeToCache('psgc_locations_cache.json', jsonEncode(dataList));
         return dataList.map((json) => PsgcLocation.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load PSGC locations: ${response.statusCode}');
       }
     } catch (e) {
       print('Fetch PSGC locations error: $e');
+      final cache = await _readFromCache('psgc_locations_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          return dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+        } catch (_) {}
+      }
       rethrow;
     }
   }
@@ -419,6 +1072,26 @@ class ApiService {
       }
     } catch (e) {
       print('Fetch survey templates error: $e');
+      rethrow;
+    }
+  }
+
+  /// Retrieve list of HCP Types (used as Link values for hcp_type field)
+  Future<List<HcpType>> fetchHcpTypes() async {
+    final url = Uri.parse(
+      '$baseUrl/api/resource/HCP%20Type?fields=["name","hcp_type","description"]&limit=50',
+    );
+    try {
+      final response = await http.get(url, headers: _headers);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final List<dynamic> dataList = body['data'] ?? [];
+        return dataList.map((json) => HcpType.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load HCP types: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Fetch HCP types error: $e');
       rethrow;
     }
   }

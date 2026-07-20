@@ -14,8 +14,8 @@ class SelfServiceQrScreen extends StatelessWidget {
     final apiService = Provider.of<ApiService>(context, listen: false);
     final medrepEmail = apiService.loggedInEmail ?? 'jptan@profinsights.biz';
 
-    // Structure the URL with MedRep email attribution and Doctor details
-    final selfServiceUrl = 'https://dev.pmii-marketing.com/app/successful-corenergy-engagement/new'
+    final slug = apiService.selectedProgram.toLowerCase().replaceAll(' ', '-');
+    final selfServiceUrl = 'https://dev.pmii-marketing.com/app/successful-$slug-engagement/new'
         '?medrep_email=${Uri.encodeComponent(medrepEmail)}'
         '&doctor_id=${Uri.encodeComponent(doctor.name ?? '')}'
         '&doctor_name=${Uri.encodeComponent("${doctor.firstName} ${doctor.lastName}")}';
@@ -24,10 +24,11 @@ class SelfServiceQrScreen extends StatelessWidget {
     final qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${Uri.encodeComponent(selfServiceUrl)}';
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121214),
+      backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
         title: const Text('Doctor Self-Service'),
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: const Color(0xFF0056B3),
+        foregroundColor: Colors.white,
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -43,14 +44,14 @@ class SelfServiceQrScreen extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF30D158), Color(0xFF34C759)],
+                    colors: [Color(0xFF34C759), Color(0xFF28A745)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF30D158).withValues(alpha: 0.3),
+                      color: const Color(0xFF34C759).withValues(alpha: 0.3),
                       blurRadius: 15,
                       offset: const Offset(0, 5),
                     ),
@@ -61,7 +62,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                     const Icon(Icons.celebration, color: Colors.white, size: 40),
                     const SizedBox(height: 10),
                     const Text(
-                      'Successfully Profiled! \ud83c\udf89',
+                      'Successfully Profiled! 🎉',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 20,
@@ -73,7 +74,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                     Text(
                       'Let the doctor scan the QR code to verify or complete self-service.',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
+                        color: Colors.white.withValues(alpha: 0.9),
                         fontSize: 13,
                       ),
                       textAlign: TextAlign.center,
@@ -86,15 +87,16 @@ class SelfServiceQrScreen extends StatelessWidget {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1C1C1E),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE5E5EA)),
                 ),
                 child: Row(
                   children: [
                     CircleAvatar(
                       radius: 28,
-                      backgroundColor: const Color(0xFF5856D6).withOpacity(0.15),
-                      child: const Icon(Icons.person, color: Color(0xFF5856D6), size: 30),
+                      backgroundColor: const Color(0xFF0056B3).withValues(alpha: 0.15),
+                      child: const Icon(Icons.person, color: Color(0xFF0056B3), size: 30),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -104,7 +106,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                           Text(
                             'Dr. ${doctor.firstName} ${doctor.lastName}',
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: Color(0xFF1C1C1E),
                               fontSize: 18,
                               fontWeight: FontWeight.bold,
                             ),
@@ -113,7 +115,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                           Text(
                             doctor.hcpType,
                             style: const TextStyle(
-                              color: Colors.white54,
+                              color: Color(0xFF636366),
                               fontSize: 14,
                             ),
                           ),
@@ -133,7 +135,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF5856D6).withOpacity(0.2),
+                      color: const Color(0xFF0056B3).withValues(alpha: 0.1),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),
@@ -153,7 +155,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                           height: 220,
                           child: Center(
                             child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF5856D6)),
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056B3)),
                             ),
                           ),
                         );
@@ -187,28 +189,28 @@ class SelfServiceQrScreen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1C1C1E),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF2C2C2E)),
+                  border: Border.all(color: const Color(0xFFE5E5EA)),
                 ),
                 child: Column(
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.assignment_ind_outlined, color: Color(0xFF5856D6), size: 20),
+                        const Icon(Icons.assignment_ind_outlined, color: Color(0xFF0056B3), size: 20),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
                             'Assigned Representative:\n$medrepEmail',
-                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                            style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13),
                           ),
                         ),
                       ],
                     ),
-                    const Divider(color: Color(0xFF2C2C2E), height: 24),
+                    const Divider(color: Color(0xFFE5E5EA), height: 24),
                     const Text(
                       'This QR Code attributes the doctor\'s submission to your account automatically.',
-                      style: TextStyle(color: Colors.white38, fontSize: 12),
+                      style: TextStyle(color: Color(0xFF636366), fontSize: 12),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -222,12 +224,12 @@ class SelfServiceQrScreen extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton.icon(
                       style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFF2C2C2E)),
+                        side: const BorderSide(color: Color(0xFF0056B3)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      icon: const Icon(Icons.copy, color: Colors.white),
-                      label: const Text('Copy Link', style: TextStyle(color: Colors.white)),
+                      icon: const Icon(Icons.copy, color: Color(0xFF0056B3)),
+                      label: const Text('Copy Link', style: TextStyle(color: Color(0xFF0056B3))),
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: selfServiceUrl));
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -240,7 +242,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF5856D6),
+                        backgroundColor: const Color(0xFF0056B3),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),

@@ -1,6 +1,6 @@
 {
-  "name": "PIMS MCP",
-  "short_name": "PIMS MCP",
+  "name": "PIMS HCP",
+  "short_name": "PIMS HCP",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#121214",

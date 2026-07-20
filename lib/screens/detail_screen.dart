@@ -48,6 +48,7 @@ class _DetailScreenState extends State<DetailScreen> {
   final _picker = ImagePicker();
   bool _isSaving = false;
   bool _isLocating = false;
+  String _selectedCountryCode = '+63';
 
   final List<String> _unsuccessfulReasons = [
     'Company moved to different address',
@@ -80,11 +81,33 @@ class _DetailScreenState extends State<DetailScreen> {
       _latitude = item.latitude;
       _longitude = item.longitude;
       
-      // Formatting datetime to "YYYY-MM-DD HH:MM" for input
+      final phone = item.contactNumber ?? '';
+      if (phone.startsWith('+')) {
+        for (var code in ['+63', '+1', '+65', '+60']) {
+          if (phone.startsWith(code)) {
+            _selectedCountryCode = code;
+            _contactNumberController.text = phone.substring(code.length);
+            break;
+          }
+        }
+        if (_contactNumberController.text.isEmpty) {
+          _contactNumberController.text = phone;
+        }
+      } else {
+        _contactNumberController.text = phone;
+      }
+      
+      // Formatting datetime to "MM-DD-YYYY HH:mm:ss" for input
       if (item.dateAndTimeOfSalesAppointment != null) {
         final raw = item.dateAndTimeOfSalesAppointment!;
-        if (raw.length >= 16) {
-          _dateTimeSalesController.text = raw.substring(0, 16).replaceFirst(' ', 'T');
+        try {
+          final year = raw.substring(0, 4);
+          final month = raw.substring(5, 7);
+          final day = raw.substring(8, 10);
+          final time = raw.substring(11);
+          _dateTimeSalesController.text = "$month-$day-$year $time";
+        } catch (_) {
+          _dateTimeSalesController.text = raw;
         }
       }
     }
@@ -158,16 +181,32 @@ class _DetailScreenState extends State<DetailScreen> {
   Future<void> _saveForm() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_selectedCompany == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a company / institution')),
+      );
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
 
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    // Parse DateTime to ERPNext format (YYYY-MM-DD HH:MM:SS)
+    // Parse DateTime to ERPNext format (YYYY-MM-DD HH:mm:ss)
     String? formattedDateTime;
     if (_dateTimeSalesController.text.isNotEmpty) {
-      formattedDateTime = _dateTimeSalesController.text.replaceFirst('T', ' ') + ':00';
+      try {
+        final text = _dateTimeSalesController.text;
+        final month = text.substring(0, 2);
+        final day = text.substring(3, 5);
+        final year = text.substring(6, 10);
+        final time = text.substring(11);
+        formattedDateTime = "$year-$month-$day $time";
+      } catch (_) {
+        formattedDateTime = _dateTimeSalesController.text;
+      }
     }
 
     final payload = Engagement(
@@ -176,16 +215,15 @@ class _DetailScreenState extends State<DetailScreen> {
       reasonForUnsuccessfulCall: _unsuccessfulCall ? _reasonForUnsuccessfulCall : '',
       company: _selectedCompany,
       salesRep: _selectedSalesRep,
-      contact: _contactFirstNameController.text.trim(),
-      lastName: _contactLastNameController.text.trim(),
-      positionOrRole: _positionOrRoleController.text.trim(),
-      emailAddress: _emailAddressController.text.trim(),
-      contactNumber: _contactNumberController.text.trim(),
+      contact: _contactFirstNameController.text.trim().isEmpty ? null : _contactFirstNameController.text.trim(),
+      lastName: _contactLastNameController.text.trim().isEmpty ? null : _contactLastNameController.text.trim(),
+      positionOrRole: _positionOrRoleController.text.trim().isEmpty ? null : _positionOrRoleController.text.trim(),
+      emailAddress: _emailAddressController.text.trim().isEmpty ? null : _emailAddressController.text.trim(),
+      contactNumber: _contactNumberController.text.trim().isEmpty ? null : '$_selectedCountryCode${_contactNumberController.text.trim()}',
       dateAndTimeOfSalesAppointment: formattedDateTime,
       decisionMakerOrResponsiblePersonNotAvailable: _decisionMakerNotAvailable,
       latitude: _latitude,
       longitude: _longitude,
-      // If there is an image file locally, we'd typically upload it. For now we mock path or send base64
       picture: _imageFile != null ? '/private/files/${_imageFile!.path.split('/').last}' : widget.engagement?.picture,
     );
 
@@ -200,15 +238,26 @@ class _DetailScreenState extends State<DetailScreen> {
         setState(() {
           _isSaving = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Engagement submitted successfully'),
+            backgroundColor: Color(0xFF30D158),
+          ),
+        );
         Navigator.of(context).pop(true); // Return success to reload list
       }
     } catch (e) {
       setState(() {
         _isSaving = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save record: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to submit: $e'),
+            backgroundColor: const Color(0xFFFF3B30),
+          ),
+        );
+      }
     }
   }
 
@@ -216,10 +265,11 @@ class _DetailScreenState extends State<DetailScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.engagement != null;
     return Scaffold(
-      backgroundColor: const Color(0xFF121214),
+      backgroundColor: const Color(0xFFF2F2F7),
       appBar: AppBar(
         title: Text(isEdit ? widget.engagement!.name! : 'New Profiling'),
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: const Color(0xFF0056B3),
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           _isSaving
@@ -238,7 +288,7 @@ class _DetailScreenState extends State<DetailScreen> {
                   child: const Text(
                     'Save',
                     style: TextStyle(
-                      color: Color(0xFF5856D6),
+                      color: Colors.white,
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                     ),
@@ -256,24 +306,24 @@ class _DetailScreenState extends State<DetailScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [const Color(0xFF5856D6).withOpacity(0.15), const Color(0xFF1C1C1E)],
+                  colors: [const Color(0xFF0056B3).withOpacity(0.08), const Color(0xFF0056B3).withOpacity(0.02)],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFF38383A)),
+                border: Border.all(color: const Color(0xFFD1D1D6)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     isEdit ? 'RECORD ID' : 'NEW CALL REGISTRATION',
-                    style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace', fontSize: 12),
+                    style: const TextStyle(color: Color(0xFF636366), fontFamily: 'monospace', fontSize: 12),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     isEdit ? widget.engagement!.name! : 'Create COREnergy Log',
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
@@ -295,7 +345,7 @@ class _DetailScreenState extends State<DetailScreen> {
 
             // Reason for Unsuccessful Call (Dynamic visibility)
             if (_unsuccessfulCall) ...[
-              const Text('REASON FOR UNSUCCESSFUL CALL', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+              const Text('REASON FOR UNSUCCESSFUL CALL', style: TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               _buildDropdownField<String>(
                 value: _reasonForUnsuccessfulCall,
@@ -311,37 +361,57 @@ class _DetailScreenState extends State<DetailScreen> {
               const SizedBox(height: 16),
             ],
 
-            // Company Dropdown
-            const Text('COMPANY / INSTITUTION *', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+            // Company Search Selector
+            const Text('COMPANY / INSTITUTION *', style: TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            _buildDropdownField<String>(
-              value: _selectedCompany,
-              hint: 'Select Company...',
-              items: widget.institutions.map((i) => i.name).toList(),
-              itemLabelBuilder: (id) {
-                final match = widget.institutions.firstWhere((i) => i.name == id);
-                return '${match.name} - ${match.institutionName}';
-              },
-              onChanged: (val) {
-                setState(() {
-                  _selectedCompany = val;
-                });
-              },
-              validator: (val) => val == null ? 'Please select a company' : null,
+            GestureDetector(
+              onTap: _showSearchableInstitutionPicker,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFD1D1D6)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _selectedCompany == null
+                            ? 'Tap to select Company...'
+                            : (() {
+                                final match = widget.institutions.firstWhere(
+                                  (i) => i.name == _selectedCompany,
+                                  orElse: () => Institution(name: _selectedCompany!, institutionName: _selectedCompany!),
+                                );
+                                return '${match.name} - ${match.institutionName}';
+                              })(),
+                        style: TextStyle(
+                          color: _selectedCompany == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
+                          fontSize: 14,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
+                  ],
+                ),
+              ),
             ),
             const SizedBox(height: 16),
 
             // Picture Uploader Area
-            const Text('PICTURE', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+            const Text('PICTURE', style: TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: _getImage,
               child: Container(
                 height: 180,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1C1C1E),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF38383A)),
+                  border: Border.all(color: const Color(0xFFD1D1D6)),
                 ),
                 child: _imageFile != null
                     ? ClipRRect(
@@ -372,13 +442,13 @@ class _DetailScreenState extends State<DetailScreen> {
             const SizedBox(height: 16),
 
             // Location Coordinates widget
-            const Text('LOCATION COORDINATES', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+            const Text('LOCATION COORDINATES', style: TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: _isLocating ? null : _fetchGPS,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white,
-                side: const BorderSide(color: Color(0xFF38383A)),
+                foregroundColor: const Color(0xFF0056B3),
+                side: const BorderSide(color: Color(0xFFD1D1D6)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
@@ -386,30 +456,30 @@ class _DetailScreenState extends State<DetailScreen> {
                   ? const SizedBox(
                       width: 14,
                       height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0056B3)),
                     )
-                  : const Icon(Icons.location_on_outlined, color: Color(0xFF5856D6), size: 18),
+                  : const Icon(Icons.location_on_outlined, color: Color(0xFF0056B3), size: 18),
               label: Text(_isLocating ? 'Fetching GPS...' : 'Get Current Location'),
             ),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
+                color: Colors.white,
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF38383A)),
+                border: Border.all(color: const Color(0xFFD1D1D6)),
               ),
               child: Row(
                 children: [
-                  Expanded(child: Text('Lat: ${_latitude ?? "Not set"}', style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace', fontSize: 13))),
-                  Expanded(child: Text('Lng: ${_longitude ?? "Not set"}', style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace', fontSize: 13))),
+                  Expanded(child: Text('Lat: ${_latitude ?? "Not set"}', style: const TextStyle(color: Color(0xFF1C1C1E), fontFamily: 'monospace', fontSize: 13))),
+                  Expanded(child: Text('Lng: ${_longitude ?? "Not set"}', style: const TextStyle(color: Color(0xFF1C1C1E), fontFamily: 'monospace', fontSize: 13))),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
             // Sales Rep
-            const Text('SALES REP *', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+            const Text('SALES REP *', style: TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             _buildDropdownField<String>(
               value: _selectedSalesRep,
@@ -458,36 +528,87 @@ class _DetailScreenState extends State<DetailScreen> {
             const SizedBox(height: 16),
 
             // Contact Number
-            _buildInputField(
+            const Text('CONTACT NUMBER', style: TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            TextFormField(
               controller: _contactNumberController,
-              label: 'Contact Number',
-              hint: 'e.g. +639170000000',
               keyboardType: TextInputType.phone,
+              style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
+              decoration: InputDecoration(
+                prefixIcon: Container(
+                  padding: const EdgeInsets.only(left: 12, right: 4),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedCountryCode,
+                      dropdownColor: Colors.white,
+                      style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
+                      items: const [
+                        DropdownMenuItem(value: '+63', child: Text('🇵🇭 +63')),
+                        DropdownMenuItem(value: '+1', child: Text('🇺🇸 +1')),
+                        DropdownMenuItem(value: '+65', child: Text('🇸🇬 +65')),
+                        DropdownMenuItem(value: '+60', child: Text('🇲🇾 +60')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _selectedCountryCode = val;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+                filled: true,
+                fillColor: Colors.white,
+                hintText: '9170000000',
+                hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF0056B3), width: 2),
+                ),
+              ),
             ),
             const SizedBox(height: 16),
 
             // Date and Time of Sales Appointment
-            const Text('DATE AND TIME OF SALES APPOINTMENT', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+            const Text('DATE AND TIME OF SALES APPOINTMENT', style: TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            TextFormField(
-              controller: _dateTimeSalesController,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: const Color(0xFF1C1C1E),
-                hintText: 'YYYY-MM-DD HH:MM',
-                hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
-                suffixIcon: const Icon(Icons.calendar_today, color: Color(0xFF8E8E93), size: 16),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF38383A)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFF38383A)),
+            GestureDetector(
+              onTap: () => _showErpnextDateTimePicker(context),
+              child: AbsorbPointer(
+                child: TextFormField(
+                  controller: _dateTimeSalesController,
+                  style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: Colors.white,
+                    hintText: 'MM-DD-YYYY HH:mm:ss',
+                    hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
+                    suffixIcon: const Icon(Icons.calendar_today, color: Color(0xFF8E8E93), size: 16),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFF0056B3), width: 2),
+                    ),
+                  ),
                 ),
               ),
-              keyboardType: TextInputType.datetime,
             ),
             const Text('Timezone: Asia/Manila', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11), textAlign: TextAlign.right),
             const SizedBox(height: 16),
@@ -516,14 +637,14 @@ class _DetailScreenState extends State<DetailScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF38383A)),
+        border: Border.all(color: const Color(0xFFD1D1D6)),
       ),
       child: CheckboxListTile(
-        title: Text(label, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        title: Text(label, style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14)),
         value: value,
-        activeColor: const Color(0xFF5856D6),
+        activeColor: const Color(0xFF0056B3),
         checkColor: Colors.white,
         onChanged: onChanged,
         controlAffinity: ListTileControlAffinity.leading,
@@ -543,16 +664,16 @@ class _DetailScreenState extends State<DetailScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF38383A)),
+        border: Border.all(color: const Color(0xFFD1D1D6)),
       ),
       child: DropdownButtonFormField<T>(
         value: value,
         hint: Text(hint, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
-        dropdownColor: const Color(0xFF1C1C1E),
+        dropdownColor: Colors.white,
         icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
-        style: const TextStyle(color: Colors.white, fontSize: 14),
+        style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
         onChanged: onChanged,
         validator: validator,
         decoration: const InputDecoration(border: InputBorder.none),
@@ -562,6 +683,7 @@ class _DetailScreenState extends State<DetailScreen> {
             child: Text(
               itemLabelBuilder != null ? itemLabelBuilder(item) : item.toString(),
               overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Color(0xFF1C1C1E)),
             ),
           );
         }).toList(),
@@ -578,32 +700,426 @@ class _DetailScreenState extends State<DetailScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label.toUpperCase(), style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+        Text(label.toUpperCase(), style: const TextStyle(color: Color(0xFF636366), fontSize: 11, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
           keyboardType: keyboardType,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
+          style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
           decoration: InputDecoration(
             filled: true,
-            fillColor: const Color(0xFF1C1C1E),
+            fillColor: Colors.white,
             hintText: hint,
             hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF38383A)),
+              borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF38383A)),
+              borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF5856D6), width: 2),
+              borderSide: const BorderSide(color: Color(0xFF0056B3), width: 2),
             ),
           ),
         ),
       ],
+    );
+  }
+
+  void _showSearchableInstitutionPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) {
+        return SearchableInstitutionPicker(
+          institutions: widget.institutions,
+          onSelected: (inst) {
+            setState(() {
+              _selectedCompany = inst.name;
+            });
+          },
+        );
+      },
+    );
+  }
+
+  Future<void> _showErpnextDateTimePicker(BuildContext context) async {
+    DateTime selectedDate = DateTime.now();
+    if (_dateTimeSalesController.text.isNotEmpty) {
+      try {
+        final text = _dateTimeSalesController.text;
+        final month = int.parse(text.substring(0, 2));
+        final day = int.parse(text.substring(3, 5));
+        final year = int.parse(text.substring(6, 10));
+        final hour = int.parse(text.substring(11, 13));
+        final minute = int.parse(text.substring(14, 16));
+        final second = int.parse(text.substring(17, 19));
+        selectedDate = DateTime(year, month, day, hour, minute, second);
+      } catch (_) {}
+    }
+
+    final DateTime? result = await showDialog<DateTime>(
+      context: context,
+      builder: (BuildContext context) {
+        return _ErpnextDateTimePickerDialog(initialDateTime: selectedDate);
+      },
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        final pad = (int n) => n.toString().padLeft(2, '0');
+        _dateTimeSalesController.text =
+            "${pad(result.month)}-${pad(result.day)}-${result.year} ${pad(result.hour)}:${pad(result.minute)}:${pad(result.second)}";
+      });
+    }
+  }
+}
+
+class SearchableInstitutionPicker extends StatefulWidget {
+  final List<Institution> institutions;
+  final Function(Institution) onSelected;
+
+  const SearchableInstitutionPicker({
+    Key? key,
+    required this.institutions,
+    required this.onSelected,
+  }) : super(key: key);
+
+  @override
+  State<SearchableInstitutionPicker> createState() => _SearchableInstitutionPickerState();
+}
+
+class _SearchableInstitutionPickerState extends State<SearchableInstitutionPicker> {
+  List<Institution> _filteredList = [];
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.institutions;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredList = widget.institutions.where((inst) {
+        final matchesName = inst.institutionName.toLowerCase().contains(query.toLowerCase());
+        final matchesId = inst.name.toLowerCase().contains(query.toLowerCase());
+        return matchesName || matchesId;
+      }).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: const Color(0xFFE5E5EA), borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Select Company / Institution',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            onChanged: _filter,
+            style: const TextStyle(color: Color(0xFF1C1C1E)),
+            decoration: InputDecoration(
+              hintText: 'Search by ID or Name...',
+              hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF8E8E93)),
+              filled: true,
+              fillColor: const Color(0xFFF4F6F9),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _filteredList.isEmpty
+                ? const Center(child: Text('No matching institutions found.', style: TextStyle(color: Color(0xFF8E8E93))))
+                : ListView.builder(
+                    itemCount: _filteredList.length,
+                    itemBuilder: (context, idx) {
+                      final item = _filteredList[idx];
+                      return ListTile(
+                        title: Text(item.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.w600)),
+                        subtitle: Text(item.name, style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace')),
+                        onTap: () {
+                          widget.onSelected(item);
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ErpnextDateTimePickerDialog extends StatefulWidget {
+  final DateTime initialDateTime;
+
+  const _ErpnextDateTimePickerDialog({Key? key, required this.initialDateTime}) : super(key: key);
+
+  @override
+  State<_ErpnextDateTimePickerDialog> createState() => _ErpnextDateTimePickerDialogState();
+}
+
+class _ErpnextDateTimePickerDialogState extends State<_ErpnextDateTimePickerDialog> {
+  late DateTime _currentMonth;
+  late DateTime _selectedDay;
+  late int _hour;
+  late int _minute;
+  late int _second;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentMonth = DateTime(widget.initialDateTime.year, widget.initialDateTime.month);
+    _selectedDay = DateTime(widget.initialDateTime.year, widget.initialDateTime.month, widget.initialDateTime.day);
+    _hour = widget.initialDateTime.hour;
+    _minute = widget.initialDateTime.minute;
+    _second = widget.initialDateTime.second;
+  }
+
+  void _onNowPressed() {
+    final now = DateTime.now();
+    setState(() {
+      _currentMonth = DateTime(now.year, now.month);
+      _selectedDay = DateTime(now.year, now.month, now.day);
+      _hour = now.hour;
+      _minute = now.minute;
+      _second = now.second;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final firstDayOfMonth = DateTime(_currentMonth.year, _currentMonth.month, 1);
+    final daysInMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 0).day;
+    final weekdayOfFirst = firstDayOfMonth.weekday % 7;
+
+    final dayWidgets = <Widget>[];
+    for (var heading in ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']) {
+      dayWidgets.add(
+        Center(
+          child: Text(
+            heading,
+            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold),
+          ),
+        ),
+      );
+    }
+
+    for (var i = 0; i < weekdayOfFirst; i++) {
+      dayWidgets.add(const SizedBox.shrink());
+    }
+
+    for (var day = 1; day <= daysInMonth; day++) {
+      final isSelected = _selectedDay.year == _currentMonth.year &&
+          _selectedDay.month == _currentMonth.month &&
+          _selectedDay.day == day;
+      dayWidgets.add(
+        GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedDay = DateTime(_currentMonth.year, _currentMonth.month, day);
+            });
+          },
+          child: Center(
+            child: Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: isSelected ? const Color(0xFF0056B3) : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                day.toString(),
+                style: TextStyle(
+                  color: isSelected ? Colors.white : const Color(0xFF1C1C1E),
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final pad = (int n) => n.toString().padLeft(2, '0');
+    final timeStr = "${pad(_hour)}:${pad(_minute)}:${pad(_second)}";
+
+    final monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+
+    return Dialog(
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 300,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, color: Color(0xFF1C1C1E)),
+                  onPressed: () {
+                    setState(() {
+                      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1);
+                    });
+                  },
+                ),
+                Text(
+                  "${monthNames[_currentMonth.month - 1]}, ${_currentMonth.year}",
+                  style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, color: Color(0xFF1C1C1E)),
+                  onPressed: () {
+                    setState(() {
+                      _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1);
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            GridView.count(
+              crossAxisCount: 7,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              children: dayWidgets,
+            ),
+            const Divider(color: Color(0xFFE5E5EA), height: 24),
+            Row(
+              children: [
+                Text(
+                  timeStr,
+                  style: const TextStyle(color: Color(0xFF1C1C1E), fontFamily: 'monospace', fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    children: [
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 2,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                        ),
+                        child: Slider(
+                          value: _hour.toDouble(),
+                          min: 0,
+                          max: 23,
+                          activeColor: const Color(0xFF0056B3),
+                          inactiveColor: const Color(0xFFE5E5EA),
+                          onChanged: (val) {
+                            setState(() {
+                              _hour = val.round();
+                            });
+                          },
+                        ),
+                      ),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 2,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                        ),
+                        child: Slider(
+                          value: _minute.toDouble(),
+                          min: 0,
+                          max: 59,
+                          activeColor: const Color(0xFF0056B3),
+                          inactiveColor: const Color(0xFFE5E5EA),
+                          onChanged: (val) {
+                            setState(() {
+                              _minute = val.round();
+                            });
+                          },
+                        ),
+                      ),
+                      SliderTheme(
+                        data: SliderTheme.of(context).copyWith(
+                          trackHeight: 2,
+                          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+                          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+                        ),
+                        child: Slider(
+                          value: _second.toDouble(),
+                          min: 0,
+                          max: 59,
+                          activeColor: const Color(0xFF0056B3),
+                          inactiveColor: const Color(0xFFE5E5EA),
+                          onChanged: (val) {
+                            setState(() {
+                              _second = val.round();
+                            });
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: _onNowPressed,
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF1C1C1E),
+                      backgroundColor: const Color(0xFFE5E5EA),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Now'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final finalResult = DateTime(_selectedDay.year, _selectedDay.month, _selectedDay.day, _hour, _minute, _second);
+                      Navigator.of(context).pop(finalResult);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0056B3),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: const Text('Done'),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

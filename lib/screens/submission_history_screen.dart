@@ -86,7 +86,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
           children: [
@@ -97,7 +97,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               child: Text(
                 submission.hcpFullName ?? submission.hcpName,
                 style: const TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFF1C1C1E),
                     fontSize: 17,
                     fontWeight: FontWeight.bold),
               ),
@@ -129,41 +129,41 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 _detailRow('Region', submission.regionName!),
               if (submission.institution != null)
                 _detailRow('Institution', submission.institution!),
-              const Divider(color: Color(0xFF2C2C2E), height: 24),
+              const Divider(color: Color(0xFFE5E5EA), height: 24),
               const Text('Specialties',
                   style: TextStyle(
-                      color: Colors.white70,
+                      color: Color(0xFF1C1C1E),
                       fontSize: 13,
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               if (submission.specialties.isEmpty)
                 const Text('None recorded.',
-                    style: TextStyle(color: Colors.white30, fontSize: 13))
+                    style: TextStyle(color: Color(0xFF8E8E93), fontSize: 13))
               else
                 ...submission.specialties.map((s) => Padding(
                       padding: const EdgeInsets.only(bottom: 3.0),
                       child: Text(
                           '\u2022 ${s.hcpSpecialty}${s.subSpecialty != null ? " (${s.subSpecialty})" : ""}',
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 13)),
+                              color: Color(0xFF1C1C1E), fontSize: 13)),
                     )),
-              const Divider(color: Color(0xFF2C2C2E), height: 24),
+              const Divider(color: Color(0xFFE5E5EA), height: 24),
               const Text('Survey Answers',
                   style: TextStyle(
-                      color: Colors.white70,
+                      color: Color(0xFF1C1C1E),
                       fontSize: 13,
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
               if (submission.answers.isEmpty)
                 const Text('No survey answers.',
-                    style: TextStyle(color: Colors.white30, fontSize: 13))
+                    style: TextStyle(color: Color(0xFF8E8E93), fontSize: 13))
               else
                 ...submission.answers.map((a) => Padding(
                       padding: const EdgeInsets.only(bottom: 4.0),
                       child: Text(
                           '\u2022 ${a.question}: ${a.answer.isNotEmpty ? a.answer : "N/A"}',
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 13)),
+                              color: Color(0xFF1C1C1E), fontSize: 13)),
                     )),
             ],
           ),
@@ -172,7 +172,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Close',
-                style: TextStyle(color: Color(0xFF8E8E93))),
+                style: TextStyle(color: Color(0xFF636366))),
           ),
         ],
       ),
@@ -186,11 +186,11 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('$label: ',
-              style: const TextStyle(color: Colors.white54, fontSize: 13)),
+              style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
           Expanded(
             child: Text(value,
                 style: TextStyle(
-                    color: color ?? Colors.white,
+                    color: color ?? const Color(0xFF1C1C1E),
                     fontSize: 13,
                     fontWeight: FontWeight.w500)),
           ),
@@ -202,10 +202,11 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121214),
+      backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
         title: const Text('Submission History'),
-        backgroundColor: const Color(0xFF1C1C1E),
+        backgroundColor: const Color(0xFF0056B3),
+        foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
@@ -217,7 +218,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF5856D6)),
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056B3)),
               ),
             )
           : _submissions.isEmpty
@@ -226,16 +227,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.inbox_outlined,
-                          size: 64, color: Colors.white.withOpacity(0.15)),
+                          size: 64, color: const Color(0xFF0056B3).withValues(alpha: 0.15)),
                       const SizedBox(height: 16),
                       const Text(
                         'No submissions found.',
-                        style: TextStyle(color: Colors.white38, fontSize: 15),
+                        style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 6),
                       const Text(
                         'Profile a doctor from the Masterlist to create submissions.',
-                        style: TextStyle(color: Colors.white24, fontSize: 13),
+                        style: TextStyle(color: Color(0xFF636366), fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                     ],
@@ -243,25 +244,28 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 )
               : RefreshIndicator(
                   onRefresh: _loadSubmissions,
-                  color: const Color(0xFF5856D6),
+                  color: const Color(0xFF0056B3),
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     itemCount: _submissions.length,
                     itemBuilder: (ctx, index) {
                       final sub = _submissions[index];
                       return Card(
-                        color: const Color(0xFF1C1C1E),
+                        color: Colors.white,
                         margin: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 5),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(color: Color(0xFFE5E5EA)),
+                        ),
+                        elevation: 0,
                         child: ListTile(
                           leading: Container(
                             width: 40,
                             height: 40,
                             decoration: BoxDecoration(
                               color: _statusColor(sub.docstatus)
-                                  .withOpacity(0.15),
+                                  .withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
@@ -273,14 +277,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           title: Text(
                             sub.hcpFullName ?? sub.hcpName,
                             style: const TextStyle(
-                                color: Colors.white,
+                                color: Color(0xFF1C1C1E),
                                 fontWeight: FontWeight.bold,
                                 fontSize: 14),
                           ),
                           subtitle: Text(
                             '${_statusLabel(sub.docstatus)} \u2022 ${sub.submissionDate ?? "No date"}',
                             style: const TextStyle(
-                                color: Colors.white54, fontSize: 12),
+                                color: Color(0xFF636366), fontSize: 12),
                           ),
                           trailing: const Icon(Icons.chevron_right,
                               color: Color(0xFF8E8E93)),
