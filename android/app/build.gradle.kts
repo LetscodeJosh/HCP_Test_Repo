@@ -17,24 +17,12 @@ android {
     defaultConfig {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.pims.hcp_profiling"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-    }
-
-    flavorDimensions.add("app")
-    productFlavors {
-        create("hcp") {
-            dimension = "app"
-            applicationId = "com.pims.hcp_profiling"
-            manifestPlaceholders["appName"] = "PIMS HCP"
-        }
-        create("corenergy") {
-            dimension = "app"
-            applicationId = "com.pims.mcp_corenergy"
-            manifestPlaceholders["appName"] = "PIMS MCP (COREnergy)"
-        }
+        manifestPlaceholders["appName"] = "PIMS HCP"
     }
 
     buildTypes {
