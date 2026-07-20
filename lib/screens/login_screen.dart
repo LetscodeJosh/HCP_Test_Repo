@@ -122,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               borderRadius: BorderRadius.circular(20),
                               boxShadow: [
                                 BoxShadow(
-                                  color: const Color(0xFF0056B3).withValues(alpha: 0.3),
+                                  color: const Color(0xFF0056B3).withOpacity(0.3),
                                   blurRadius: 20,
                                   offset: const Offset(0, 10),
                                 ),
@@ -260,7 +260,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: _isLoading ? null : _handleLogin,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF0056B3),
-                            disabledBackgroundColor: const Color(0xFF0056B3).withValues(alpha: 0.5),
+                            disabledBackgroundColor: const Color(0xFF0056B3).withOpacity(0.5),
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),

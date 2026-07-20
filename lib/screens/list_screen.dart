@@ -58,6 +58,7 @@ class _ListScreenState extends State<ListScreen> {
   final MapController _mapController = MapController();
   LatLng? _myLocation;
   bool _isLocatingMap = false;
+  bool _areFiltersExpanded = false;
 
   Future<void> _moveToCurrentLocation() async {
     setState(() {
@@ -462,6 +463,82 @@ class _ListScreenState extends State<ListScreen> {
     );
   }
 
+  void _clearFilters() {
+    setState(() {
+      if (_corenergySubTab == 0) {
+        _selectedCompany = null;
+        _selectedSalesRep = null;
+        _selectedStatus = null;
+      } else {
+        _selectedInstitution = null;
+        _selectedRegion = null;
+        _selectedProvince = null;
+        _selectedCity = null;
+      }
+      _applyFilters();
+    });
+  }
+
+  Widget _buildFilterToggleButton() {
+    final bool hasActiveFilters = _corenergySubTab == 0
+        ? (_selectedCompany != null || _selectedSalesRep != null || _selectedStatus != null)
+        : (_selectedInstitution != null || _selectedRegion != null || _selectedProvince != null || _selectedCity != null);
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _areFiltersExpanded = !_areFiltersExpanded;
+        });
+      },
+      borderRadius: BorderRadius.circular(10),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF4F6F9),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _areFiltersExpanded ? const Color(0xFF0056B3) : const Color(0xFFE5E5EA)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _areFiltersExpanded ? Icons.tune : Icons.filter_alt_outlined,
+                  size: 14,
+                  color: _areFiltersExpanded || hasActiveFilters ? const Color(0xFF0056B3) : const Color(0xFF8E8E93),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  _areFiltersExpanded ? 'Hide' : 'Filter',
+                  style: TextStyle(
+                    color: _areFiltersExpanded || hasActiveFilters ? const Color(0xFF0056B3) : const Color(0xFF1C1C1E),
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (hasActiveFilters)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFF3B30),
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   String _getCompanyLabel(String? companyId) {
     if (companyId == null) return 'No Company';
     final match = _allInstitutions.firstWhere(
@@ -764,348 +841,385 @@ class _ListScreenState extends State<ListScreen> {
                   ),
                   const SizedBox(width: 8),
                   _buildSortButton(),
+                  const SizedBox(width: 8),
+                  _buildFilterToggleButton(),
                 ],
               ),
-              const SizedBox(height: 10),
-
-              // Filter Controls
-              if (_corenergySubTab == 0) ...[
-                // Row 1: Company Search Selector
-                GestureDetector(
-                  onTap: _showCompanyFilterPicker,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4F6F9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              if (_areFiltersExpanded) ...[
+                const SizedBox(height: 10),
+                if (_corenergySubTab == 0) ...[
+                  // Show clear filters button if there are active filters on Tab 0
+                  if (_selectedCompany != null || _selectedSalesRep != null || _selectedStatus != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        Expanded(
-                          child: Text(
-                            _selectedCompany == null
-                                ? 'All Companies'
-                                : (() {
-                                    final match = _allInstitutions.firstWhere(
-                                      (i) => i.name == _selectedCompany,
-                                      orElse: () => Institution(name: _selectedCompany!, institutionName: _selectedCompany!),
-                                    );
-                                    return '${match.name} - ${match.institutionName}';
-                                  })(),
-                            style: TextStyle(
-                              color: _selectedCompany == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
-                              fontSize: 13,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                        TextButton.icon(
+                          onPressed: _clearFilters,
+                          icon: const Icon(Icons.clear_all, size: 16, color: Color(0xFFFF3B30)),
+                          label: const Text('Clear All Filters', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                           ),
                         ),
-                        if (_selectedCompany != null)
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedCompany = null;
-                                _applyFilters();
-                              });
-                            },
-                            child: const Icon(Icons.clear, size: 16, color: Color(0xFF8E8E93)),
-                          )
-                        else
-                          const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 18),
                       ],
                     ),
+                    const SizedBox(height: 8),
+                  ],
+                  // Row 1: Company Search Selector
+                  GestureDetector(
+                    onTap: _showCompanyFilterPicker,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4F6F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedCompany == null
+                                  ? 'All Companies'
+                                  : (() {
+                                      final match = _allInstitutions.firstWhere(
+                                        (i) => i.name == _selectedCompany,
+                                        orElse: () => Institution(name: _selectedCompany!, institutionName: _selectedCompany!),
+                                      );
+                                      return '${match.name} - ${match.institutionName}';
+                                    })(),
+                              style: TextStyle(
+                                color: _selectedCompany == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
+                                fontSize: 13,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_selectedCompany != null)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedCompany = null;
+                                  _applyFilters();
+                                });
+                              },
+                              child: const Icon(Icons.clear, size: 16, color: Color(0xFF8E8E93)),
+                            )
+                          else
+                            const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 18),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                // Row 2: Sales Rep & Status
-                Row(
-                  children: [
-                    // Sales Rep Dropdown
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF4F6F9),
-                          borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 10),
+                  // Row 2: Sales Rep & Status
+                  Row(
+                    children: [
+                      // Sales Rep Dropdown
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF4F6F9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedSalesRep,
+                              hint: const Text('All Reps', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
+                              dropdownColor: Colors.white,
+                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
+                              style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedSalesRep = val;
+                                  _applyFilters();
+                                });
+                              },
+                              items: [
+                                const DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('All Reps', style: TextStyle(color: Color(0xFF1C1C1E))),
+                                ),
+                                ..._salesReps.map((rep) {
+                                  return DropdownMenuItem<String>(
+                                    value: rep,
+                                    child: Text(
+                                      rep,
+                                      style: const TextStyle(color: Color(0xFF1C1C1E)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }).toList(),
+                              ],
+                            ),
+                          ),
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedSalesRep,
-                            hint: const Text('All Reps', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
-                            dropdownColor: Colors.white,
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
-                            style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13),
-                            onChanged: (val) {
+                      ),
+                      const SizedBox(width: 10),
+                      // Status Dropdown
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF4F6F9),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedStatus,
+                              hint: const Text('All Status', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
+                              dropdownColor: Colors.white,
+                              icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
+                              style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13),
+                              onChanged: (val) {
+                                setState(() {
+                                  _selectedStatus = val;
+                                  _applyFilters();
+                                });
+                              },
+                              items: const [
+                                DropdownMenuItem<String>(
+                                  value: null,
+                                  child: Text('All Status', style: TextStyle(color: Color(0xFF1C1C1E))),
+                                ),
+                                DropdownMenuItem<String>(
+                                  value: 'successful',
+                                  child: Text('Successful', style: TextStyle(color: Color(0xFF1C1C1E))),
+                                ),
+                                DropdownMenuItem<String>(
+                                  value: 'unsuccessful',
+                                  child: Text('Unsuccessful', style: TextStyle(color: Color(0xFF1C1C1E))),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  // Show clear filters button if there are active filters on Tab 1
+                  if (_selectedInstitution != null || _selectedRegion != null || _selectedProvince != null || _selectedCity != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _clearFilters,
+                          icon: const Icon(Icons.clear_all, size: 16, color: Color(0xFFFF3B30)),
+                          label: const Text('Clear All Filters', style: TextStyle(color: Color(0xFFFF3B30), fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                  // Row 0: Institution Filter (searchable bottom sheet)
+                  GestureDetector(
+                    onTap: _showInstitutionFilterPicker,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4F6F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedInstitution == null
+                                  ? 'All Institutions'
+                                  : (() {
+                                      final match = _allInstitutions.firstWhere(
+                                        (i) => i.name == _selectedInstitution,
+                                        orElse: () => Institution(name: _selectedInstitution!, institutionName: _selectedInstitution!),
+                                      );
+                                      return '${match.institutionName} (${match.name})';
+                                    })(),
+                              style: TextStyle(
+                                color: _selectedInstitution == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
+                                fontSize: 13,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_selectedInstitution != null)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedInstitution = null;
+                                  _applyFilters();
+                                });
+                              },
+                              child: const Icon(Icons.clear, size: 16, color: Color(0xFF8E8E93)),
+                            )
+                          else
+                            const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 18),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Row 1: Region & Province (searchable tappable pickers)
+                  Row(
+                    children: [
+                      // Region Picker
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showSearchableLocationPicker(
+                            title: 'Filter by Region',
+                            locationType: 'Region',
+                            selectedValue: _selectedRegion,
+                            onSelected: (code) {
                               setState(() {
-                                _selectedSalesRep = val;
+                                _selectedRegion = code;
                                 _applyFilters();
                               });
                             },
-                            items: [
-                              const DropdownMenuItem<String>(
-                                value: null,
-                                child: Text('All Reps', style: TextStyle(color: Color(0xFF1C1C1E))),
-                              ),
-                              ..._salesReps.map((rep) {
-                                return DropdownMenuItem<String>(
-                                  value: rep,
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF4F6F9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
                                   child: Text(
-                                    rep,
-                                    style: const TextStyle(color: Color(0xFF1C1C1E)),
+                                    _selectedRegion == null ? 'All Regions' : _resolveLocationLabel(_selectedRegion),
+                                    style: TextStyle(
+                                      color: _selectedRegion == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
+                                      fontSize: 12,
+                                    ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                );
-                              }).toList(),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Status Dropdown
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF4F6F9),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedStatus,
-                            hint: const Text('All Status', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
-                            dropdownColor: Colors.white,
-                            icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
-                            style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13),
-                            onChanged: (val) {
-                              setState(() {
-                                _selectedStatus = val;
-                                _applyFilters();
-                              });
-                            },
-                            items: const [
-                              DropdownMenuItem<String>(
-                                value: null,
-                                child: Text('All Status', style: TextStyle(color: Color(0xFF1C1C1E))),
-                              ),
-                              DropdownMenuItem<String>(
-                                value: 'successful',
-                                child: Text('Successful', style: TextStyle(color: Color(0xFF1C1C1E))),
-                              ),
-                              DropdownMenuItem<String>(
-                                value: 'unsuccessful',
-                                child: Text('Unsuccessful', style: TextStyle(color: Color(0xFF1C1C1E))),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ] else ...[
-                // COREnergy Engage Filters
-
-                // Row 0: Institution Filter (searchable bottom sheet)
-                GestureDetector(
-                  onTap: _showInstitutionFilterPicker,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4F6F9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _selectedInstitution == null
-                                ? 'All Institutions'
-                                : (() {
-                                    final match = _allInstitutions.firstWhere(
-                                      (i) => i.name == _selectedInstitution,
-                                      orElse: () => Institution(name: _selectedInstitution!, institutionName: _selectedInstitution!),
-                                    );
-                                    return '${match.institutionName} (${match.name})';
-                                  })(),
-                            style: TextStyle(
-                              color: _selectedInstitution == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
-                              fontSize: 13,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (_selectedInstitution != null)
-                          GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedInstitution = null;
-                                _applyFilters();
-                              });
-                            },
-                            child: const Icon(Icons.clear, size: 16, color: Color(0xFF8E8E93)),
-                          )
-                        else
-                          const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 18),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                // Row 1: Region & Province (searchable tappable pickers)
-                Row(
-                  children: [
-                    // Region Picker
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _showSearchableLocationPicker(
-                          title: 'Filter by Region',
-                          locationType: 'Region',
-                          selectedValue: _selectedRegion,
-                          onSelected: (code) {
-                            setState(() {
-                              _selectedRegion = code;
-                              _applyFilters();
-                            });
-                          },
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF4F6F9),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _selectedRegion == null ? 'All Regions' : _resolveLocationLabel(_selectedRegion),
-                                  style: TextStyle(
-                                    color: _selectedRegion == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
-                                    fontSize: 12,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              ),
-                              if (_selectedRegion != null)
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedRegion = null;
-                                      _applyFilters();
-                                    });
-                                  },
-                                  child: const Icon(Icons.clear, size: 14, color: Color(0xFF8E8E93)),
-                                )
-                              else
-                                const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    // Province Picker
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () => _showSearchableLocationPicker(
-                          title: 'Filter by Province',
-                          locationType: 'Province',
-                          selectedValue: _selectedProvince,
-                          onSelected: (code) {
-                            setState(() {
-                              _selectedProvince = code;
-                              _applyFilters();
-                            });
-                          },
-                        ),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF4F6F9),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  _selectedProvince == null ? 'All Provinces' : _resolveLocationLabel(_selectedProvince),
-                                  style: TextStyle(
-                                    color: _selectedProvince == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
-                                    fontSize: 12,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                              if (_selectedProvince != null)
-                                GestureDetector(
-                                  onTap: () {
-                                    setState(() {
-                                      _selectedProvince = null;
-                                      _applyFilters();
-                                    });
-                                  },
-                                  child: const Icon(Icons.clear, size: 14, color: Color(0xFF8E8E93)),
-                                )
-                              else
-                                const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                // Row 2: City/Municipality Picker
-                GestureDetector(
-                  onTap: () => _showSearchableLocationPicker(
-                    title: 'Filter by City/Municipality',
-                    locationType: 'City',
-                    selectedValue: _selectedCity,
-                    onSelected: (code) {
-                      setState(() {
-                        _selectedCity = code;
-                        _applyFilters();
-                      });
-                    },
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF4F6F9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _selectedCity == null ? 'All Cities' : _resolveLocationLabel(_selectedCity),
-                            style: TextStyle(
-                              color: _selectedCity == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
-                              fontSize: 12,
+                                if (_selectedRegion != null)
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedRegion = null;
+                                        _applyFilters();
+                                      });
+                                    },
+                                    child: const Icon(Icons.clear, size: 14, color: Color(0xFF8E8E93)),
+                                  )
+                                else
+                                  const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 16),
+                              ],
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        if (_selectedCity != null)
-                          GestureDetector(
-                            onTap: () {
+                      ),
+                      const SizedBox(width: 10),
+                      // Province Picker
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showSearchableLocationPicker(
+                            title: 'Filter by Province',
+                            locationType: 'Province',
+                            selectedValue: _selectedProvince,
+                            onSelected: (code) {
                               setState(() {
-                                _selectedCity = null;
+                                _selectedProvince = code;
                                 _applyFilters();
                               });
                             },
-                            child: const Icon(Icons.clear, size: 14, color: Color(0xFF8E8E93)),
-                          )
-                        else
-                          const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 16),
-                      ],
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF4F6F9),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _selectedProvince == null ? 'All Provinces' : _resolveLocationLabel(_selectedProvince),
+                                    style: TextStyle(
+                                      color: _selectedProvince == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
+                                      fontSize: 12,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (_selectedProvince != null)
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedProvince = null;
+                                        _applyFilters();
+                                      });
+                                    },
+                                    child: const Icon(Icons.clear, size: 14, color: Color(0xFF8E8E93)),
+                                  )
+                                else
+                                  const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Row 2: City/Municipality Picker
+                  GestureDetector(
+                    onTap: () => _showSearchableLocationPicker(
+                      title: 'Filter by City/Municipality',
+                      locationType: 'City',
+                      selectedValue: _selectedCity,
+                      onSelected: (code) {
+                        setState(() {
+                          _selectedCity = code;
+                          _applyFilters();
+                        });
+                      },
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF4F6F9),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedCity == null ? 'All Cities' : _resolveLocationLabel(_selectedCity),
+                              style: TextStyle(
+                                color: _selectedCity == null ? const Color(0xFF8E8E93) : const Color(0xFF1C1C1E),
+                                fontSize: 12,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (_selectedCity != null)
+                            GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedCity = null;
+                                  _applyFilters();
+                                });
+                              },
+                              child: const Icon(Icons.clear, size: 14, color: Color(0xFF8E8E93)),
+                            )
+                          else
+                            const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93), size: 16),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ],
           ),

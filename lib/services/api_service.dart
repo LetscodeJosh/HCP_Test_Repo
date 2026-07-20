@@ -139,11 +139,12 @@ class ApiService extends ChangeNotifier {
 
   Future<void> _addPendingUpdate(String name, COREnergyEngage engage) async {
     try {
-      if (name.startsWith('OFFLINE-')) {
+      final offlineKey = engage.institutionName ?? name;
+      if (offlineKey.startsWith('OFFLINE-')) {
         await DbHelper.insertPendingEngagement(engage, 'CREATE');
       } else {
         final pending = await DbHelper.getPendingEngagements();
-        final match = pending.where((r) => r['temp_id'] == name && r['action_type'] == 'CREATE');
+        final match = pending.where((r) => r['temp_id'] == offlineKey && r['action_type'] == 'CREATE');
         if (match.isNotEmpty) {
           await DbHelper.insertPendingEngagement(engage, 'CREATE');
         } else {
@@ -210,14 +211,36 @@ class ApiService extends ChangeNotifier {
               final body = jsonDecode(response.body);
               final created = COREnergyEngage.fromJson(body['data']);
               await _saveDetailToCache(created.name, created);
+              if (created.institutionName != null) {
+                await _saveDetailToCache(created.institutionName!, created);
+              }
               somethingSynced = true;
             } else if (response.statusCode == 409 || 
                        response.body.contains('already exists') || 
                        response.body.contains('DuplicateEntryError') || 
                        response.body.contains('Duplicate')) {
               // Self-healing: Convert CREATE to UPDATE if the record already exists on the server
-              print('Duplicate COREnergy Engage document detected during sync for ${engage.name}. Falling back to PUT update...');
-              final updateUrl = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/${engage.name}');
+              print('Duplicate COREnergy Engage document detected during sync for ${engage.institutionName}. Falling back to PUT update...');
+              
+              String? serverDocName;
+              try {
+                final searchUrl = Uri.parse(
+                  '$baseUrl/api/resource/COREnergy%20Engage?filters=[["institution_name","=","${engage.institutionName}"]]'
+                );
+                final searchResponse = await http.get(searchUrl, headers: _headers).timeout(const Duration(seconds: 7));
+                if (searchResponse.statusCode == 200) {
+                  final searchBody = jsonDecode(searchResponse.body);
+                  final List<dynamic> searchData = searchBody['data'] ?? [];
+                  if (searchData.isNotEmpty) {
+                    serverDocName = searchData[0]['name'];
+                  }
+                }
+              } catch (e) {
+                print('Error searching for duplicate document name: $e');
+              }
+
+              final targetName = serverDocName ?? engage.name;
+              final updateUrl = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$targetName');
               final updateResponse = await http.put(
                 updateUrl,
                 headers: _headers,
@@ -227,7 +250,10 @@ class ApiService extends ChangeNotifier {
               if (updateResponse.statusCode == 200) {
                 final body = jsonDecode(updateResponse.body);
                 final updated = COREnergyEngage.fromJson(body['data']);
-                await _saveDetailToCache(engage.name, updated);
+                await _saveDetailToCache(updated.name, updated);
+                if (updated.institutionName != null) {
+                  await _saveDetailToCache(updated.institutionName!, updated);
+                }
                 somethingSynced = true;
               } else {
                 throw Exception('Sync fallback update failed: ${updateResponse.body}');
@@ -236,7 +262,27 @@ class ApiService extends ChangeNotifier {
               throw Exception('Sync create failed: ${response.body}');
             }
           } else if (actionType == 'UPDATE') {
-            final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/${engage.name}');
+            String targetName = engage.name;
+            if (targetName == engage.institutionName) {
+              // It's the Institution ID, let's search if the server has a COREnergy Engage ID for this institution
+              try {
+                final searchUrl = Uri.parse(
+                  '$baseUrl/api/resource/COREnergy%20Engage?filters=[["institution_name","=","${engage.institutionName}"]]'
+                );
+                final searchResponse = await http.get(searchUrl, headers: _headers).timeout(const Duration(seconds: 7));
+                if (searchResponse.statusCode == 200) {
+                  final searchBody = jsonDecode(searchResponse.body);
+                  final List<dynamic> searchData = searchBody['data'] ?? [];
+                  if (searchData.isNotEmpty) {
+                    targetName = searchData[0]['name'];
+                  }
+                }
+              } catch (e) {
+                print('Error resolving server name for update: $e');
+              }
+            }
+
+            final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$targetName');
             final payloadMap = engage.toJson();
             payloadMap.remove('name');
             final response = await http.put(
@@ -248,12 +294,15 @@ class ApiService extends ChangeNotifier {
             if (response.statusCode == 200) {
               final body = jsonDecode(response.body);
               final updated = COREnergyEngage.fromJson(body['data']);
-              await _saveDetailToCache(engage.name, updated);
+              await _saveDetailToCache(updated.name, updated);
+              if (updated.institutionName != null) {
+                await _saveDetailToCache(updated.institutionName!, updated);
+              }
               somethingSynced = true;
             } else if (response.statusCode == 404 || 
                        response.body.contains('DoesNotExistError') || 
                        response.body.contains('not found')) {
-              print('COREnergy Engage document does not exist during sync for ${engage.name}. Falling back to POST create...');
+              print('COREnergy Engage document does not exist during sync for $targetName. Falling back to POST create...');
               final createUrl = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage');
               final createResponse = await http.post(
                 createUrl,
@@ -264,7 +313,10 @@ class ApiService extends ChangeNotifier {
               if (createResponse.statusCode == 200 || createResponse.statusCode == 201) {
                 final body = jsonDecode(createResponse.body);
                 final created = COREnergyEngage.fromJson(body['data']);
-                await _saveDetailToCache(engage.name, created);
+                await _saveDetailToCache(created.name, created);
+                if (created.institutionName != null) {
+                  await _saveDetailToCache(created.institutionName!, created);
+                }
                 somethingSynced = true;
               } else {
                 throw Exception('Sync fallback create failed: ${createResponse.body}');
@@ -776,11 +828,11 @@ class ApiService extends ChangeNotifier {
   }
 
   Future<COREnergyEngage> _saveCOREnergyEngageOffline(COREnergyEngage engage, {required bool isCreate}) async {
-    final name = engage.name.isEmpty ? (engage.institutionName ?? 'OFFLINE-${DateTime.now().millisecondsSinceEpoch}') : engage.name;
+    final offlineKey = engage.institutionName ?? engage.name;
     final nowStr = DateTime.now().toIso8601String().replaceFirst('T', ' ').substring(0, 19);
     final localEngage = COREnergyEngage(
-      name: name,
-      institutionName: engage.institutionName ?? name,
+      name: engage.name.isEmpty ? offlineKey : engage.name,
+      institutionName: offlineKey,
       hospitalClinic: engage.hospitalClinic,
       region: engage.region,
       province: engage.province,
@@ -797,9 +849,12 @@ class ApiService extends ChangeNotifier {
     if (isCreate) {
       await _addPendingCreate(localEngage);
     } else {
-      await _addPendingUpdate(localEngage.name, localEngage);
+      await _addPendingUpdate(offlineKey, localEngage);
     }
     await _saveDetailToCache(localEngage.name, localEngage);
+    if (localEngage.institutionName != null && localEngage.institutionName != localEngage.name) {
+      await _saveDetailToCache(localEngage.institutionName!, localEngage);
+    }
 
     // Update list cache
     final cache = await _readFromCache('corenergy_engages_cache.json');
@@ -807,7 +862,7 @@ class ApiService extends ChangeNotifier {
       try {
         final List<dynamic> jsonList = jsonDecode(cache);
         final list = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
-        final idx = list.indexWhere((e) => e.name == localEngage.name);
+        final idx = list.indexWhere((e) => e.name == localEngage.name || e.institutionName == localEngage.institutionName);
         if (idx != -1) {
           list[idx] = localEngage;
         } else {

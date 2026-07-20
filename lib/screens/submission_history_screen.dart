@@ -227,7 +227,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.inbox_outlined,
-                          size: 64, color: const Color(0xFF0056B3).withValues(alpha: 0.15)),
+                          size: 64, color: const Color(0xFF0056B3).withOpacity(0.15)),
                       const SizedBox(height: 16),
                       const Text(
                         'No submissions found.',
@@ -265,7 +265,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                             height: 40,
                             decoration: BoxDecoration(
                               color: _statusColor(sub.docstatus)
-                                  .withValues(alpha: 0.15),
+                                  .withOpacity(0.15),
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(

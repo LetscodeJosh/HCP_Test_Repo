@@ -337,7 +337,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF0056B3),
-                  disabledBackgroundColor: const Color(0xFF0056B3).withValues(alpha: 0.5),
+                  disabledBackgroundColor: const Color(0xFF0056B3).withOpacity(0.5),
                 ),
                 onPressed: agreed && _waiverSignaturePoints.value.isNotEmpty
                     ? () => Navigator.pop(ctx, true)
@@ -1088,7 +1088,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0056B3),
-              disabledBackgroundColor: const Color(0xFF0056B3).withValues(alpha: 0.5),
+              disabledBackgroundColor: const Color(0xFF0056B3).withOpacity(0.5),
             ),
             onPressed: _currentStep == 0 && (!_consentGiven || _signaturePoints.value.isEmpty)
                 ? null

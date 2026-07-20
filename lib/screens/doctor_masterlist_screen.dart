@@ -347,7 +347,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 leading: const Icon(Icons.people_alt, color: Color(0xFF0056B3)),
                 title: const Text('Doctor Masterlist', style: TextStyle(color: Color(0xFF0056B3), fontWeight: FontWeight.bold)),
                 selected: true,
-                selectedTileColor: const Color(0xFF0056B3).withValues(alpha: 0.1),
+                selectedTileColor: const Color(0xFF0056B3).withOpacity(0.1),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 onTap: () => Navigator.pop(context),
               ),

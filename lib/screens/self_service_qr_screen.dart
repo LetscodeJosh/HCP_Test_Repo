@@ -51,7 +51,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF34C759).withValues(alpha: 0.3),
+                      color: const Color(0xFF34C759).withOpacity(0.3),
                       blurRadius: 15,
                       offset: const Offset(0, 5),
                     ),
@@ -74,7 +74,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                     Text(
                       'Let the doctor scan the QR code to verify or complete self-service.',
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.9),
+                        color: Colors.white.withOpacity(0.9),
                         fontSize: 13,
                       ),
                       textAlign: TextAlign.center,
@@ -95,7 +95,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 28,
-                      backgroundColor: const Color(0xFF0056B3).withValues(alpha: 0.15),
+                      backgroundColor: const Color(0xFF0056B3).withOpacity(0.15),
                       child: const Icon(Icons.person, color: Color(0xFF0056B3), size: 30),
                     ),
                     const SizedBox(width: 16),
@@ -135,7 +135,7 @@ class SelfServiceQrScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF0056B3).withValues(alpha: 0.1),
+                      color: const Color(0xFF0056B3).withOpacity(0.1),
                       blurRadius: 20,
                       spreadRadius: 2,
                     ),

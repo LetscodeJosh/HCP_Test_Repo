@@ -153,10 +153,10 @@ class COREnergyEngage {
       parsedActionItems = actionItemsList.map((a) => COREnergyEngageActionItem.fromJson(a)).toList();
     }
 
-    final resolvedInstName = json['institution_name'] ?? json['institution'] ?? json['name'] ?? '';
+    final resolvedInstName = json['institution_name'] ?? json['institution'] ?? '';
     return COREnergyEngage(
-      name: resolvedInstName,
-      institutionName: resolvedInstName,
+      name: json['name'] ?? '',
+      institutionName: resolvedInstName.isNotEmpty ? resolvedInstName : (json['name'] ?? ''),
       hospitalClinic: json['name_of_hospital_or_clinic'] ?? json['hospital_clinic'] ?? json['hospital_clinic_name'] ?? json['institution_label'],
       region: json['region_name'] ?? json['region'],
       province: json['province_name'] ?? json['province'],
