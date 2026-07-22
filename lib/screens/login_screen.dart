@@ -5,6 +5,7 @@ import '../app_config.dart';
 import '../services/api_service.dart';
 import '../services/biometric_service.dart';
 import 'doctor_masterlist_screen.dart';
+import 'submission_history_screen.dart';
 import 'list_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -113,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy
                 ? const ListScreen()
-                : const DoctorMasterlistScreen(),
+                : const SubmissionHistoryScreen(),
           ),
         );
       } else {

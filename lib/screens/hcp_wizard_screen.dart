@@ -191,6 +191,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       return SubmissionAnswer(surveyQuestion: e.key, questionText: e.key, answer: e.value);
     }).toList();
 
+    final changesMap = {
+      'first_name': widget.doctor.firstName,
+      'last_name': widget.doctor.lastName,
+      'hcp_type': widget.doctor.hcpType,
+      'hcp_practice': widget.doctor.hcpPractice,
+      'specialties_count': _selectedSpecialties.length,
+      'workplaces_count': _selectedWorkplaces.length,
+      'answers_count': answersList.length,
+    };
+    final changesJsonStr = jsonEncode(changesMap);
+    final changeSummaryHtmlStr = '<ul><li><b>Profile Submission Created</b> for Dr. ${widget.doctor.firstName} ${widget.doctor.lastName}</li><li><b>Specialties Linked</b>: ${_selectedSpecialties.length}</li><li><b>Workplaces Linked</b>: ${_selectedWorkplaces.length}</li></ul>';
+
     final submission = HcpProfileSubmission(
       hcpName: widget.doctor.name ?? '',
       hcpFullName: '${widget.doctor.firstName} ${widget.doctor.lastName}',
@@ -210,6 +222,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       surveyTemplateTitle: _activeSurvey?.templateName,
       answers: answersList,
       medrepEmail: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
+      changeSummaryHtml: changeSummaryHtmlStr,
+      changesJson: changesJsonStr,
       docstatus: 1, // Submit automatically
     );
 
@@ -1020,13 +1034,77 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   Widget _buildReviewStep() {
+    final changesMap = {
+      'first_name': widget.doctor.firstName,
+      'last_name': widget.doctor.lastName,
+      'hcp_type': widget.doctor.hcpType,
+      'hcp_practice': widget.doctor.hcpPractice,
+      'specialties_count': _selectedSpecialties.length,
+      'workplaces_count': _selectedWorkplaces.length,
+      'answers_count': _surveyAnswers.length,
+    };
+    final jsonFormatted = const JsonEncoder.withIndent('  ').convert(changesMap);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Profile Summary Review', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 20, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
+          const Text('Step 4: Record Changes & Profile Review', style: TextStyle(color: Color(0xFF1C1C1E), fontSize: 20, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 6),
+          const Text('Review the changes that will be submitted and pushed to ERPNext v15:', style: TextStyle(color: Color(0xFF636366), fontSize: 13)),
+          const SizedBox(height: 16),
+
+          // Changes HTML Box
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBE6),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFFD591)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.change_circle, color: Color(0xFFD48806), size: 20),
+                    SizedBox(width: 8),
+                    Text('Change Summary (ERPNext Format)', style: TextStyle(color: Color(0xFFD48806), fontWeight: FontWeight.bold, fontSize: 14)),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text('• Profile Submission for Dr. ${widget.doctor.firstName} ${widget.doctor.lastName}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13)),
+                Text('• Linked Specialties: ${_selectedSpecialties.length}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13)),
+                Text('• Linked Workplaces: ${_selectedWorkplaces.length}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Changes JSON Code Block
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2C2C2E),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Changes JSON Preview', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                Text(
+                  jsonFormatted,
+                  style: const TextStyle(color: Color(0xFF30D158), fontFamily: 'monospace', fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
