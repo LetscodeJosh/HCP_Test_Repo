@@ -1,6 +1,8 @@
 class HcpAccount {
   final String? name;
-  final String accountName;
+  final String accountName; // Map to account_or_program
+  final String? territory;
+  final String? salesPerson;
   final String? accountType;
   final bool isActive;
   final String? hcp;
@@ -11,6 +13,8 @@ class HcpAccount {
   HcpAccount({
     this.name,
     required this.accountName,
+    this.territory,
+    this.salesPerson,
     this.accountType,
     this.isActive = true,
     this.hcp,
@@ -22,17 +26,19 @@ class HcpAccount {
   factory HcpAccount.fromJson(Map<String, dynamic> json) {
     return HcpAccount(
       name: json['name'],
-      accountName: json['account_name'] ?? json['account_or_program'] ?? '',
+      accountName: json['account_or_program'] ?? json['account_name'] ?? '',
+      territory: json['territory'],
+      salesPerson: json['sales_person'],
       accountType: json['account_type'],
       isActive: json['is_active'] == 1 || json['is_active'] == true,
       hcp: json['hcp'],
-      specialties: (json['specialties'] as List?)
+      specialties: (json['specialization'] as List? ?? json['specialties'] as List?)
               ?.map((e) => HcpAccountSpecialization.fromJson(e))
               .toList() ?? [],
-      workplaces: (json['workplaces'] as List?)
+      workplaces: (json['workplace_info'] as List? ?? json['workplaces'] as List?)
               ?.map((e) => HcpAccountWorkplace.fromJson(e))
               .toList() ?? [],
-      contacts: (json['contacts'] as List?)
+      contacts: (json['contact_info'] as List? ?? json['contacts'] as List?)
               ?.map((e) => HcpAccountContact.fromJson(e))
               .toList() ?? [],
     );
@@ -42,12 +48,14 @@ class HcpAccount {
     return {
       if (name != null) 'name': name,
       'account_or_program': accountName,
+      'territory': territory ?? 'All Territories',
+      'sales_person': salesPerson ?? 'JORGE MENGORIO (AD0110)',
       if (accountType != null) 'account_type': accountType,
       'is_active': isActive ? 1 : 0,
       if (hcp != null) 'hcp': hcp,
-      'specialties': specialties.map((e) => e.toJson()).toList(),
-      'workplaces': workplaces.map((e) => e.toJson()).toList(),
-      'contacts': contacts.map((e) => e.toJson()).toList(),
+      if (specialties.isNotEmpty) 'specialization': specialties.map((e) => e.toJson()).toList(),
+      if (workplaces.isNotEmpty) 'workplace_info': workplaces.map((e) => e.toJson()).toList(),
+      if (contacts.isNotEmpty) 'contact_info': contacts.map((e) => e.toJson()).toList(),
     };
   }
 }

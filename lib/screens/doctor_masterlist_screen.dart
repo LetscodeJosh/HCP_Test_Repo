@@ -374,6 +374,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   
                   final newHcpAccount = HcpAccount(
                     accountName: apiService.selectedProgram,
+                    territory: 'All Territories',
+                    salesPerson: 'JORGE MENGORIO (AD0110)',
                     hcp: savedDoctor.name,
                   );
                   await apiService.hcpAccounts.create(newHcpAccount);
