@@ -7,7 +7,6 @@ import '../services/api_service.dart';
 import 'doctor_profile_screen.dart';
 import 'hcp_wizard_screen.dart';
 import 'self_service_qr_screen.dart';
-import 'list_screen.dart';
 import 'submission_history_screen.dart';
 import 'login_screen.dart';
 
@@ -29,10 +28,11 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   bool _isLoading = true;
   String _searchQuery = '';
   
-  // Selected filter values
-  String? _selectedSpecialty;
-  String? _selectedInstitution;
-  String? _selectedLocation;
+  // ERPNext Matching Filters
+  String? _selectedTypeFilter;
+  String? _selectedPracticeFilter;
+  bool _onlyIsActive = false;
+  bool _onlyIsPendingApproval = false;
 
   @override
   void initState() {
@@ -81,23 +81,17 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   void _applyFilters() {
     setState(() {
       _filteredDoctors = _allDoctors.where((doctor) {
-        final fullName = '${doctor.firstName} ${doctor.lastName}'.toLowerCase();
-        final matchesSearch = fullName.contains(_searchQuery.toLowerCase()) ||
-            (doctor.name?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
+        final nameStr = '${doctor.firstName} ${doctor.middleName ?? ''} ${doctor.lastName}'.toLowerCase();
+        final idStr = (doctor.name ?? '').toLowerCase();
+        final queryLower = _searchQuery.toLowerCase().trim();
+        final matchesSearch = queryLower.isEmpty || nameStr.contains(queryLower) || idStr.contains(queryLower);
 
-        final matchesSpecialty = _selectedSpecialty == null ||
-            doctor.specialties.any((s) => s.hcpSpecialty == _selectedSpecialty);
+        final matchesType = _selectedTypeFilter == null || doctor.hcpType == _selectedTypeFilter;
+        final matchesPractice = _selectedPracticeFilter == null || doctor.hcpPractice == _selectedPracticeFilter;
+        final matchesIsActive = !_onlyIsActive || doctor.isActive;
+        final matchesIsPending = !_onlyIsPendingApproval || doctor.isPendingApproval;
 
-        final matchesInstitution = _selectedInstitution == null ||
-            doctor.workplaces.any((w) => w.workplace == _selectedInstitution);
-
-        final matchesLocation = _selectedLocation == null ||
-            doctor.regionName == _selectedLocation ||
-            doctor.provinceName == _selectedLocation ||
-            doctor.cityMunicipality == _selectedLocation ||
-            doctor.barangayName == _selectedLocation;
-
-        return matchesSearch && matchesSpecialty && matchesInstitution && matchesLocation;
+        return matchesSearch && matchesType && matchesPractice && matchesIsActive && matchesIsPending;
       }).toList();
     });
   }
@@ -140,7 +134,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Dr. ${doctor.firstName} ${doctor.lastName}',
+                          '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' ? doctor.middleName! + ' ' : ''}${doctor.lastName}',
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
                         ),
                         Text(
@@ -163,6 +157,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 _detailRowItem('Birth Date', doctor.birthDate!),
               _detailRowItem('HCP Type', doctor.hcpType),
               _detailRowItem('Practice Mode', doctor.hcpPractice),
+              _detailRowItem('Status', doctor.isActive ? 'Active' : 'Inactive'),
               if (doctor.regionName != null)
                 _detailRowItem('Region', doctor.regionName!),
               if (doctor.provinceName != null)
@@ -238,7 +233,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Register New Doctor', style: TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold)),
+        title: const Text('Register New Doctor (HCP)', style: TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
           child: Form(
             key: formKey,
@@ -277,7 +272,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   validator: (val) => val == null || val.isEmpty ? 'Required' : null,
                   onSaved: (val) => lastName = val!,
                 ),
-                // HCP Type — fetched dynamically from HCP Type DocType
                 DropdownButtonFormField<String>(
                   value: selectedType,
                   dropdownColor: Colors.white,
@@ -295,7 +289,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   )).toList(),
                   onChanged: (val) => selectedType = val,
                 ),
-                // Primary Specialty
                 DropdownButtonFormField<String>(
                   value: selectedSpecialty,
                   dropdownColor: Colors.white,
@@ -312,7 +305,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   )).toList(),
                   onChanged: (val) => selectedSpecialty = val,
                 ),
-                // Primary Workplace / Institution
                 DropdownButtonFormField<String>(
                   value: selectedWorkplace,
                   dropdownColor: Colors.white,
@@ -329,7 +321,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   )).toList(),
                   onChanged: (val) => selectedWorkplace = val,
                 ),
-                // HCP Practice — static dropdown (not a DocType)
                 DropdownButtonFormField<String>(
                   value: selectedPractice,
                   dropdownColor: Colors.white,
@@ -381,7 +372,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   );
                   final savedDoctor = await apiService.createDoctor(newDoctor);
                   
-                  // Reconcile and link the newly registered doctor to the active program using HCP Account
                   final newHcpAccount = HcpAccount(
                     accountName: apiService.selectedProgram,
                     hcp: savedDoctor.name,
@@ -416,13 +406,17 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('Doctor Masterlist'),
+        title: const Text('HCP'),
         backgroundColor: const Color(0xFF0056B3),
         elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,
+          ),
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: _showAddDoctorDialog,
           ),
         ],
       ),
@@ -466,7 +460,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   ],
                 ),
               ),
-              // Dynamic Program Selector Dropdown
               Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Consumer<ApiService>(
@@ -505,10 +498,9 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 ),
               ),
               const SizedBox(height: 8),
-              // Navigation Items
               ListTile(
                 leading: const Icon(Icons.people_alt, color: Color(0xFF0056B3)),
-                title: const Text('Doctor Masterlist', style: TextStyle(color: Color(0xFF0056B3), fontWeight: FontWeight.bold)),
+                title: const Text('HCP', style: TextStyle(color: Color(0xFF0056B3), fontWeight: FontWeight.bold)),
                 selected: true,
                 selectedTileColor: const Color(0xFF0056B3).withOpacity(0.1),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -550,7 +542,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
             )
           : Column(
               children: [
-                // Filter Header
+                // ERPNext Filter Bar Matching Screenshot
                 Container(
                   padding: const EdgeInsets.all(12),
                   color: Colors.white,
@@ -559,17 +551,15 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   ),
                   child: Column(
                     children: [
-                      // Search Doctor
+                      // Search ID / Name of Doctor
                       TextField(
                         onChanged: (val) {
-                          setState(() {
-                            _searchQuery = val;
-                            _applyFilters();
-                          });
+                          _searchQuery = val;
+                          _applyFilters();
                         },
                         style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
                         decoration: InputDecoration(
-                          hintText: 'Search doctors by name or ID...',
+                          hintText: 'Search by ID or Name of Doctor...',
                           hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
                           prefixIcon: const Icon(Icons.search, color: Color(0xFF8E8E93)),
                           filled: true,
@@ -587,10 +577,10 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         ),
                       ),
                       const SizedBox(height: 10),
-                      // Dropdown Filters
+                      // Dropdown Filters: Type & Practice
                       Row(
                         children: [
-                          // Specialty Filter
+                          // Type Filter
                           Expanded(
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -602,22 +592,20 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
                                   isExpanded: true,
-                                  value: _selectedSpecialty,
+                                  value: _selectedTypeFilter,
                                   dropdownColor: Colors.white,
-                                  hint: const Text('Specialty', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
+                                  hint: const Text('Type', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
                                   icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
                                   style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 12),
                                   onChanged: (val) {
-                                    setState(() {
-                                      _selectedSpecialty = val;
-                                      _applyFilters();
-                                    });
+                                    _selectedTypeFilter = val;
+                                    _applyFilters();
                                   },
                                   items: [
-                                    const DropdownMenuItem<String>(value: null, child: Text('All Specialties')),
-                                    ..._specializations.map((spec) => DropdownMenuItem(
-                                          value: spec.specialty,
-                                          child: Text(spec.specialty, style: const TextStyle(color: Color(0xFF1C1C1E))),
+                                    const DropdownMenuItem<String>(value: null, child: Text('All Types')),
+                                    ..._hcpTypes.map((t) => DropdownMenuItem(
+                                          value: t.name,
+                                          child: Text(t.typeName, style: const TextStyle(color: Color(0xFF1C1C1E))),
                                         )),
                                   ],
                                 ),
@@ -625,7 +613,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          // Hospital Filter
+                          // Practice Filter
                           Expanded(
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -637,23 +625,20 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               child: DropdownButtonHideUnderline(
                                 child: DropdownButton<String>(
                                   isExpanded: true,
-                                  value: _selectedInstitution,
+                                  value: _selectedPracticeFilter,
                                   dropdownColor: Colors.white,
-                                  hint: const Text('Hospital', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
+                                  hint: const Text('Practice', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
                                   icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
                                   style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 12),
                                   onChanged: (val) {
-                                    setState(() {
-                                      _selectedInstitution = val;
-                                      _applyFilters();
-                                    });
+                                    _selectedPracticeFilter = val;
+                                    _applyFilters();
                                   },
-                                  items: [
-                                    const DropdownMenuItem<String>(value: null, child: Text('All Hospitals')),
-                                    ..._institutions.map((inst) => DropdownMenuItem(
-                                          value: inst.name,
-                                          child: Text(inst.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E))),
-                                        )),
+                                  items: const [
+                                    DropdownMenuItem<String>(value: null, child: Text('All Practices')),
+                                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                                    DropdownMenuItem(value: 'Both', child: Text('Both')),
                                   ],
                                 ),
                               ),
@@ -662,48 +647,36 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      // Area / Location Filter
+                      // Checkbox Filter Chips: Is Active & Is Pending Approval
                       Row(
                         children: [
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFD1D1D6)),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  isExpanded: true,
-                                  value: _selectedLocation,
-                                  dropdownColor: Colors.white,
-                                  hint: const Text('Area / Location', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
-                                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
-                                  style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 12),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _selectedLocation = val;
-                                      _applyFilters();
-                                    });
-                                  },
-                                  items: [
-                                    const DropdownMenuItem<String>(value: null, child: Text('All Areas')),
-                                    ..._psgcLocations.map((loc) => DropdownMenuItem(
-                                          value: loc.name,
-                                          child: Text('${loc.locationLabel} (${loc.locationType})', style: const TextStyle(color: Color(0xFF1C1C1E))),
-                                        )),
-                                  ],
-                                ),
-                              ),
-                            ),
+                          FilterChip(
+                            label: const Text('Is Active', style: TextStyle(fontSize: 12)),
+                            selected: _onlyIsActive,
+                            selectedColor: const Color(0xFF0056B3).withOpacity(0.15),
+                            checkmarkColor: const Color(0xFF0056B3),
+                            onSelected: (val) {
+                              _onlyIsActive = val;
+                              _applyFilters();
+                            },
+                          ),
+                          const SizedBox(width: 8),
+                          FilterChip(
+                            label: const Text('Is Pending Approval', style: TextStyle(fontSize: 12)),
+                            selected: _onlyIsPendingApproval,
+                            selectedColor: const Color(0xFFFF9500).withOpacity(0.15),
+                            checkmarkColor: const Color(0xFFFF9500),
+                            onSelected: (val) {
+                              _onlyIsPendingApproval = val;
+                              _applyFilters();
+                            },
                           ),
                         ],
                       ),
                     ],
                   ),
                 ),
-                // Doctor List View
+                // Doctor List Table View (Matching ERPNext columns)
                 Expanded(
                   child: _filteredDoctors.isEmpty
                       ? const Center(
@@ -713,62 +686,58 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                           itemCount: _filteredDoctors.length,
                           itemBuilder: (ctx, index) {
                             final doctor = _filteredDoctors[index];
-                            final primarySpecialty = doctor.specialties.isNotEmpty
-                                ? doctor.specialties.first.hcpSpecialty
-                                : 'No Specialty Declared';
-                            return Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(14),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withOpacity(0.04),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(14),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    border: Border.all(color: const Color(0xFFE5E5EA)),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: IntrinsicHeight(
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 5,
-                                          color: const Color(0xFF0056B3),
-                                        ),
-                                        Expanded(
-                                          child: ListTile(
-                                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                            leading: CircleAvatar(
-                                              backgroundColor: const Color(0xFF0056B3).withOpacity(0.08),
-                                              child: const Icon(Icons.person, color: Color(0xFF0056B3)),
-                                            ),
-                                            title: Text(
-                                              'Dr. ${doctor.firstName} ${doctor.lastName}',
-                                              style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold),
-                                            ),
-                                            subtitle: Padding(
-                                              padding: const EdgeInsets.only(top: 4.0),
-                                              child: Text(
-                                                '$primarySpecialty • ${doctor.hcpType}',
-                                                style: const TextStyle(color: Color(0xFF636366), fontSize: 13),
-                                              ),
-                                            ),
-                                            trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Color(0xFF8E8E93)),
-                                            onTap: () => _openDoctorProfile(doctor),
-                                          ),
-                                        ),
-                                      ],
+                            final fullName = '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' ? doctor.middleName! + ' ' : ''}${doctor.lastName}';
+                            final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
+
+                            return Card(
+                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                              elevation: 1,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                leading: Icon(
+                                  doctor.isActive ? Icons.check_circle : Icons.radio_button_unchecked,
+                                  color: doctor.isActive ? const Color(0xFF34C759) : const Color(0xFFC7C7CC),
+                                  size: 22,
+                                ),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        fullName,
+                                        style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold, fontSize: 15),
+                                      ),
                                     ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFE5E5EA),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        doctor.hcpPractice,
+                                        style: const TextStyle(color: Color(0xFF3A3A3C), fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                subtitle: Padding(
+                                  padding: const EdgeInsets.only(top: 6.0),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        '$typeLabel • ${doctor.institution ?? "No Institution"}',
+                                        style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
+                                      ),
+                                      Text(
+                                        doctor.name ?? '',
+                                        style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace', fontSize: 12),
+                                      ),
+                                    ],
                                   ),
                                 ),
+                                onTap: () => _openDoctorProfile(doctor),
                               ),
                             );
                           },
@@ -776,9 +745,10 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 ),
               ],
             ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFF0056B3),
-        child: const Icon(Icons.add, color: Colors.white),
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text('Add HCP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: _showAddDoctorDialog,
       ),
     );
