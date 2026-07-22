@@ -102,15 +102,125 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     });
   }
 
-  void _openDoctorProfile(Hcp doctor) async {
-    final result = await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => DoctorProfileScreen(doctor: doctor),
+  void _openDoctorProfile(Hcp doctor) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        maxChildSize: 0.9,
+        minChildSize: 0.4,
+        expand: false,
+        builder: (ctx, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(color: const Color(0xFFE5E5EA), borderRadius: BorderRadius.circular(2)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: const Color(0xFF0056B3).withOpacity(0.1),
+                    child: const Icon(Icons.person, color: Color(0xFF0056B3), size: 28),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Dr. ${doctor.firstName} ${doctor.lastName}',
+                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+                        ),
+                        Text(
+                          doctor.name ?? '',
+                          style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace', fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              const Text('Registered Doctor Details', style: TextStyle(color: Color(0xFF0056B3), fontSize: 15, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              _detailRowItem('First Name', doctor.firstName),
+              if (doctor.middleName != null && doctor.middleName!.isNotEmpty)
+                _detailRowItem('Middle Name', doctor.middleName!),
+              _detailRowItem('Last Name', doctor.lastName),
+              if (doctor.birthDate != null)
+                _detailRowItem('Birth Date', doctor.birthDate!),
+              _detailRowItem('HCP Type', doctor.hcpType),
+              _detailRowItem('Practice Mode', doctor.hcpPractice),
+              if (doctor.regionName != null)
+                _detailRowItem('Region', doctor.regionName!),
+              if (doctor.provinceName != null)
+                _detailRowItem('Province', doctor.provinceName!),
+              if (doctor.cityMunicipality != null)
+                _detailRowItem('City', doctor.cityMunicipality!),
+              
+              if (doctor.specialties.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text('Declared Specialties', style: TextStyle(color: Color(0xFF0056B3), fontSize: 15, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                ...doctor.specialties.map((s) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Text('• ${s.hcpSpecialty} ${s.subSpecialty != null ? "(${s.subSpecialty})" : ""}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14)),
+                )),
+              ],
+
+              if (doctor.workplaces.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Text('Workplaces', style: TextStyle(color: Color(0xFF0056B3), fontSize: 15, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 6),
+                ...doctor.workplaces.map((w) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4.0),
+                  child: Text('• ${w.workplace}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14)),
+                )),
+              ],
+
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0056B3),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => Navigator.pop(ctx),
+                  child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
-    if (result == true) {
-      _loadData();
-    }
+  }
+
+  Widget _detailRowItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
+          Text(value, style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
   }
 
   void _showAddDoctorDialog() {
@@ -352,17 +462,9 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 onTap: () => Navigator.pop(context),
               ),
               ListTile(
-                leading: const Icon(Icons.assignment, color: Color(0xFF34C759)),
-                title: const Text('Engagements', style: TextStyle(color: Color(0xFF1C1C1E))),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const ListScreen()));
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.history, color: Color(0xFFFF9500)),
-                title: const Text('Submission History', style: TextStyle(color: Color(0xFF1C1C1E))),
+                leading: const Icon(Icons.assignment_turned_in, color: Color(0xFFFF9500)),
+                title: const Text('HCP Profile Submissions', style: TextStyle(color: Color(0xFF1C1C1E))),
+                subtitle: const Text('View IT Manager changes from ERPNext', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11)),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 onTap: () {
                   Navigator.pop(context);

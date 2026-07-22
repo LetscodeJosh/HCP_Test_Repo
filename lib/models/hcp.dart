@@ -4,6 +4,7 @@ class Hcp {
   final String firstName;
   final String? middleName;
   final String lastName;
+  final String? birthDate;
   final String? hcpPhoto;
   final String hcpType;
   final String hcpPractice;
@@ -24,6 +25,7 @@ class Hcp {
     required this.firstName,
     this.middleName,
     required this.lastName,
+    this.birthDate,
     this.hcpPhoto,
     required this.hcpType,
     required this.hcpPractice,
@@ -46,6 +48,7 @@ class Hcp {
       firstName: json['first_name'] ?? '',
       middleName: json['middle_name'],
       lastName: json['last_name'] ?? '',
+      birthDate: json['birth_date'],
       hcpPhoto: json['hcp_photo'],
       hcpType: json['hcp_type'] ?? '',
       hcpPractice: json['hcp_practice'] ?? 'Both',

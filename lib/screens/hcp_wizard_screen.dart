@@ -65,15 +65,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     }
     for (var work in widget.doctor.workplaces) {
       _selectedWorkplaces.add(SubmissionWorkplace(
-        workplace: work.workplace,
-        address: work.address,
-        isPrimary: work.isPrimary,
+        hcpWorkplace: work.workplace,
+        workplaceName: work.address,
       ));
     }
     for (var contact in widget.doctor.contacts) {
       _contacts.add(SubmissionContact(
-        contactType: contact.contactType,
-        contactValue: contact.contactValue,
+        contactNumber: contact.contactValue,
+        emailAddress: contact.contactType,
       ));
     }
     _selectedRegion = widget.doctor.regionName;
@@ -189,7 +188,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
     // Map Answers table
     final answersList = _surveyAnswers.entries.map((e) {
-      return SubmissionAnswer(question: e.key, answer: e.value);
+      return SubmissionAnswer(surveyQuestion: e.key, questionText: e.key, answer: e.value);
     }).toList();
 
     final submission = HcpProfileSubmission(
@@ -224,9 +223,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         lastName: widget.doctor.lastName,
         hcpType: widget.doctor.hcpType,
         hcpPractice: widget.doctor.hcpPractice,
-        specialties: _selectedSpecialties.map((e) => HcpSpecialty(hcpSpecialty: e.hcpSpecialty, subSpecialty: e.subSpecialty)).toList(),
-        workplaces: _selectedWorkplaces.map((e) => HcpWorkplace(workplace: e.workplace, address: e.address, isPrimary: e.isPrimary)).toList(),
-        contacts: _contacts.map((e) => HcpContact(contactType: e.contactType, contactValue: e.contactValue)).toList(),
+        specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpSpecialty(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty)).toList(),
+        workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpWorkplace(workplace: e.hcpWorkplace!, address: e.workplaceName)).toList(),
+        contacts: _contacts.where((e) => e.contactNumber != null).map((e) => HcpContact(contactType: e.emailAddress ?? 'Mobile', contactValue: e.contactNumber!)).toList(),
         regionName: _selectedRegion,
         provinceName: _selectedProvince,
         cityMunicipality: _selectedCity,
@@ -728,7 +727,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             ..._selectedWorkplaces.asMap().entries.map((entry) {
               final idx = entry.key;
               final workplace = entry.value;
-              final nameMatch = _institutions.firstWhere((i) => i.name == workplace.workplace, orElse: () => Institution(name: workplace.workplace, institutionName: workplace.workplace));
+              final targetId = workplace.hcpWorkplace ?? '';
+              final nameMatch = _institutions.firstWhere((i) => i.name == targetId, orElse: () => Institution(name: targetId, institutionName: workplace.workplaceName ?? targetId));
               return Card(
                 color: Colors.white,
                 margin: const EdgeInsets.only(bottom: 8),
@@ -739,7 +739,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 elevation: 0,
                 child: ListTile(
                   title: Text(nameMatch.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.w600)),
-                  subtitle: Text(workplace.isPrimary ? 'Primary Workplace' : 'Supporting Workplace', style: const TextStyle(color: Color(0xFF636366), fontSize: 12)),
+                  subtitle: Text(workplace.workplaceName ?? 'Workplace', style: const TextStyle(color: Color(0xFF636366), fontSize: 12)),
                   trailing: IconButton(
                     icon: const Icon(Icons.delete, color: Color(0xFFFF3B30)),
                     onPressed: () {
@@ -779,9 +779,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 ),
                 elevation: 0,
                 child: ListTile(
-                  title: Text(specialty.hcpSpecialty, style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.w600)),
-                  subtitle: specialty.subSpecialty != null && specialty.subSpecialty!.isNotEmpty
-                      ? Text(specialty.subSpecialty!, style: const TextStyle(color: Color(0xFF636366), fontSize: 12))
+                  title: Text(specialty.specialtyName ?? specialty.hcpSpecialty ?? 'Specialty', style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.w600)),
+                  subtitle: specialty.subSpecialtyName != null && specialty.subSpecialtyName!.isNotEmpty
+                      ? Text(specialty.subSpecialtyName!, style: const TextStyle(color: Color(0xFF636366), fontSize: 12))
                       : null,
                   trailing: IconButton(
                     icon: const Icon(Icons.delete, color: Color(0xFFFF3B30)),
@@ -859,8 +859,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               if (selectedInst != null) {
                 setState(() {
                   _selectedWorkplaces.add(SubmissionWorkplace(
-                    workplace: selectedInst!,
-                    isPrimary: isPrimary,
+                    hcpWorkplace: selectedInst!,
+                    workplaceName: selectedInst!,
                   ));
                 });
                 Navigator.pop(ctx);

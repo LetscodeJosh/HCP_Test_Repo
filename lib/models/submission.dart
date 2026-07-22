@@ -2,6 +2,10 @@ class HcpProfileSubmission {
   final String? name;
   final String hcpName; // Link -> HCP
   final String? hcpFullName;
+  final String? firstName;
+  final String? middleName;
+  final String? lastName;
+  final String? birthDate;
   final bool consentPrivacyUnderstood;
   final String? consentSignature;
   final String? consentPhoto;
@@ -23,12 +27,19 @@ class HcpProfileSubmission {
   final String? submissionDate;
   final String? surveyResponse; // Link -> HCP Survey Response
   final List<SubmissionAnswer> answers; // Table -> HCP Profile Submission Answer
+  final String? applicationStatus; // Not Applied, Applying, Applied, Failed
+  final String? changeSummaryHtml;
+  final String? changesJson;
   final int docstatus; // 0: Draft, 1: Submitted, 2: Cancelled
 
   HcpProfileSubmission({
     this.name,
     required this.hcpName,
     this.hcpFullName,
+    this.firstName,
+    this.middleName,
+    this.lastName,
+    this.birthDate,
     this.consentPrivacyUnderstood = false,
     this.consentSignature,
     this.consentPhoto,
@@ -50,6 +61,9 @@ class HcpProfileSubmission {
     this.submissionDate,
     this.surveyResponse,
     this.answers = const [],
+    this.applicationStatus,
+    this.changeSummaryHtml,
+    this.changesJson,
     this.docstatus = 0,
   });
 
@@ -58,6 +72,10 @@ class HcpProfileSubmission {
       name: json['name'],
       hcpName: json['hcp_name'] ?? '',
       hcpFullName: json['hcp_full_name'],
+      firstName: json['first_name'],
+      middleName: json['middle_name'],
+      lastName: json['last_name'],
+      birthDate: json['birth_date'],
       consentPrivacyUnderstood: json['consent_privacy_understood'] == 1 || json['consent_privacy_understood'] == true,
       consentSignature: json['consent_signature'],
       consentPhoto: json['consent_photo'],
@@ -87,6 +105,9 @@ class HcpProfileSubmission {
       answers: (json['answers'] as List?)
               ?.map((e) => SubmissionAnswer.fromJson(e))
               .toList() ?? [],
+      applicationStatus: json['application_status'],
+      changeSummaryHtml: json['change_summary_html'],
+      changesJson: json['changes_json'],
       docstatus: json['docstatus'] ?? 0,
     );
   }
@@ -96,6 +117,10 @@ class HcpProfileSubmission {
       if (name != null) 'name': name,
       'hcp_name': hcpName,
       if (hcpFullName != null) 'hcp_full_name': hcpFullName,
+      if (firstName != null) 'first_name': firstName,
+      if (middleName != null) 'middle_name': middleName,
+      if (lastName != null) 'last_name': lastName,
+      if (birthDate != null) 'birth_date': birthDate,
       'consent_privacy_understood': consentPrivacyUnderstood ? 1 : 0,
       if (consentSignature != null) 'consent_signature': consentSignature,
       if (consentPhoto != null) 'consent_photo': consentPhoto,
@@ -117,106 +142,133 @@ class HcpProfileSubmission {
       if (submissionDate != null) 'submission_date': submissionDate,
       if (surveyResponse != null) 'survey_response': surveyResponse,
       'answers': answers.map((e) => e.toJson()).toList(),
+      if (applicationStatus != null) 'application_status': applicationStatus,
+      if (changeSummaryHtml != null) 'change_summary_html': changeSummaryHtml,
+      if (changesJson != null) 'changes_json': changesJson,
       'docstatus': docstatus,
     };
   }
 }
 
 class SubmissionSpecialty {
-  final String hcpSpecialty; // Link -> Specialization
+  final String? hcpSpecialty; // Link -> Specialization
+  final String? specialtyName;
   final String? subSpecialty; // Link -> Specialization
+  final String? subSpecialtyName;
 
   SubmissionSpecialty({
-    required this.hcpSpecialty,
+    this.hcpSpecialty,
+    this.specialtyName,
     this.subSpecialty,
+    this.subSpecialtyName,
   });
 
   factory SubmissionSpecialty.fromJson(Map<String, dynamic> json) {
     return SubmissionSpecialty(
-      hcpSpecialty: json['hcp_specialty'] ?? '',
+      hcpSpecialty: json['hcp_specialty'],
+      specialtyName: json['specialty_name'],
       subSpecialty: json['sub_specialty'],
+      subSpecialtyName: json['sub_specialty_name'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'hcp_specialty': hcpSpecialty,
+      if (hcpSpecialty != null) 'hcp_specialty': hcpSpecialty,
+      if (specialtyName != null) 'specialty_name': specialtyName,
       if (subSpecialty != null) 'sub_specialty': subSpecialty,
+      if (subSpecialtyName != null) 'sub_specialty_name': subSpecialtyName,
     };
   }
 }
 
 class SubmissionWorkplace {
-  final String workplace; // Link -> Institution
-  final String? address;
-  final bool isPrimary;
+  final String? hcpWorkplace; // Link -> Institution
+  final String? workplaceName;
+  final String? cityMunicipality;
+  final String? cityTitle;
+  final String? provinceName;
+  final String? provinceTitle;
 
   SubmissionWorkplace({
-    required this.workplace,
-    this.address,
-    this.isPrimary = false,
+    this.hcpWorkplace,
+    this.workplaceName,
+    this.cityMunicipality,
+    this.cityTitle,
+    this.provinceName,
+    this.provinceTitle,
   });
 
   factory SubmissionWorkplace.fromJson(Map<String, dynamic> json) {
     return SubmissionWorkplace(
-      workplace: json['workplace'] ?? '',
-      address: json['address'],
-      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true,
+      hcpWorkplace: json['hcp_workplace'] ?? json['workplace'],
+      workplaceName: json['workplace_name'] ?? json['address'],
+      cityMunicipality: json['city_municipality'],
+      cityTitle: json['city_title'],
+      provinceName: json['province_name'],
+      provinceTitle: json['province_title'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'workplace': workplace,
-      if (address != null) 'address': address,
-      'is_primary': isPrimary ? 1 : 0,
+      if (hcpWorkplace != null) 'hcp_workplace': hcpWorkplace,
+      if (workplaceName != null) 'workplace_name': workplaceName,
+      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
+      if (cityTitle != null) 'city_title': cityTitle,
+      if (provinceName != null) 'province_name': provinceName,
+      if (provinceTitle != null) 'province_title': provinceTitle,
     };
   }
 }
 
 class SubmissionContact {
-  final String contactType;
-  final String contactValue;
+  final String? contactNumber;
+  final String? emailAddress;
 
   SubmissionContact({
-    required this.contactType,
-    required this.contactValue,
+    this.contactNumber,
+    this.emailAddress,
   });
 
   factory SubmissionContact.fromJson(Map<String, dynamic> json) {
     return SubmissionContact(
-      contactType: json['contact_type'] ?? '',
-      contactValue: json['contact_value'] ?? '',
+      contactNumber: json['contact_number'] ?? json['contact_value'],
+      emailAddress: json['email_address'] ?? json['contact_type'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'contact_type': contactType,
-      'contact_value': contactValue,
+      if (contactNumber != null) 'contact_number': contactNumber,
+      if (emailAddress != null) 'email_address': emailAddress,
     };
   }
 }
 
 class SubmissionAnswer {
-  final String question; // Link -> HCP Survey Question or Data
-  final String answer; // Answer string / select option
+  final String surveyQuestion;
+  final String questionText;
+  final String answer;
 
   SubmissionAnswer({
-    required this.question,
+    required this.surveyQuestion,
+    required this.questionText,
     required this.answer,
   });
 
   factory SubmissionAnswer.fromJson(Map<String, dynamic> json) {
     return SubmissionAnswer(
-      question: json['question'] ?? '',
+      surveyQuestion: json['survey_question'] ?? json['question'] ?? '',
+      questionText: json['question_text'] ?? json['question'] ?? '',
       answer: json['answer'] ?? '',
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'question': question,
+      'survey_question': surveyQuestion,
+      'question_text': questionText,
       'answer': answer,
     };
   }
