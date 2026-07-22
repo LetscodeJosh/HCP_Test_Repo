@@ -226,10 +226,12 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   void _showAddDoctorDialog() {
     final formKey = GlobalKey<FormState>();
     String firstName = '';
+    String middleName = '';
     String lastName = '';
-    // Use the first available HCP Type name from the server, or empty
     String? selectedType = _hcpTypes.isNotEmpty ? _hcpTypes.first.name : null;
     String selectedPractice = 'Both';
+    String? selectedSpecialty = _specializations.isNotEmpty ? _specializations.first.name : null;
+    String? selectedWorkplace = _institutions.isNotEmpty ? _institutions.first.name : null;
 
     showDialog(
       context: context,
@@ -246,7 +248,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 TextFormField(
                   style: const TextStyle(color: Color(0xFF1C1C1E)),
                   decoration: const InputDecoration(
-                    labelText: 'First Name',
+                    labelText: 'First Name *',
                     labelStyle: TextStyle(color: Color(0xFF636366)),
                     enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
                     focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
@@ -257,7 +259,17 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 TextFormField(
                   style: const TextStyle(color: Color(0xFF1C1C1E)),
                   decoration: const InputDecoration(
-                    labelText: 'Last Name',
+                    labelText: 'Middle Name *',
+                    labelStyle: TextStyle(color: Color(0xFF636366)),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  ),
+                  onSaved: (val) => middleName = val ?? '',
+                ),
+                TextFormField(
+                  style: const TextStyle(color: Color(0xFF1C1C1E)),
+                  decoration: const InputDecoration(
+                    labelText: 'Last Name *',
                     labelStyle: TextStyle(color: Color(0xFF636366)),
                     enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
                     focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
@@ -271,7 +283,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   dropdownColor: Colors.white,
                   style: const TextStyle(color: Color(0xFF1C1C1E)),
                   decoration: const InputDecoration(
-                    labelText: 'HCP Type',
+                    labelText: 'HCP Type *',
                     labelStyle: TextStyle(color: Color(0xFF636366)),
                     enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
                     focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
@@ -283,13 +295,47 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   )).toList(),
                   onChanged: (val) => selectedType = val,
                 ),
+                // Primary Specialty
+                DropdownButtonFormField<String>(
+                  value: selectedSpecialty,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Color(0xFF1C1C1E)),
+                  decoration: const InputDecoration(
+                    labelText: 'Primary Specialty *',
+                    labelStyle: TextStyle(color: Color(0xFF636366)),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  ),
+                  items: _specializations.map((s) => DropdownMenuItem(
+                    value: s.name,
+                    child: Text(s.specialty, style: const TextStyle(color: Color(0xFF1C1C1E))),
+                  )).toList(),
+                  onChanged: (val) => selectedSpecialty = val,
+                ),
+                // Primary Workplace / Institution
+                DropdownButtonFormField<String>(
+                  value: selectedWorkplace,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Color(0xFF1C1C1E)),
+                  decoration: const InputDecoration(
+                    labelText: 'Workplace / Institution *',
+                    labelStyle: TextStyle(color: Color(0xFF636366)),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  ),
+                  items: _institutions.map((i) => DropdownMenuItem(
+                    value: i.name,
+                    child: Text(i.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E))),
+                  )).toList(),
+                  onChanged: (val) => selectedWorkplace = val,
+                ),
                 // HCP Practice — static dropdown (not a DocType)
                 DropdownButtonFormField<String>(
                   value: selectedPractice,
                   dropdownColor: Colors.white,
                   style: const TextStyle(color: Color(0xFF1C1C1E)),
                   decoration: const InputDecoration(
-                    labelText: 'Practice Mode',
+                    labelText: 'Practice Mode *',
                     labelStyle: TextStyle(color: Color(0xFF636366)),
                     enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
                     focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
@@ -320,11 +366,18 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
 
                 final apiService = Provider.of<ApiService>(context, listen: false);
                 try {
+                  final reqMiddleName = middleName.trim().isNotEmpty ? middleName.trim() : '-';
+                  final reqSpec = selectedSpecialty ?? (_specializations.isNotEmpty ? _specializations.first.name : '');
+                  final reqWork = selectedWorkplace ?? (_institutions.isNotEmpty ? _institutions.first.name : '');
+
                   final newDoctor = Hcp(
                     firstName: firstName,
+                    middleName: reqMiddleName,
                     lastName: lastName,
-                    hcpType: selectedType!,  // Now sends the name ID (e.g. HCP-TYPE-01)
+                    hcpType: selectedType!,
                     hcpPractice: selectedPractice,
+                    specialties: reqSpec.isNotEmpty ? [HcpSpecialty(hcpSpecialty: reqSpec)] : [],
+                    workplaces: reqWork.isNotEmpty ? [HcpWorkplace(workplace: reqWork)] : [],
                   );
                   final savedDoctor = await apiService.createDoctor(newDoctor);
                   
