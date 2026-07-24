@@ -48,7 +48,7 @@ android {
         versionName flutterVersionName
         manifestPlaceholders = [
             appName: "PIMS HCP",
-            applicationName: "io.flutter.app.FlutterApplication"
+            applicationName: "android.app.Application"
         ]
     }
 
