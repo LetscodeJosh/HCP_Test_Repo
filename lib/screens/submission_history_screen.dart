@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/submission.dart';
 import '../models/hcp.dart';
 import '../services/api_service.dart';
+import 'components/app_drawer.dart';
 import 'hcp_wizard_screen.dart';
 import 'doctor_masterlist_screen.dart';
 import 'login_screen.dart';
@@ -293,130 +294,18 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('HCP Profile Submissions'),
-        backgroundColor: const Color(0xFF0056B3),
+        title: const Text('HCP Profile Submissions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFF0B192C),
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadSubmissions,
           ),
         ],
       ),
-      drawer: Drawer(
-        backgroundColor: Colors.white,
-        child: SafeArea(
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-                decoration: const BoxDecoration(
-                  image: DecorationImage(
-                    image: AssetImage('assets/medical_bg.jpg'),
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white.withOpacity(0.4)),
-                      ),
-                      child: const Icon(Icons.donut_large, color: Colors.white, size: 26),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'PIMS HCP',
-                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      Provider.of<ApiService>(context, listen: false).loggedInEmail ?? '',
-                      style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Consumer<ApiService>(
-                  builder: (context, api, child) {
-                    return DropdownButtonFormField<String>(
-                      dropdownColor: Colors.white,
-                      style: const TextStyle(color: Color(0xFF1C1C1E)),
-                      value: api.selectedProgram,
-                      decoration: const InputDecoration(
-                        labelText: 'Active Program',
-                        labelStyle: TextStyle(color: Color(0xFF0056B3), fontWeight: FontWeight.bold),
-                        prefixIcon: Icon(Icons.business_center, color: Color(0xFF0056B3)),
-                        enabledBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFFD1D1D6)),
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderSide: BorderSide(color: Color(0xFF0056B3), width: 2),
-                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                        ),
-                      ),
-                      items: api.availablePrograms.map((prog) {
-                        return DropdownMenuItem<String>(
-                          value: prog,
-                          child: Text(prog),
-                        );
-                      }).toList(),
-                      onChanged: (newProg) {
-                        if (newProg != null) {
-                          api.setProgram(newProg);
-                          _loadSubmissions();
-                        }
-                      },
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              ListTile(
-                leading: const Icon(Icons.assignment_turned_in, color: Color(0xFF0056B3)),
-                title: const Text('HCP Profile Submissions', style: TextStyle(color: Color(0xFF0056B3), fontWeight: FontWeight.bold)),
-                selected: true,
-                selectedTileColor: const Color(0xFF0056B3).withOpacity(0.1),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                onTap: () => Navigator.pop(context),
-              ),
-              ListTile(
-                leading: const Icon(Icons.people_alt, color: Color(0xFF1C1C1E)),
-                title: const Text('HCP Masterlist', style: TextStyle(color: Color(0xFF1C1C1E))),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()));
-                },
-              ),
-              const Spacer(),
-              const Divider(color: Color(0xFFD1D1D6)),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Color(0xFFFF3B30)),
-                title: const Text('Logout', style: TextStyle(color: Color(0xFFFF3B30))),
-                onTap: () {
-                  Provider.of<ApiService>(context, listen: false).logout();
-                  Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
-                },
-              ),
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
+      drawer: const AppDrawer(currentItem: DrawerItem.submissionsFact),
       body: _isLoading
           ? const Center(
               child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056B3))),
