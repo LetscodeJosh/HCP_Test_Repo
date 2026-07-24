@@ -135,11 +135,6 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Top Hero Banner
-                    _buildHeroBanner(),
-
-                    const SizedBox(height: 16),
-
                     // Top Metric Summary Cards Row
                     _buildMetricsRow(syncRatePercent),
 
@@ -187,84 +182,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     );
   }
 
-  Widget _buildHeroBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0B192C), Color(0xFF1E3E62)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFF0B192C).withOpacity(0.2),
-            blurRadius: 15,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF0066FF).withOpacity(0.3),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF38BDF8), width: 1),
-                      ),
-                      child: const Text(
-                        'Active Period: Q3 2026',
-                        style: TextStyle(
-                          color: Color(0xFF38BDF8),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Coverage & Field Operations',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Real-time HCP consent validation, institution mapping, and representative productivity dashboard.',
-                  style: TextStyle(
-                    color: Color(0xFFCBD5E1),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.analytics_outlined, color: Color(0xFF38BDF8), size: 36),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   Widget _buildMetricsRow(String syncRatePercent) {
     return LayoutBuilder(
@@ -453,33 +371,11 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               Expanded(
                 child: _buildActionButton(
                   icon: Icons.groups_rounded,
-                  label: 'Doctor List',
+                  label: 'Doctor Listing',
                   color: const Color(0xFF0B192C),
                   onTap: () {
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.qr_code_scanner_rounded,
-                  label: 'QR Consent',
-                  color: const Color(0xFF10B981),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => SelfServiceQrScreen(
-                          doctor: Hcp(
-                            firstName: 'Medrep',
-                            lastName: 'Self-Service',
-                            hcpType: 'Medical Doctor',
-                            hcpPractice: 'Prescribing',
-                          ),
-                        ),
-                      ),
                     );
                   },
                 ),

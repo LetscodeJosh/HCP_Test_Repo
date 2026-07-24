@@ -74,16 +74,9 @@ class AppDrawer extends StatelessWidget {
                             'PIMS HCP',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 20,
+                              fontSize: 22,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 0.5,
-                            ),
-                          ),
-                          Text(
-                            'Profile Management Platform',
-                            style: TextStyle(
-                              color: Color(0xFF94A3B8),
-                              fontSize: 12,
                             ),
                           ),
                         ],
@@ -93,24 +86,38 @@ class AppDrawer extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E293B),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.person_pin_rounded, color: Color(0xFF38BDF8), size: 16),
-                      const SizedBox(width: 8),
+                      const Icon(Icons.person_pin_rounded, color: Color(0xFF38BDF8), size: 20),
+                      const SizedBox(width: 10),
                       Expanded(
-                        child: Text(
-                          userEmail,
-                          style: const TextStyle(
-                            color: Color(0xFFE2E8F0),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              apiService.loggedInFullName ?? userEmail.split('@').first.replaceAll('.', ' ').toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              userEmail,
+                              style: const TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
                         ),
                       ),
                     ],
@@ -160,7 +167,7 @@ class AppDrawer extends StatelessWidget {
                 _buildMenuItem(
                   context,
                   icon: Icons.people_alt_rounded,
-                  title: 'Doctor Management',
+                  title: 'Doctor Listing',
                   isSelected: currentItem == DrawerItem.doctorManagement,
                   onTap: () {
                     Navigator.of(context).pop();
@@ -195,30 +202,6 @@ class AppDrawer extends StatelessWidget {
                   onTap: () {
                     Navigator.of(context).pop();
                     _showInstitutionsModal(context);
-                  },
-                ),
-                const SizedBox(height: 4),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.qr_code_scanner_rounded,
-                  title: 'Self-Service QR & Sync',
-                  isSelected: currentItem == DrawerItem.selfServiceQr,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    if (currentItem != DrawerItem.selfServiceQr) {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SelfServiceQrScreen(
-                            doctor: Hcp(
-                              firstName: 'Medrep',
-                              lastName: 'Self-Service',
-                              hcpType: 'Medical Doctor',
-                              hcpPractice: 'Prescribing',
-                            ),
-                          ),
-                        ),
-                      );
-                    }
                   },
                 ),
               ],

@@ -409,7 +409,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('Doctor Management', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF0B192C),
         elevation: 0,
         actions: [

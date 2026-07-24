@@ -376,6 +376,7 @@ class ApiService extends ChangeNotifier {
   final String baseUrl = 'https://dev.pmii-marketing.com';
   String? _sessionCookie;
   String? loggedInEmail;
+  String? loggedInFullName;
 
   late final FrappeRepository<Hcp> hcps = FrappeRepository<Hcp>(
     api: this,
@@ -487,17 +488,23 @@ class ApiService extends ChangeNotifier {
         if (body['message'] == 'Logged In') {
           // Store username as the logged-in email
           loggedInEmail = username.trim();
-          
+          if (body['full_name'] != null && body['full_name'].toString().isNotEmpty) {
+            loggedInFullName = body['full_name'].toString();
+          } else if (body['user_fullname'] != null && body['user_fullname'].toString().isNotEmpty) {
+            loggedInFullName = body['user_fullname'].toString();
+          }
+
           // Parse cookie header to persist session (e.g. sid=xxxxxx)
           final rawCookie = response.headers['set-cookie'];
           if (rawCookie != null) {
-            // Keep the relevant parts of the cookie
             _sessionCookie = rawCookie.split(';').firstWhere(
                   (c) => c.trim().startsWith('sid='),
                   orElse: () => '',
                 );
           }
+
           await fetchAvailablePrograms();
+          await fetchLoggedInUserInfo();
           return true;
         }
       }
@@ -508,10 +515,37 @@ class ApiService extends ChangeNotifier {
     }
   }
 
+  Future<void> fetchLoggedInUserInfo() async {
+    if (_isOffline || _sessionCookie == null) return;
+    try {
+      final url = Uri.parse('$baseUrl/api/method/frappe.auth.get_logged_user');
+      final response = await http.get(url, headers: _headers);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final userEmail = body['message'];
+        if (userEmail != null && userEmail is String) {
+          final userDocUrl = Uri.parse('$baseUrl/api/resource/User/${Uri.encodeComponent(userEmail)}?fields=["full_name","first_name","last_name"]');
+          final userDocRes = await http.get(userDocUrl, headers: _headers);
+          if (userDocRes.statusCode == 200) {
+            final userDocBody = jsonDecode(userDocRes.body);
+            final data = userDocBody['data'];
+            if (data != null && data['full_name'] != null) {
+              loggedInFullName = data['full_name'];
+              notifyListeners();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('Error fetching logged in user info: $e');
+    }
+  }
+
   /// Log out
   void logout() {
     _sessionCookie = null;
     loggedInEmail = null;
+    loggedInFullName = null;
   }
 
   /// Retrieve list of COREnergy engagements
