@@ -6,6 +6,7 @@ class HcpAccount {
   final String? accountType;
   final bool isActive;
   final String? hcp;
+  final String? hcpName; // Doctor Full Name (e.g. Joshua Pambuena Tan)
   final List<HcpAccountSpecialization> specialties;
   final List<HcpAccountWorkplace> workplaces;
   final List<HcpAccountContact> contacts;
@@ -18,6 +19,7 @@ class HcpAccount {
     this.accountType,
     this.isActive = true,
     this.hcp,
+    this.hcpName,
     this.specialties = const [],
     this.workplaces = const [],
     this.contacts = const [],
@@ -27,11 +29,12 @@ class HcpAccount {
     return HcpAccount(
       name: json['name'],
       accountName: json['account_or_program'] ?? json['account_name'] ?? '',
-      territory: json['territory'],
-      salesPerson: json['sales_person'],
+      territory: json['territory'] ?? json['territory_mr_code'],
+      salesPerson: json['sales_person'] ?? json['territory_manager'],
       accountType: json['account_type'],
       isActive: json['is_active'] == 1 || json['is_active'] == true,
-      hcp: json['hcp'],
+      hcp: json['hcp'] ?? json['hcp_doctor_unique_id'],
+      hcpName: json['hcp_name'] ?? json['doctor_name'] ?? json['hcp_full_name'] ?? json['hcp'],
       specialties: (json['specialization'] as List? ?? json['specialties'] as List?)
               ?.map((e) => HcpAccountSpecialization.fromJson(e))
               .toList() ?? [],
@@ -48,11 +51,12 @@ class HcpAccount {
     return {
       if (name != null) 'name': name,
       'account_or_program': accountName,
-      'territory': territory ?? 'All Territories',
+      'territory': territory ?? 'AD0110',
       'sales_person': salesPerson ?? 'JORGE MENGORIO (AD0110)',
       if (accountType != null) 'account_type': accountType,
       'is_active': isActive ? 1 : 0,
       if (hcp != null) 'hcp': hcp,
+      if (hcpName != null) 'hcp_name': hcpName,
       if (specialties.isNotEmpty) 'specialization': specialties.map((e) => e.toJson()).toList(),
       if (workplaces.isNotEmpty) 'workplace_info': workplaces.map((e) => e.toJson()).toList(),
       if (contacts.isNotEmpty) 'contact_info': contacts.map((e) => e.toJson()).toList(),
@@ -86,18 +90,24 @@ class HcpAccountSpecialization {
 
 class HcpAccountWorkplace {
   final String workplace;
+  final String? city;
+  final String? province;
   final String? address;
   final bool isPrimary;
 
   HcpAccountWorkplace({
     required this.workplace,
+    this.city,
+    this.province,
     this.address,
     this.isPrimary = false,
   });
 
   factory HcpAccountWorkplace.fromJson(Map<String, dynamic> json) {
     return HcpAccountWorkplace(
-      workplace: json['workplace'] ?? '',
+      workplace: json['workplace'] ?? json['workplace_name'] ?? '',
+      city: json['city'] ?? json['city_title'],
+      province: json['province'] ?? json['province_title'],
       address: json['address'],
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true,
     );
@@ -106,6 +116,8 @@ class HcpAccountWorkplace {
   Map<String, dynamic> toJson() {
     return {
       'workplace': workplace,
+      if (city != null) 'city': city,
+      if (province != null) 'province': province,
       if (address != null) 'address': address,
       'is_primary': isPrimary ? 1 : 0,
     };
@@ -123,8 +135,8 @@ class HcpAccountContact {
 
   factory HcpAccountContact.fromJson(Map<String, dynamic> json) {
     return HcpAccountContact(
-      contactType: json['contact_type'] ?? '',
-      contactValue: json['contact_value'] ?? '',
+      contactType: json['contact_type'] ?? json['contact_number'] ?? '',
+      contactValue: json['contact_value'] ?? json['email_address'] ?? '',
     );
   }
 

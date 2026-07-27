@@ -376,9 +376,10 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 child: _buildActionButton(
                   icon: Icons.groups_rounded,
                   label: 'Doctor Listing',
+                  subtitle: 'HCP Masterlist',
                   color: const Color(0xFF0066FF),
                   onTap: () {
-                    Navigator.of(context).pushReplacement(
+                    Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
                     );
                   },
@@ -389,9 +390,10 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 child: _buildActionButton(
                   icon: Icons.account_box_rounded,
                   label: 'Doctor Account',
-                  color: const Color(0xFF0B192C),
+                  subtitle: 'Program Coverage',
+                  color: const Color(0xFF0066FF),
                   onTap: () {
-                    Navigator.of(context).pushReplacement(
+                    Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
                     );
                   },
@@ -407,6 +409,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
+    required String subtitle,
     required Color color,
     required VoidCallback onTap,
   }) {
@@ -414,25 +417,41 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withOpacity(0.2)),
         ),
-        child: Column(
+        child: Row(
           children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                color: color,
+            CircleAvatar(
+              radius: 18,
+              backgroundColor: color.withOpacity(0.15),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: color,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFF64748B),
+                    ),
+                  ),
+                ],
               ),
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
