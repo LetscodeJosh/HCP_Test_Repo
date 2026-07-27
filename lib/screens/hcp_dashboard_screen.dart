@@ -27,6 +27,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   List<HcpProfileSubmission> _submissions = [];
 
   Map<String, int> _specialtyCounts = {};
+  Map<String, int> _subSpecialtyCounts = {};
   Map<String, int> _regionCounts = {};
 
   @override
@@ -36,7 +37,9 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
-    setState(() => _isLoading = true);
+    if (_doctors.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     final apiService = Provider.of<ApiService>(context, listen: false);
 
     try {
@@ -48,7 +51,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
       // Filter doctors for selected program
       final hcpAccounts = await apiService.hcpAccounts.list(
         filters: [['account_or_program', '=', apiService.selectedProgram]],
-        fields: ['hcp'],
+        fields: ['hcp', 'name', 'account_name', 'specialties'],
         limit: 1000,
       );
       final allowedIds = hcpAccounts.map((a) => a.hcp).whereType<String>().toSet();
@@ -57,13 +60,32 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
           ? doctors.where((d) => allowedIds.contains(d.name)).toList()
           : doctors;
 
-      // Compute Specialty Counts
+      // Compute Specialty & Sub-Specialty Counts
       final Map<String, int> specMap = {};
+      final Map<String, int> subSpecMap = {};
+
       for (var d in filteredDoctors) {
         final spec = d.specialties.isNotEmpty
             ? d.specialties.first.hcpSpecialty
             : 'General Practice';
         specMap[spec] = (specMap[spec] ?? 0) + 1;
+
+        for (var s in d.specialties) {
+          if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') {
+            subSpecMap[s.subSpecialty!] = (subSpecMap[s.subSpecialty!] ?? 0) + 1;
+          }
+        }
+      }
+
+      // Also parse HCP Account Specialization child records if doctor list is empty
+      if (subSpecMap.isEmpty) {
+        for (var acc in hcpAccounts) {
+          for (var spec in acc.specialties) {
+            if (spec.subSpecialty != null && spec.subSpecialty!.isNotEmpty) {
+              subSpecMap[spec.subSpecialty!] = (subSpecMap[spec.subSpecialty!] ?? 0) + 1;
+            }
+          }
+        }
       }
 
       // Compute Region Counts
@@ -82,6 +104,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
           _specializations = specializations.where((s) => !s.isGroup).toList();
           _submissions = submissions;
           _specialtyCounts = specMap;
+          _subSpecialtyCounts = subSpecMap;
           _regionCounts = regMap;
           _isLoading = false;
         });
@@ -162,6 +185,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                           return Column(
                             children: [
                               _buildDoctorsBySpecialtyCard(),
+                              const SizedBox(height: 16),
+                              _buildDoctorsBySubSpecialtyCard(),
                               const SizedBox(height: 16),
                               _buildRecentConsentLogsCard(),
                             ],
@@ -508,6 +533,113 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: count / totalDocs,
+                        backgroundColor: const Color(0xFFF1F5F9),
+                        color: color,
+                        minHeight: 8,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDoctorsBySubSpecialtyCard() {
+    final sortedEntries = _subSpecialtyCounts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final totalDocs = _doctors.isEmpty ? 1 : _doctors.length;
+
+    final barColors = const [
+      Color(0xFF10B981),
+      Color(0xFF3B82F6),
+      Color(0xFF8B5CF6),
+      Color(0xFFF59E0B),
+      Color(0xFFEC4899),
+      Color(0xFF06B6D4),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.pie_chart_rounded, color: Color(0xFF0B192C), size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Doctors by Sub-Specialty',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                'Sub-Specialties: ${sortedEntries.length}',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (sortedEntries.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text('No sub-specialty data recorded yet', style: TextStyle(color: Color(0xFF94A3B8))),
+              ),
+            )
+          else
+            ...List.generate(sortedEntries.take(6).length, (idx) {
+              final entry = sortedEntries[idx];
+              final count = entry.value;
+              final percent = (count / totalDocs * 100).round();
+              final color = barColors[idx % barColors.length];
+
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          entry.key,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF334155),
+                          ),
+                        ),
+                        Text(
+                          '$count Doctors ($percent%)',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF64748B),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (count / totalDocs).clamp(0.0, 1.0),
                         backgroundColor: const Color(0xFFF1F5F9),
                         color: color,
                         minHeight: 8,
