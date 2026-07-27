@@ -6,6 +6,7 @@ import '../models/submission.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
 import 'doctor_masterlist_screen.dart';
+import 'doctor_account_screen.dart';
 import 'hcp_wizard_screen.dart';
 import 'submission_history_screen.dart';
 import 'self_service_qr_screen.dart';
@@ -348,21 +349,12 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             children: [
               Expanded(
                 child: _buildActionButton(
-                  icon: Icons.person_add_alt_1_rounded,
-                  label: 'Register Doctor',
+                  icon: Icons.groups_rounded,
+                  label: 'Doctor Listing',
                   color: const Color(0xFF0066FF),
                   onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => HcpWizardScreen(
-                          doctor: Hcp(
-                            firstName: '',
-                            lastName: '',
-                            hcpType: 'Medical Doctor',
-                            hcpPractice: 'Prescribing',
-                          ),
-                        ),
-                      ),
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
                     );
                   },
                 ),
@@ -370,12 +362,12 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: _buildActionButton(
-                  icon: Icons.groups_rounded,
-                  label: 'Doctor Listing',
+                  icon: Icons.account_box_rounded,
+                  label: 'Doctor Account',
                   color: const Color(0xFF0B192C),
                   onTap: () {
                     Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                      MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
                     );
                   },
                 ),

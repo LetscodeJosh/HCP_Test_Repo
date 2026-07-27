@@ -8,12 +8,14 @@ import '../submission_history_screen.dart';
 import '../self_service_qr_screen.dart';
 import '../login_screen.dart';
 
+import '../doctor_account_screen.dart';
+
 enum DrawerItem {
   dashboard,
   doctorManagement,
+  doctorAccount,
   submissionsFact,
   institutions,
-  selfServiceQr,
 }
 
 class AppDrawer extends StatelessWidget {
@@ -174,6 +176,21 @@ class AppDrawer extends StatelessWidget {
                     if (currentItem != DrawerItem.doctorManagement) {
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                      );
+                    }
+                  },
+                ),
+                const SizedBox(height: 4),
+                _buildMenuItem(
+                  context,
+                  icon: Icons.account_box_rounded,
+                  title: 'Doctor Account',
+                  isSelected: currentItem == DrawerItem.doctorAccount,
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    if (currentItem != DrawerItem.doctorAccount) {
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
                       );
                     }
                   },
