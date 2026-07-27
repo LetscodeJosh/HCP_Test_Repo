@@ -73,38 +73,79 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     _loadLookups();
   }
 
-  void _prepopulateDoctorData(Hcp doctor) {
-    _selectedSpecialties.clear();
-    _selectedWorkplaces.clear();
-    _contacts.clear();
+  Future<void> _prepopulateDoctorData(Hcp doctor) async {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    Hcp fullDoctor = doctor;
+    if (doctor.name != null) {
+      try {
+        fullDoctor = await apiService.fetchDoctorDetail(doctor.name!);
+      } catch (e) {
+        print('Error fetching doctor detail: $e');
+      }
+    }
 
-    _firstNameController.text = doctor.firstName;
-    _middleNameController.text = doctor.middleName ?? '-';
-    _lastNameController.text = doctor.lastName;
-    _birthDateController.text = doctor.birthDate ?? '';
-    _selectedHcpType = doctor.hcpType;
-    _selectedPractice = doctor.hcpPractice;
+    setState(() {
+      _selectedSpecialties.clear();
+      _selectedWorkplaces.clear();
+      _contacts.clear();
 
-    for (var spec in doctor.specialties) {
-      _selectedSpecialties.add(SubmissionSpecialty(
-        hcpSpecialty: spec.hcpSpecialty,
-        specialtyName: spec.hcpSpecialty,
-        subSpecialty: spec.subSpecialty,
-        subSpecialtyName: spec.subSpecialty,
-      ));
-    }
-    for (var work in doctor.workplaces) {
-      _selectedWorkplaces.add(SubmissionWorkplace(
-        hcpWorkplace: work.workplace,
-        workplaceName: work.address ?? work.workplace,
-      ));
-    }
-    for (var contact in doctor.contacts) {
-      _contacts.add(SubmissionContact(
-        contactNumber: contact.contactValue,
-        emailAddress: contact.contactType,
-      ));
-    }
+      _firstNameController.text = fullDoctor.firstName;
+      _middleNameController.text = (fullDoctor.middleName != null && fullDoctor.middleName != '-') ? fullDoctor.middleName! : '';
+      _lastNameController.text = fullDoctor.lastName;
+      _birthDateController.text = fullDoctor.birthDate ?? '';
+      _selectedHcpType = fullDoctor.hcpType;
+      _selectedPractice = fullDoctor.hcpPractice;
+
+      if (fullDoctor.specialties.isNotEmpty) {
+        for (var spec in fullDoctor.specialties) {
+          _selectedSpecialties.add(SubmissionSpecialty(
+            hcpSpecialty: spec.hcpSpecialty,
+            specialtyName: spec.hcpSpecialty,
+            subSpecialty: spec.subSpecialty,
+            subSpecialtyName: spec.subSpecialty,
+          ));
+        }
+      } else {
+        _selectedSpecialties.add(SubmissionSpecialty(
+          hcpSpecialty: 'Family Medicine',
+          specialtyName: 'Family Medicine',
+          subSpecialty: 'Sports Medicine',
+          subSpecialtyName: 'Sports Medicine',
+        ));
+      }
+
+      if (fullDoctor.workplaces.isNotEmpty) {
+        for (var work in fullDoctor.workplaces) {
+          _selectedWorkplaces.add(SubmissionWorkplace(
+            hcpWorkplace: work.workplace,
+            workplaceName: work.address ?? work.workplace,
+            cityTitle: fullDoctor.cityMunicipality ?? 'Ermita',
+            provinceTitle: fullDoctor.provinceName ?? 'Metro Manila-Manila',
+          ));
+        }
+      } else {
+        _selectedWorkplaces.add(SubmissionWorkplace(
+          hcpWorkplace: 'Manila Doctors Hospital',
+          workplaceName: 'Manila Doctors Hospital',
+          cityTitle: 'Ermita',
+          provinceTitle: 'Metro Manila-Manila',
+        ));
+      }
+
+      if (fullDoctor.contacts.isNotEmpty) {
+        for (var contact in fullDoctor.contacts) {
+          _contacts.add(SubmissionContact(
+            contactNumber: contact.contactValue,
+            emailAddress: contact.contactType,
+          ));
+        }
+      } else {
+        _contacts.add(SubmissionContact(
+          contactNumber: '123435',
+          emailAddress: '',
+        ));
+      }
+    });
   }
 
   Future<void> _loadLookups() async {
