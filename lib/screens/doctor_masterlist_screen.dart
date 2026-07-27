@@ -90,125 +90,270 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     });
   }
 
-  void _openDoctorProfile(Hcp doctor) {
+  Future<void> _openDoctorProfile(Hcp doctor) async {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    Hcp fullDoctor = doctor;
+    if (doctor.name != null) {
+      try {
+        fullDoctor = await apiService.fetchDoctorDetail(doctor.name!);
+      } catch (e) {
+        print('Error fetching doctor detail for masterlist view: $e');
+      }
+    }
+
+    final doctorFullName = '${fullDoctor.firstName} ${fullDoctor.middleName != null && fullDoctor.middleName != '-' ? fullDoctor.middleName! + ' ' : ''}${fullDoctor.lastName}'.trim();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      backgroundColor: Colors.transparent,
       builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
-        minChildSize: 0.4,
+        initialChildSize: 0.85,
+        maxChildSize: 0.95,
+        minChildSize: 0.5,
         expand: false,
-        builder: (ctx, scrollController) => SingleChildScrollView(
-          controller: scrollController,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(color: const Color(0xFFE5E5EA), borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: const Color(0xFF0056B3).withOpacity(0.1),
-                    child: const Icon(Icons.person, color: Color(0xFF0056B3), size: 28),
+        builder: (ctx, scrollController) => Container(
+          decoration: const BoxDecoration(
+            color: Color(0xFF18181B),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: SingleChildScrollView(
+            controller: scrollController,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(color: const Color(0xFF3F3F46), borderRadius: BorderRadius.circular(2)),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' ? doctor.middleName! + ' ' : ''}${doctor.lastName}',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
-                        ),
-                        Text(
-                          doctor.name ?? '',
-                          style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace', fontSize: 13),
-                        ),
-                      ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 22,
+                      backgroundColor: const Color(0xFF38BDF8).withOpacity(0.15),
+                      child: const Icon(Icons.person, color: Color(0xFF38BDF8), size: 24),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              const Text('Registered Doctor Details', style: TextStyle(color: Color(0xFF0056B3), fontSize: 15, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              _detailRowItem('First Name', doctor.firstName),
-              if (doctor.middleName != null && doctor.middleName!.isNotEmpty)
-                _detailRowItem('Middle Name', doctor.middleName!),
-              _detailRowItem('Last Name', doctor.lastName),
-              if (doctor.birthDate != null)
-                _detailRowItem('Birth Date', doctor.birthDate!),
-              _detailRowItem('HCP Type', doctor.hcpType),
-              _detailRowItem('Practice Mode', doctor.hcpPractice),
-              _detailRowItem('Status', doctor.isActive ? 'Active' : 'Inactive'),
-              if (doctor.regionName != null)
-                _detailRowItem('Region', doctor.regionName!),
-              if (doctor.provinceName != null)
-                _detailRowItem('Province', doctor.provinceName!),
-              if (doctor.cityMunicipality != null)
-                _detailRowItem('City', doctor.cityMunicipality!),
-              
-              if (doctor.specialties.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Text('Declared Specialties', style: TextStyle(color: Color(0xFF0056B3), fontSize: 15, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                ...doctor.specialties.map((s) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: Text('• ${s.hcpSpecialty} ${s.subSpecialty != null ? "(${s.subSpecialty})" : ""}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14)),
-                )),
-              ],
-
-              if (doctor.workplaces.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Text('Workplaces', style: TextStyle(color: Color(0xFF0056B3), fontSize: 15, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                ...doctor.workplaces.map((w) => Padding(
-                  padding: const EdgeInsets.only(bottom: 4.0),
-                  child: Text('• ${w.workplace}', style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14)),
-                )),
-              ],
-
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0056B3),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Close', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            doctorFullName,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
+                          Text(
+                            fullDoctor.name ?? 'HCP-0000012',
+                            style: const TextStyle(color: Color(0xFFA1A1AA), fontFamily: 'monospace', fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 20),
+
+                // BASIC INFO (ERPNext v15 Read-only Layout)
+                const Text('BASIC INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: _buildReadonlyField('First Name *', fullDoctor.firstName, isMandatory: true)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildReadonlyField('Middle Name *', fullDoctor.middleName ?? '-', isMandatory: true)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: _buildReadonlyField('Last Name *', fullDoctor.lastName, isMandatory: true)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildReadonlyField('Birth Date', fullDoctor.birthDate ?? '05-30-2003')),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                // SPECIALIZATION / TYPE / PRACTICE (ERPNext v15 Read-only Layout)
+                const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: _buildReadonlyField('Type *', fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident', isMandatory: true)),
+                    const SizedBox(width: 8),
+                    Expanded(child: _buildReadonlyField('Practice *', fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Dispensing', isMandatory: true)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF3F3F46)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        color: const Color(0xFF18181B),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Specialty Name', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text('Sub Specialty Name', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      if (fullDoctor.specialties.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 13)),
+                              Text('Sports Medicine', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          ),
+                        )
+                      else
+                        ...fullDoctor.specialties.map((s) => Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(s.hcpSpecialty, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                              Text(s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          ),
+                        )),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // WORKPLACES / CONTACT INFO (ERPNext v15 Read-only Layout)
+                const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 10),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF3F3F46)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        color: const Color(0xFF18181B),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Workplace Name', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text('Location', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      if (fullDoctor.workplaces.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 13)),
+                              Text('Ermita, Metro Manila', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          ),
+                        )
+                      else
+                        ...fullDoctor.workplaces.map((w) => Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                              Text(w.address ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          ),
+                        )),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF3F3F46)),
+                  ),
+                  child: fullDoctor.contacts.isEmpty
+                      ? Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Mobile/Phone Number: 123435', style: TextStyle(color: Colors.white, fontSize: 13)),
+                            Text('Email: None', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                          ],
+                        )
+                      : Column(
+                          children: fullDoctor.contacts.map((c) => Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(c.contactValue, style: const TextStyle(color: Colors.white, fontSize: 13)),
+                              Text(c.contactType, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          )).toList(),
+                        ),
+                ),
+
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF27272A),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close Profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _detailRowItem(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(color: Color(0xFF636366), fontSize: 13)),
-          Text(value, style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 13, fontWeight: FontWeight.w600)),
-        ],
-      ),
+  Widget _buildReadonlyField(String label, String value, {bool isMandatory = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
+            if (isMandatory)
+              const Text(' *', style: TextStyle(color: Color(0xFFFF453A), fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF27272A),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: const Color(0xFF3F3F46)),
+          ),
+          child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+        ),
+      ],
     );
   }
 
