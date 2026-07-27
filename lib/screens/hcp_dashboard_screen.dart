@@ -98,7 +98,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
 
       if (mounted) {
         setState(() {
-          _doctors = filteredDoctors;
+          _doctors = doctors;
           _institutions = institutions;
           _specializations = specializations.where((s) => !s.isGroup).toList();
           _submissions = submissions;

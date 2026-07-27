@@ -53,15 +53,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       final psgc = await apiService.fetchPsgcLocations();
       final types = await apiService.fetchHcpTypes();
 
-      final hcpAccounts = await apiService.hcpAccounts.list(
-        filters: [['account_or_program', '=', apiService.selectedProgram]],
-        fields: ['hcp'],
-        limit: 1000,
-      );
-      final allowedHcpIds = hcpAccounts.map((a) => a.hcp).whereType<String>().toSet();
-
       setState(() {
-        _allDoctors = doctors.where((d) => allowedHcpIds.contains(d.name)).toList();
+        _allDoctors = doctors;
         _institutions = institutions;
         _specializations = specializations.where((s) => !s.isGroup).toList();
         _psgcLocations = psgc;
