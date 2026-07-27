@@ -6,6 +6,7 @@ import '../models/hcp.dart';
 import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../services/api_service.dart';
+import 'hcp_dashboard_screen.dart';
 
 class HcpWizardScreen extends StatefulWidget {
   final Hcp? doctor;
@@ -150,6 +151,44 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         _consentPhotoFile = file;
       });
     }
+  }
+
+  void _onDoctorRejectsProfiling() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1C1C1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.cancel_outlined, color: Color(0xFFFF453A)),
+            SizedBox(width: 8),
+            Text('Doctor Rejects Profiling', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: const Text(
+          'Are you sure the doctor rejects undergoing profiling? The profiling form will exit and redirect you to the Homepage.',
+          style: TextStyle(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFFF453A)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
+                (route) => false,
+              );
+            },
+            child: const Text('Confirm & Exit to Homepage', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 
   String _pointsToSvgDataUri(List<Offset> points, Size canvasSize) {
@@ -822,6 +861,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ],
             ),
           ],
+          const SizedBox(height: 24),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: Color(0xFFFF453A)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              icon: const Icon(Icons.cancel_outlined, color: Color(0xFFFF453A)),
+              label: const Text('Doctor Rejects Profiling (Exit to Homepage)', style: TextStyle(color: Color(0xFFFF453A), fontWeight: FontWeight.bold)),
+              onPressed: _onDoctorRejectsProfiling,
+            ),
+          ),
         ],
       ),
     );

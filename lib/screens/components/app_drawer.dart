@@ -168,36 +168,6 @@ class AppDrawer extends StatelessWidget {
                 const SizedBox(height: 4),
                 _buildMenuItem(
                   context,
-                  icon: Icons.people_alt_rounded,
-                  title: 'Doctor Listing',
-                  isSelected: currentItem == DrawerItem.doctorManagement,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    if (currentItem != DrawerItem.doctorManagement) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 4),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.account_box_rounded,
-                  title: 'Doctor Account',
-                  isSelected: currentItem == DrawerItem.doctorAccount,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    if (currentItem != DrawerItem.doctorAccount) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 4),
-                _buildMenuItem(
-                  context,
                   icon: Icons.assignment_turned_in_rounded,
                   title: 'HCP Profile Submissions',
                   isSelected: currentItem == DrawerItem.submissionsFact,
