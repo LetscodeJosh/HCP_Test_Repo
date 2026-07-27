@@ -26,20 +26,33 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     setState(() => _isLoading = true);
     final apiService = Provider.of<ApiService>(context, listen: false);
     try {
-      final items = await apiService.hcpAccounts.list(
-        filters: [['account_or_program', '=', apiService.selectedProgram]],
-        limit: 1000,
-      );
+      final items = await apiService.fetchHcpAccounts();
+      final filtered = items.where((acc) {
+        if (apiService.selectedProgram.isEmpty) return true;
+        return acc.accountName.toLowerCase().contains(apiService.selectedProgram.toLowerCase());
+      }).toList();
+
       setState(() {
-        _accounts = items;
+        _accounts = filtered.isNotEmpty ? filtered : items;
         _isLoading = false;
       });
     } catch (e) {
+      print('Error loading doctor accounts: $e');
       setState(() => _isLoading = false);
     }
   }
 
-  void _showAccountDetail(HcpAccount account) {
+  Future<void> _showAccountDetail(HcpAccount account) async {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    HcpAccount fullAccount = account;
+    if (account.name != null) {
+      try {
+        fullAccount = await apiService.fetchHcpAccountDetail(account.name!);
+      } catch (e) {
+        print('Error loading full HCP Account details: $e');
+      }
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -77,11 +90,11 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          account.hcp ?? 'Doctor Account',
+                          fullAccount.hcp ?? 'Doctor Account',
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                         ),
                         Text(
-                          account.name ?? '',
+                          fullAccount.name ?? '',
                           style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 13),
                         ),
                       ],
@@ -92,27 +105,27 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
               const SizedBox(height: 20),
               const Text('HCP Account Details', style: TextStyle(color: Color(0xFF0066FF), fontSize: 15, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              _detailRow('Account / Program', account.accountName),
-              _detailRow('Territory', account.territory ?? 'All Territories'),
-              _detailRow('Territory Manager / Sales Person', account.salesPerson ?? 'Unassigned'),
-              _detailRow('Account Type', account.accountType ?? 'Standard'),
-              _detailRow('Status', account.isActive ? 'Active' : 'Inactive'),
+              _detailRow('Account / Program', fullAccount.accountName),
+              _detailRow('Territory', fullAccount.territory ?? 'All Territories'),
+              _detailRow('Territory Manager / Sales Person', fullAccount.salesPerson ?? 'Unassigned'),
+              _detailRow('Account Type', fullAccount.accountType ?? 'Standard'),
+              _detailRow('Status', fullAccount.isActive ? 'Active' : 'Inactive'),
 
-              if (account.specialties.isNotEmpty) ...[
+              if (fullAccount.specialties.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 const Text('Specialties', style: TextStyle(color: Color(0xFF0066FF), fontSize: 15, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                ...account.specialties.map((s) => Padding(
+                ...fullAccount.specialties.map((s) => Padding(
                   padding: const EdgeInsets.only(bottom: 4.0),
                   child: Text('• ${s.specialty} ${s.subSpecialty != null ? "(${s.subSpecialty})" : ""}', style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14)),
                 )),
               ],
 
-              if (account.workplaces.isNotEmpty) ...[
+              if (fullAccount.workplaces.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 const Text('Workplaces', style: TextStyle(color: Color(0xFF0066FF), fontSize: 15, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 6),
-                ...account.workplaces.map((w) => Padding(
+                ...fullAccount.workplaces.map((w) => Padding(
                   padding: const EdgeInsets.only(bottom: 4.0),
                   child: Text('• ${w.workplace}', style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14)),
                 )),

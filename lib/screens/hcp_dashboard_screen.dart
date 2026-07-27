@@ -46,15 +46,16 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
       final doctors = await apiService.fetchDoctors();
       final institutions = await apiService.fetchInstitutions();
       final specializations = await apiService.fetchSpecializations();
-      final submissions = await apiService.submissions.list(limit: 100);
+      final submissions = await apiService.submissions.list(limit: 500);
+      final hcpAccounts = await apiService.fetchHcpAccounts();
 
-      // Filter doctors for selected program
-      final hcpAccounts = await apiService.hcpAccounts.list(
-        filters: [['account_or_program', '=', apiService.selectedProgram]],
-        fields: ['hcp', 'name', 'account_name', 'specialties'],
-        limit: 1000,
-      );
-      final allowedIds = hcpAccounts.map((a) => a.hcp).whereType<String>().toSet();
+      // Filter hcpAccounts for selected program if matched
+      final matchedAccounts = hcpAccounts.where((a) {
+        if (apiService.selectedProgram.isEmpty) return true;
+        return a.accountName.toLowerCase().contains(apiService.selectedProgram.toLowerCase());
+      }).toList();
+
+      final allowedIds = matchedAccounts.map((a) => a.hcp).whereType<String>().toSet();
 
       final filteredDoctors = allowedIds.isNotEmpty
           ? doctors.where((d) => allowedIds.contains(d.name)).toList()
@@ -77,13 +78,11 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         }
       }
 
-      // Also parse HCP Account Specialization child records if doctor list is empty
-      if (subSpecMap.isEmpty) {
-        for (var acc in hcpAccounts) {
-          for (var spec in acc.specialties) {
-            if (spec.subSpecialty != null && spec.subSpecialty!.isNotEmpty) {
-              subSpecMap[spec.subSpecialty!] = (subSpecMap[spec.subSpecialty!] ?? 0) + 1;
-            }
+      // Also aggregate sub-specialties from HCP Account records
+      for (var acc in (matchedAccounts.isNotEmpty ? matchedAccounts : hcpAccounts)) {
+        for (var spec in acc.specialties) {
+          if (spec.subSpecialty != null && spec.subSpecialty!.isNotEmpty && spec.subSpecialty != '-') {
+            subSpecMap[spec.subSpecialty!] = (subSpecMap[spec.subSpecialty!] ?? 0) + 1;
           }
         }
       }
@@ -110,6 +109,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         });
       }
     } catch (e) {
+      print('Error loading dashboard data: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }

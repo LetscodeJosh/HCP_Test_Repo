@@ -1038,6 +1038,45 @@ class ApiService extends ChangeNotifier {
     }
   }
 
+  /// Retrieve list of HCP Account doctype records
+  Future<List<HcpAccount>> fetchHcpAccounts() async {
+    final url = Uri.parse(
+      '$baseUrl/api/resource/HCP%20Account?fields=["*"]&limit=2000',
+    );
+    try {
+      final response = await http.get(url, headers: _headers);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final List<dynamic> dataList = body['data'] ?? [];
+        return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+      } else {
+        throw Exception('Failed to load HCP Accounts: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Fetch HCP Accounts error: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetch full details of a specific HCP Account including child tables
+  Future<HcpAccount> fetchHcpAccountDetail(String name) async {
+    final url = Uri.parse(
+      '$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(name)}',
+    );
+    try {
+      final response = await http.get(url, headers: _headers);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return HcpAccount.fromJson(body['data']);
+      } else {
+        throw Exception('Failed to load HCP Account details: ${response.body}');
+      }
+    } catch (e) {
+      print('Fetch HCP Account detail error: $e');
+      rethrow;
+    }
+  }
+
   /// Retrieve list of HCP Profile Submissions
   Future<List<HcpProfileSubmission>> fetchSubmissions() async {
     final url = Uri.parse(
