@@ -44,7 +44,7 @@ class Hcp {
   factory Hcp.fromJson(Map<String, dynamic> json) {
     return Hcp(
       name: json['name'],
-      hcpFullName: json['hcp_full_name'],
+      hcpFullName: json['hcp_full_name'] ?? json['full_name'],
       firstName: json['first_name'] ?? '',
       middleName: json['middle_name'],
       lastName: json['last_name'] ?? '',
@@ -54,13 +54,13 @@ class Hcp {
       hcpPractice: json['hcp_practice'] ?? 'Both',
       isActive: json['is_active'] == 1 || json['is_active'] == true,
       isPendingApproval: json['is_pending_approval'] == 1 || json['is_pending_approval'] == true,
-      specialties: (json['hcp_specialty'] as List?)
+      specialties: (json['hcp_specialty'] as List? ?? json['specialties'] as List?)
               ?.map((e) => HcpSpecialty.fromJson(e))
               .toList() ?? [],
-      workplaces: (json['hcp_workplace'] as List?)
+      workplaces: (json['hcp_workplace'] as List? ?? json['workplaces'] as List?)
               ?.map((e) => HcpWorkplace.fromJson(e))
               .toList() ?? [],
-      contacts: (json['hcp_contact_info'] as List?)
+      contacts: (json['hcp_contact_info'] as List? ?? json['contacts'] as List? ?? json['hcp_contact'] as List?)
               ?.map((e) => HcpContact.fromJson(e))
               .toList() ?? [],
       regionName: json['region_name'],
@@ -106,8 +106,8 @@ class HcpSpecialty {
 
   factory HcpSpecialty.fromJson(Map<String, dynamic> json) {
     return HcpSpecialty(
-      hcpSpecialty: json['hcp_specialty'] ?? '',
-      subSpecialty: json['sub_specialty'],
+      hcpSpecialty: json['hcp_specialty'] ?? json['specialty'] ?? json['specialty_name'] ?? '',
+      subSpecialty: json['sub_specialty'] ?? json['sub_specialty_name'],
     );
   }
 
@@ -132,7 +132,7 @@ class HcpWorkplace {
 
   factory HcpWorkplace.fromJson(Map<String, dynamic> json) {
     return HcpWorkplace(
-      workplace: json['workplace'] ?? '',
+      workplace: json['workplace'] ?? json['workplace_name'] ?? json['hcp_workplace'] ?? '',
       address: json['address'],
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true,
     );
@@ -158,8 +158,8 @@ class HcpContact {
 
   factory HcpContact.fromJson(Map<String, dynamic> json) {
     return HcpContact(
-      contactType: json['contact_type'] ?? '',
-      contactValue: json['contact_value'] ?? '',
+      contactType: json['contact_type'] ?? json['email_address'] ?? 'Mobile',
+      contactValue: json['contact_value'] ?? json['contact_number'] ?? json['mobile_number'] ?? '',
     );
   }
 
