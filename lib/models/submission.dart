@@ -109,9 +109,9 @@ class HcpProfileSubmission {
       answers: (json['answers'] as List?)
               ?.map((e) => SubmissionAnswer.fromJson(e))
               .toList() ?? [],
-      status: json['status'] ?? json['workflow_state'],
-      workflowState: json['workflow_state'] ?? json['status'],
-      applicationStatus: json['application_status'],
+      status: json['status'] ?? json['workflow_state'] ?? json['application_status'],
+      workflowState: json['workflow_state'] ?? json['status'] ?? json['application_status'],
+      applicationStatus: json['application_status'] ?? json['status'] ?? json['workflow_state'],
       changeSummaryHtml: json['change_summary_html'],
       changesJson: json['changes_json'],
       docstatus: json['docstatus'] ?? 0,

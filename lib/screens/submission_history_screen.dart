@@ -487,13 +487,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
     Color bg;
     Color fg = Colors.white;
-    String label = rawStatus;
+    String label;
 
-    final sLower = rawStatus.toLowerCase();
+    final sLower = rawStatus.toLowerCase().trim();
     if (sLower.contains('reject') || sLower.contains('cancel') || item.docstatus == 2) {
       bg = const Color(0xFFDC2626);
       label = 'Rejected';
-    } else if (sLower.contains('appr') || sLower.contains('applied') || item.docstatus == 1) {
+    } else if (sLower.contains('pend') || sLower.contains('draft') || item.docstatus == 0) {
+      bg = const Color(0xFF6B7280);
+      label = 'Pending Approval';
+    } else if (sLower.contains('approved') || sLower.contains('applied') || item.docstatus == 1) {
       bg = const Color(0xFF16A34A);
       label = 'Approved';
     } else {

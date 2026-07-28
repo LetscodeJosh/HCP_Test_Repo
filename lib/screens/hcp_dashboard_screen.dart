@@ -751,17 +751,22 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                     : 'Specialty Pending';
                 final rawStatus = item.status ?? item.workflowState ?? item.applicationStatus ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
 
-                Color statusBg = const Color(0xFF6B7280);
-                String statusLabel = rawStatus;
-                if (rawStatus.toLowerCase().contains('reject')) {
+                Color statusBg;
+                String statusLabel;
+
+                final sLower = rawStatus.toLowerCase().trim();
+                if (sLower.contains('reject') || sLower.contains('cancel') || item.docstatus == 2) {
                   statusBg = const Color(0xFFDC2626);
                   statusLabel = 'Rejected';
-                } else if (rawStatus.toLowerCase().contains('appr') || rawStatus.toLowerCase().contains('appl') || item.docstatus == 1) {
+                } else if (sLower.contains('pend') || sLower.contains('draft') || item.docstatus == 0) {
+                  statusBg = const Color(0xFF6B7280);
+                  statusLabel = 'Pending Approval';
+                } else if (sLower.contains('approved') || sLower.contains('applied') || item.docstatus == 1) {
                   statusBg = const Color(0xFF16A34A);
                   statusLabel = 'Approved';
                 } else {
                   statusBg = const Color(0xFF6B7280);
-                  statusLabel = 'Pending Approval';
+                  statusLabel = rawStatus.isNotEmpty ? rawStatus : 'Pending Approval';
                 }
 
                 return Row(

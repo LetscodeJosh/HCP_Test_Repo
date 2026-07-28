@@ -1250,9 +1250,7 @@ class FrappeRepository<T> {
     String? orderBy,
   }) async {
     final Map<String, String> queryParams = {};
-    if (fields != null) {
-      queryParams['fields'] = jsonEncode(fields);
-    }
+    queryParams['fields'] = jsonEncode(fields ?? ['*']);
     if (filters != null) {
       queryParams['filters'] = jsonEncode(filters);
     }
