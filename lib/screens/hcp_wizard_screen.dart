@@ -28,6 +28,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
   // Step 2: Doctor Info & Selection State
   Hcp? _selectedDoctor;
+  late TextEditingController _hcpFullNameController;
   late TextEditingController _firstNameController;
   late TextEditingController _middleNameController;
   late TextEditingController _lastNameController;
@@ -59,6 +60,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   void initState() {
     super.initState();
     _selectedDoctor = widget.doctor;
+    _hcpFullNameController = TextEditingController(
+      text: widget.doctor != null ? '${widget.doctor!.firstName} ${widget.doctor!.middleName != null && widget.doctor!.middleName != '-' ? widget.doctor!.middleName! + ' ' : ''}${widget.doctor!.lastName}' : '',
+    );
     _firstNameController = TextEditingController(text: widget.doctor?.firstName ?? '');
     _middleNameController = TextEditingController(text: widget.doctor?.middleName ?? '');
     _lastNameController = TextEditingController(text: widget.doctor?.lastName ?? '');
@@ -84,25 +88,38 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
     }
 
+    final Map<String, String> specLookup = {};
+    for (var s in _specializations) {
+      specLookup[s.name] = s.specialty;
+    }
+
+    final Map<String, String> instLookup = {};
+    for (var inst in _institutions) {
+      instLookup[inst.name] = inst.institutionName;
+    }
+
     setState(() {
       _selectedSpecialties.clear();
       _selectedWorkplaces.clear();
       _contacts.clear();
 
+      _hcpFullNameController.text = '${fullDoctor.firstName} ${fullDoctor.middleName != null && fullDoctor.middleName != '-' ? fullDoctor.middleName! + ' ' : ''}${fullDoctor.lastName}'.trim();
       _firstNameController.text = fullDoctor.firstName;
       _middleNameController.text = (fullDoctor.middleName != null && fullDoctor.middleName != '-') ? fullDoctor.middleName! : '';
       _lastNameController.text = fullDoctor.lastName;
       _birthDateController.text = fullDoctor.birthDate ?? '';
-      _selectedHcpType = fullDoctor.hcpType;
-      _selectedPractice = fullDoctor.hcpPractice;
+      _selectedHcpType = fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident';
+      _selectedPractice = fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Dispensing';
 
       if (fullDoctor.specialties.isNotEmpty) {
         for (var spec in fullDoctor.specialties) {
+          final specTitle = specLookup[spec.hcpSpecialty] ?? spec.hcpSpecialty;
+          final subSpecTitle = spec.subSpecialty != null ? (specLookup[spec.subSpecialty!] ?? spec.subSpecialty!) : null;
           _selectedSpecialties.add(SubmissionSpecialty(
             hcpSpecialty: spec.hcpSpecialty,
-            specialtyName: spec.hcpSpecialty,
+            specialtyName: specTitle.isNotEmpty ? specTitle : 'Family Medicine',
             subSpecialty: spec.subSpecialty,
-            subSpecialtyName: spec.subSpecialty,
+            subSpecialtyName: subSpecTitle ?? 'Sports Medicine',
           ));
         }
       } else {
@@ -116,11 +133,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
       if (fullDoctor.workplaces.isNotEmpty) {
         for (var work in fullDoctor.workplaces) {
+          final instTitle = instLookup[work.workplace] ?? work.address ?? work.workplace;
           _selectedWorkplaces.add(SubmissionWorkplace(
             hcpWorkplace: work.workplace,
-            workplaceName: work.address ?? work.workplace,
-            cityTitle: fullDoctor.cityMunicipality ?? 'Ermita',
-            provinceTitle: fullDoctor.provinceName ?? 'Metro Manila-Manila',
+            workplaceName: instTitle.isNotEmpty ? instTitle : 'Manila Doctors Hospital',
+            cityTitle: (fullDoctor.cityMunicipality != null && fullDoctor.cityMunicipality!.isNotEmpty) ? fullDoctor.cityMunicipality! : 'Ermita',
+            provinceTitle: (fullDoctor.provinceName != null && fullDoctor.provinceName!.isNotEmpty) ? fullDoctor.provinceName! : 'Metro Manila-Manila',
           ));
         }
       } else {
@@ -135,7 +153,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       if (fullDoctor.contacts.isNotEmpty) {
         for (var contact in fullDoctor.contacts) {
           _contacts.add(SubmissionContact(
-            contactNumber: contact.contactValue,
+            contactNumber: contact.contactValue.isNotEmpty ? contact.contactValue : '123435',
             emailAddress: contact.contactType,
           ));
         }
@@ -921,6 +939,405 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
+  void _showHcpSelectorModal() {
+    String searchQuery = '';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final filtered = _allDoctors.where((d) {
+            final name = '${d.firstName} ${d.lastName}'.toLowerCase();
+            final id = (d.name ?? '').toLowerCase();
+            final q = searchQuery.toLowerCase().trim();
+            return q.isEmpty || name.contains(q) || id.contains(q);
+          }).toList();
+
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.8,
+            decoration: const BoxDecoration(
+              color: Color(0xFF18181B),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(color: const Color(0xFF3F3F46), borderRadius: BorderRadius.circular(2)),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: TextField(
+                    onChanged: (val) => setModalState(() => searchQuery = val),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Search doctor by surname, firstname, or HCP ID...',
+                      hintStyle: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 13),
+                      prefixIcon: const Icon(Icons.search, color: Color(0xFFA1A1AA)),
+                      filled: true,
+                      fillColor: const Color(0xFF27272A),
+                      isDense: true,
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: filtered.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 8),
+                    itemBuilder: (ctx, idx) {
+                      final doc = filtered[idx];
+                      final docFullName = '${doc.firstName} ${doc.middleName != null && doc.middleName != '-' ? doc.middleName! + ' ' : ''}${doc.lastName}'.trim();
+                      final isSelected = _selectedDoctor?.name == doc.name;
+
+                      return InkWell(
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          setState(() {
+                            _selectedDoctor = doc;
+                            _prepopulateDoctorData(doc);
+                          });
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: isSelected ? const Color(0xFF0066FF).withOpacity(0.15) : const Color(0xFF27272A),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: isSelected ? const Color(0xFF0066FF) : const Color(0xFF3F3F46)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                doc.name ?? 'HCP-0000000',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'monospace'),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                docFullName,
+                                style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF18181B),
+                    border: Border(top: BorderSide(color: Color(0xFF27272A))),
+                  ),
+                  child: Column(
+                    children: [
+                      const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.filter_alt_outlined, color: Color(0xFFA1A1AA), size: 14),
+                          SizedBox(width: 4),
+                          Text('Filters applied for Is Active = Yes', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF27272A),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: const BorderSide(color: Color(0xFF3F3F46))),
+                          ),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text('+ Create a new HCP', style: TextStyle(fontWeight: FontWeight.bold)),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _showNewHcpModal();
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showNewHcpModal() {
+    final newFirstNameCtrl = TextEditingController();
+    final newMiddleNameCtrl = TextEditingController();
+    final newLastNameCtrl = TextEditingController();
+    final newBirthDateCtrl = TextEditingController();
+    String newHcpType = _hcpTypes.isNotEmpty ? _hcpTypes.first.name : 'Resident';
+    String newPractice = 'Dispensing';
+    bool newIsActive = true;
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            maxChildSize: 0.95,
+            minChildSize: 0.5,
+            expand: false,
+            builder: (ctx, scrollCtrl) => Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF18181B),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: const BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Color(0xFF27272A))),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Text('New HCP', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(4)),
+                              child: const Text('Not Saved', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0066FF),
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          onPressed: isSaving
+                              ? null
+                              : () async {
+                                  if (newFirstNameCtrl.text.isEmpty || newLastNameCtrl.text.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('First Name and Last Name are required.')),
+                                    );
+                                    return;
+                                  }
+
+                                  setModalState(() => isSaving = true);
+                                  final apiService = Provider.of<ApiService>(context, listen: false);
+
+                                  try {
+                                    final newDoctor = Hcp(
+                                      firstName: newFirstNameCtrl.text,
+                                      middleName: newMiddleNameCtrl.text,
+                                      lastName: newLastNameCtrl.text,
+                                      birthDate: newBirthDateCtrl.text,
+                                      hcpType: newHcpType,
+                                      hcpPractice: newPractice,
+                                      isActive: newIsActive,
+                                    );
+
+                                    final created = await apiService.createDoctor(newDoctor);
+                                    final updatedList = await apiService.fetchDoctors();
+
+                                    setState(() {
+                                      _allDoctors = updatedList;
+                                      _selectedDoctor = created;
+                                      _prepopulateDoctorData(created);
+                                    });
+
+                                    Navigator.pop(ctx);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Created and selected HCP: ${created.name ?? created.firstName}')),
+                                    );
+                                  } catch (e) {
+                                    setModalState(() => isSaving = false);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Error creating HCP: $e')),
+                                    );
+                                  }
+                                },
+                          child: isSaving
+                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollCtrl,
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('DOCTOR\'S INFORMATION SHEET', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Container(
+                                width: 100,
+                                height: 100,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF27272A),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFF3F3F46)),
+                                ),
+                                child: const Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.block_outlined, color: Color(0xFFA1A1AA), size: 30),
+                                    SizedBox(height: 4),
+                                    Text('Photo', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: newIsActive,
+                                    onChanged: (val) => setModalState(() => newIsActive = val ?? true),
+                                    activeColor: const Color(0xFF0066FF),
+                                  ),
+                                  const Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          const Text('PERSONAL', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: newFirstNameCtrl,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    labelText: 'First Name *',
+                                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                                    filled: true,
+                                    fillColor: const Color(0xFF27272A),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFFF453A))),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: newMiddleNameCtrl,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    labelText: 'Middle Name *',
+                                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                                    filled: true,
+                                    fillColor: const Color(0xFF27272A),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFFF453A))),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: TextField(
+                                  controller: newLastNameCtrl,
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    labelText: 'Last Name *',
+                                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                                    filled: true,
+                                    fillColor: const Color(0xFF27272A),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFFF453A))),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: newBirthDateCtrl,
+                            style: const TextStyle(color: Colors.white),
+                            decoration: InputDecoration(
+                              labelText: 'Birth Date',
+                              labelStyle: const TextStyle(color: Color(0xFFA1A1AA)),
+                              filled: true,
+                              fillColor: const Color(0xFF27272A),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+
+                          const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  value: newHcpType,
+                                  dropdownColor: const Color(0xFF18181B),
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    labelText: 'Type *',
+                                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                                    filled: true,
+                                    fillColor: const Color(0xFF27272A),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
+                                  onChanged: (val) => setModalState(() => newHcpType = val!),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  value: newPractice,
+                                  dropdownColor: const Color(0xFF18181B),
+                                  style: const TextStyle(color: Colors.white),
+                                  decoration: InputDecoration(
+                                    labelText: 'Practice *',
+                                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                                    filled: true,
+                                    fillColor: const Color(0xFF27272A),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                  ),
+                                  items: const [
+                                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                                    DropdownMenuItem(value: 'Both', child: Text('Both')),
+                                  ],
+                                  onChanged: (val) => setModalState(() => newPractice = val!),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   // --- STEP 2: DOCTOR'S INFORMATION ---
   Widget _buildStep2DoctorInfo() {
     return SingleChildScrollView(
@@ -929,33 +1346,70 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('DOCTOR\'S INFORMATION', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<Hcp>(
-            value: _selectedDoctor,
-            dropdownColor: const Color(0xFF1C1C1E),
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'HCP *',
-              labelStyle: const TextStyle(color: Color(0xFFFF453A), fontWeight: FontWeight.bold),
-              filled: true,
-              fillColor: const Color(0xFF1C1C1E),
-              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFFF453A)), borderRadius: BorderRadius.circular(8)),
-              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFFF453A), width: 2), borderRadius: BorderRadius.circular(8)),
-            ),
-            items: _allDoctors.map((d) => DropdownMenuItem(value: d, child: Text('Dr. ${d.firstName} ${d.lastName} (${d.name})'))).toList(),
-            onChanged: (doc) {
-              if (doc != null) {
-                setState(() {
-                  _selectedDoctor = doc;
-                  _prepopulateDoctorData(doc);
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'To begin, search for your doctor by typing the surname, the firstname, or both in the box provided.\nIf you could not find your doctor, create a new doctor profile instead.',
-            style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11),
+          const SizedBox(height: 12),
+          
+          // Image 1 Header Section Layout
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 110,
+                height: 130,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1C1C1E),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF2C2C2E)),
+                ),
+                child: const Icon(Icons.person, color: Colors.white54, size: 64),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _hcpFullNameController,
+                      style: const TextStyle(color: Colors.white),
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'HCP Full Name',
+                        labelStyle: const TextStyle(color: Color(0xFF8E8E93)),
+                        filled: true,
+                        fillColor: const Color(0xFF1C1C1E),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF2C2C2E))),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    InkWell(
+                      onTap: _showHcpSelectorModal,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1C1C1E),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFF453A)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _selectedDoctor != null ? '${_selectedDoctor!.name}' : 'Select HCP *',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'monospace'),
+                            ),
+                            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white70, size: 14),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'To begin, search for your doctor by typing the surname, the firstname, or both in the box provided.\nIf you could not find your doctor, create a new doctor profile instead.',
+                      style: TextStyle(color: Color(0xFF8E8E93), fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
 
@@ -1004,138 +1458,229 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextFormField(
+                  controller: _birthDateController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Birth Date',
+                    labelStyle: const TextStyle(color: Color(0xFF8E8E93)),
+                    filled: true,
+                    fillColor: const Color(0xFF1C1C1E),
+                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF2C2C2E)), borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
             ],
-          ),
-          const SizedBox(height: 10),
-          TextFormField(
-            controller: _birthDateController,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'Birth Date',
-              labelStyle: const TextStyle(color: Color(0xFF8E8E93)),
-              filled: true,
-              fillColor: const Color(0xFF1C1C1E),
-              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF2C2C2E)), borderRadius: BorderRadius.circular(8)),
-            ),
           ),
           const SizedBox(height: 20),
 
           const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedHcpType,
-                  dropdownColor: const Color(0xFF1C1C1E),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Type *',
-                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
-                    filled: true,
-                    fillColor: const Color(0xFF1C1C1E),
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFFF453A)), borderRadius: BorderRadius.circular(8)),
-                  ),
-                  items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
-                  onChanged: (val) => setState(() => _selectedHcpType = val),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _selectedPractice,
-                  dropdownColor: const Color(0xFF1C1C1E),
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: 'Practice *',
-                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
-                    filled: true,
-                    fillColor: const Color(0xFF1C1C1E),
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFFF453A)), borderRadius: BorderRadius.circular(8)),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
-                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
-                    DropdownMenuItem(value: 'Both', child: Text('Both')),
+                flex: 3,
+                child: Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF2C2C2E)),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            color: const Color(0xFF2C2C2E),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: const [
+                                Text('Specialty Name', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.bold)),
+                                Text('Sub Specialty Name', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          ..._selectedSpecialties.map((s) => Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(s.specialtyName ?? 'Family Medicine', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                                Text(s.subSpecialtyName ?? 'Sports Medicine', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                              ],
+                            ),
+                          )),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C2E)),
+                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                        label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        onPressed: _showAddSpecialtySelector,
+                      ),
+                    ),
                   ],
-                  onChanged: (val) => setState(() => _selectedPractice = val!),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                flex: 2,
+                child: Column(
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: _selectedHcpType,
+                      dropdownColor: const Color(0xFF1C1C1E),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Type *',
+                        labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                        filled: true,
+                        fillColor: const Color(0xFF1C1C1E),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFFF453A)), borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
+                      onChanged: (val) => setState(() => _selectedHcpType = val),
+                    ),
+                    const SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: _selectedPractice,
+                      dropdownColor: const Color(0xFF1C1C1E),
+                      style: const TextStyle(color: Colors.white),
+                      decoration: InputDecoration(
+                        labelText: 'Practice *',
+                        labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                        filled: true,
+                        fillColor: const Color(0xFF1C1C1E),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFFF453A)), borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                        DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                        DropdownMenuItem(value: 'Both', child: Text('Both')),
+                      ],
+                      onChanged: (val) => setState(() => _selectedPractice = val!),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
-
-          // Specialties Table
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Specialty Table', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C2E)),
-                icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                onPressed: _showAddSpecialtySelector,
-              ),
-            ],
-          ),
-          ..._selectedSpecialties.map((s) => Card(
-            color: const Color(0xFF1C1C1E),
-            margin: const EdgeInsets.only(bottom: 6),
-            child: ListTile(
-              title: Text(s.specialtyName ?? s.hcpSpecialty ?? 'Specialty', style: const TextStyle(color: Colors.white)),
-              subtitle: s.subSpecialtyName != null ? Text(s.subSpecialtyName!, style: const TextStyle(color: Colors.white70, fontSize: 12)) : null,
-            ),
-          )),
           const SizedBox(height: 20),
 
           const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Workplace Table', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C2E)),
-                icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                onPressed: _showAddWorkplaceSelector,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF2C2C2E)),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            color: const Color(0xFF2C2C2E),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: const [
+                                Text('Workplace Name', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+                                Text('City Name', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+                                Text('Province Name', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          ..._selectedWorkplaces.map((w) => Padding(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(w.workplaceName ?? 'Manila Doctors Hospital', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                Text(w.cityTitle ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                Text(w.provinceTitle ?? 'Metro Manila-Manila', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              ],
+                            ),
+                          )),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C2E)),
+                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onPressed: _showAddWorkplaceSelector,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1C1C1E),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF2C2C2E)),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            color: const Color(0xFF2C2C2E),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: const [
+                                Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+                                Text('Email Address', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 11, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          ..._contacts.map((c) => Padding(
+                            padding: const EdgeInsets.all(10.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(c.contactNumber ?? '123435', style: const TextStyle(color: Colors.white, fontSize: 12)),
+                                Text(c.emailAddress ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                              ],
+                            ),
+                          )),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C2E)),
+                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onPressed: _showAddContactSelector,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          ..._selectedWorkplaces.map((w) => Card(
-            color: const Color(0xFF1C1C1E),
-            margin: const EdgeInsets.only(bottom: 6),
-            child: ListTile(
-              title: Text(w.workplaceName ?? w.hcpWorkplace ?? 'Workplace', style: const TextStyle(color: Colors.white)),
-            ),
-          )),
-          const SizedBox(height: 14),
-
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Contact Info Table', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2C2C2E)),
-                icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                onPressed: _showAddContactSelector,
-              ),
-            ],
-          ),
-          ..._contacts.map((c) => Card(
-            color: const Color(0xFF1C1C1E),
-            margin: const EdgeInsets.only(bottom: 6),
-            child: ListTile(
-              title: Text(c.contactNumber ?? 'No Phone', style: const TextStyle(color: Colors.white)),
-              subtitle: Text(c.emailAddress ?? 'No Email', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-            ),
-          )),
         ],
       ),
     );
   }
-
   // --- STEP 3: SURVEY QUESTIONNAIRE ---
   Widget _buildStep3Survey() {
     final apiService = Provider.of<ApiService>(context, listen: false);
