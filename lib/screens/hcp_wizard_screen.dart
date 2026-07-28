@@ -2241,29 +2241,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-
-          DropdownButtonFormField<String>(
-            value: _applicationStatus,
-            dropdownColor: const Color(0xFF1C1C1E),
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              labelText: 'Application Status',
-              labelStyle: const TextStyle(color: Color(0xFF8E8E93)),
-              filled: true,
-              fillColor: const Color(0xFF1C1C1E),
-              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF2C2C2E)), borderRadius: BorderRadius.circular(8)),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'Not Applied', child: Text('Not Applied')),
-              DropdownMenuItem(value: 'Applying', child: Text('Applying')),
-              DropdownMenuItem(value: 'Applied', child: Text('Applied')),
-              DropdownMenuItem(value: 'Failed', child: Text('Failed')),
-            ],
-            onChanged: (val) {
-              if (val != null) setState(() => _applicationStatus = val);
-            },
-          ),
         ],
       ),
     );
