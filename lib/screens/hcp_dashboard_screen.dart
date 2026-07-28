@@ -749,9 +749,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 final specialty = item.specialties.isNotEmpty
                     ? (item.specialties.first.specialtyName ?? item.specialties.first.hcpSpecialty ?? 'Specialty Pending')
                     : 'Specialty Pending';
-                final rawStatus = (item.applicationStatus != null && item.applicationStatus!.isNotEmpty)
-                    ? item.applicationStatus!
-                    : (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
+                final rawStatus = item.status ?? item.workflowState ?? item.applicationStatus ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
 
                 Color statusBg = const Color(0xFF6B7280);
                 String statusLabel = rawStatus;

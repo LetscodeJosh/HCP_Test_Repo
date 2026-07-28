@@ -482,21 +482,23 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     );
   }
 
-  Widget _buildStatusBadge(String? status) {
-    Color bg = const Color(0xFF6B7280);
-    Color fg = Colors.white;
-    String label = status ?? 'Pending Approval';
+  Widget _buildStatusBadge(HcpProfileSubmission item) {
+    final rawStatus = item.status ?? item.workflowState ?? item.applicationStatus ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
 
-    final sLower = label.toLowerCase();
-    if (sLower.contains('reject')) {
+    Color bg;
+    Color fg = Colors.white;
+    String label = rawStatus;
+
+    final sLower = rawStatus.toLowerCase();
+    if (sLower.contains('reject') || sLower.contains('cancel') || item.docstatus == 2) {
       bg = const Color(0xFFDC2626);
       label = 'Rejected';
-    } else if (sLower.contains('appr') || sLower.contains('appl')) {
+    } else if (sLower.contains('appr') || sLower.contains('applied') || item.docstatus == 1) {
       bg = const Color(0xFF16A34A);
       label = 'Approved';
     } else {
       bg = const Color(0xFF6B7280);
-      label = 'Pending Approval';
+      label = rawStatus.isNotEmpty ? rawStatus : 'Pending Approval';
     }
 
     return Container(
@@ -581,7 +583,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                             mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              _buildStatusBadge(item.applicationStatus),
+                              _buildStatusBadge(item),
                             ],
                           ),
                           onTap: () => _showSubmissionDetail(item),

@@ -27,6 +27,8 @@ class HcpProfileSubmission {
   final String? submissionDate;
   final String? surveyResponse; // Link -> HCP Survey Response
   final List<SubmissionAnswer> answers; // Table -> HCP Profile Submission Answer
+  final String? status; // ERPNext status field
+  final String? workflowState; // ERPNext workflow_state field
   final String? applicationStatus; // Not Applied, Applying, Applied, Failed
   final String? changeSummaryHtml;
   final String? changesJson;
@@ -61,6 +63,8 @@ class HcpProfileSubmission {
     this.submissionDate,
     this.surveyResponse,
     this.answers = const [],
+    this.status,
+    this.workflowState,
     this.applicationStatus,
     this.changeSummaryHtml,
     this.changesJson,
@@ -105,6 +109,8 @@ class HcpProfileSubmission {
       answers: (json['answers'] as List?)
               ?.map((e) => SubmissionAnswer.fromJson(e))
               .toList() ?? [],
+      status: json['status'] ?? json['workflow_state'],
+      workflowState: json['workflow_state'] ?? json['status'],
       applicationStatus: json['application_status'],
       changeSummaryHtml: json['change_summary_html'],
       changesJson: json['changes_json'],
