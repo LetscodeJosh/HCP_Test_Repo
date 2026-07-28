@@ -483,16 +483,20 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   Widget _buildStatusBadge(String? status) {
-    Color bg = const Color(0xFFFEF3C7);
-    Color fg = const Color(0xFFD97706);
-    String label = status ?? 'Pending';
+    Color bg = const Color(0xFF6B7280);
+    Color fg = Colors.white;
+    String label = status ?? 'Pending Approval';
 
-    if (label.toLowerCase().contains('applied') || label.toLowerCase().contains('approved')) {
-      bg = const Color(0xFFD1FAE5);
-      fg = const Color(0xFF059669);
-    } else if (label.toLowerCase().contains('reject') || label.toLowerCase().contains('fail')) {
-      bg = const Color(0xFFFEE2E2);
-      fg = const Color(0xFFDC2626);
+    final sLower = label.toLowerCase();
+    if (sLower.contains('reject')) {
+      bg = const Color(0xFFDC2626);
+      label = 'Rejected';
+    } else if (sLower.contains('appr') || sLower.contains('appl')) {
+      bg = const Color(0xFF16A34A);
+      label = 'Approved';
+    } else {
+      bg = const Color(0xFF6B7280);
+      label = 'Pending Approval';
     }
 
     return Container(
@@ -502,8 +506,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
-        label.toUpperCase(),
-        style: TextStyle(color: fg, fontSize: 10, fontWeight: FontWeight.bold),
+        label,
+        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.bold),
       ),
     );
   }

@@ -1285,42 +1285,200 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 10),
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  value: newHcpType,
-                                  dropdownColor: const Color(0xFF18181B),
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    labelText: 'Type *',
-                                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
-                                    filled: true,
-                                    fillColor: const Color(0xFF27272A),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
-                                  onChanged: (val) => setModalState(() => newHcpType = val!),
+                                flex: 3,
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF27272A),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: const Color(0xFF3F3F46)),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            color: const Color(0xFF18181B),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: const [
+                                                Text('Specialty', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                                                Text('Sub Specialty', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.all(12.0),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: const [
+                                                Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 13)),
+                                                Text('Sports Medicine', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                                        label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                        onPressed: () {},
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 12),
                               Expanded(
-                                child: DropdownButtonFormField<String>(
-                                  value: newPractice,
-                                  dropdownColor: const Color(0xFF18181B),
-                                  style: const TextStyle(color: Colors.white),
-                                  decoration: InputDecoration(
-                                    labelText: 'Practice *',
-                                    labelStyle: const TextStyle(color: Color(0xFFFF453A)),
-                                    filled: true,
-                                    fillColor: const Color(0xFF27272A),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  items: const [
-                                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
-                                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
-                                    DropdownMenuItem(value: 'Both', child: Text('Both')),
+                                flex: 2,
+                                child: Column(
+                                  children: [
+                                    DropdownButtonFormField<String>(
+                                      value: newHcpType,
+                                      dropdownColor: const Color(0xFF18181B),
+                                      style: const TextStyle(color: Colors.white),
+                                      decoration: InputDecoration(
+                                        labelText: 'Type *',
+                                        labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                                        filled: true,
+                                        fillColor: const Color(0xFF27272A),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
+                                      onChanged: (val) => setModalState(() => newHcpType = val!),
+                                    ),
+                                    const SizedBox(height: 10),
+                                    DropdownButtonFormField<String>(
+                                      value: newPractice,
+                                      dropdownColor: const Color(0xFF18181B),
+                                      style: const TextStyle(color: Colors.white),
+                                      decoration: InputDecoration(
+                                        labelText: 'Practice *',
+                                        labelStyle: const TextStyle(color: Color(0xFFFF453A)),
+                                        filled: true,
+                                        fillColor: const Color(0xFF27272A),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      items: const [
+                                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                                        DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                                        DropdownMenuItem(value: 'Both', child: Text('Both')),
+                                      ],
+                                      onChanged: (val) => setModalState(() => newPractice = val!),
+                                    ),
                                   ],
-                                  onChanged: (val) => setModalState(() => newPractice = val!),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 10),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF27272A),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: const Color(0xFF3F3F46)),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            color: const Color(0xFF18181B),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: const [
+                                                Text('Workplace', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                                Text('City', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                                Text('Province', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.all(10.0),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: const [
+                                                Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                                Text('Ermita', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                                Text('Metro Manila-Manila', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                      onPressed: () {},
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF27272A),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: const Color(0xFF3F3F46)),
+                                      ),
+                                      child: Column(
+                                        children: [
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            color: const Color(0xFF18181B),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: const [
+                                                Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                                Text('Email Address', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                              ],
+                                            ),
+                                          ),
+                                          Padding(
+                                            padding: const EdgeInsets.all(10.0),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: const [
+                                                Text('123435', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                                Text('', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                      onPressed: () {},
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],

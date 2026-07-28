@@ -749,7 +749,22 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 final specialty = item.specialties.isNotEmpty
                     ? (item.specialties.first.specialtyName ?? item.specialties.first.hcpSpecialty ?? 'Specialty Pending')
                     : 'Specialty Pending';
-                final isApproved = item.docstatus == 1 || item.applicationStatus == 'Applied';
+                final rawStatus = (item.applicationStatus != null && item.applicationStatus!.isNotEmpty)
+                    ? item.applicationStatus!
+                    : (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
+
+                Color statusBg = const Color(0xFF6B7280);
+                String statusLabel = rawStatus;
+                if (rawStatus.toLowerCase().contains('reject')) {
+                  statusBg = const Color(0xFFDC2626);
+                  statusLabel = 'Rejected';
+                } else if (rawStatus.toLowerCase().contains('appr') || rawStatus.toLowerCase().contains('appl') || item.docstatus == 1) {
+                  statusBg = const Color(0xFF16A34A);
+                  statusLabel = 'Approved';
+                } else {
+                  statusBg = const Color(0xFF6B7280);
+                  statusLabel = 'Pending Approval';
+                }
 
                 return Row(
                   children: [
@@ -786,17 +801,17 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isApproved ? const Color(0xFFD1FAE5) : const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(6),
+                        color: statusBg,
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        isApproved ? 'CONSENTED' : 'PENDING',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: isApproved ? const Color(0xFF065F46) : const Color(0xFF92400E),
+                        statusLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
                         ),
                       ),
                     ),
