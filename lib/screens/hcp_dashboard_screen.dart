@@ -65,18 +65,29 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         }
       }
 
+      // Build a lookup map: SPEC code -> human-readable specialty name
+      final Map<String, String> specLookup = {};
+      for (var s in specializations) {
+        specLookup[s.name] = s.specialty;
+      }
+
       // Compute Specialty & Sub-Specialty Counts from actual HCP child table data
+      // Resolve codes like SPEC-0003 to human-readable names like "Family Medicine"
       final Map<String, int> specMap = {};
       final Map<String, int> subSpecMap = {};
 
       for (var d in doctors) {
         if (d.specialties.isNotEmpty) {
           for (var s in d.specialties) {
-            final specName = s.hcpSpecialty.isNotEmpty ? s.hcpSpecialty : 'General Practice';
+            // Resolve specialty code to readable name
+            final rawSpec = s.hcpSpecialty.isNotEmpty ? s.hcpSpecialty : 'General Practice';
+            final specName = specLookup[rawSpec] ?? rawSpec;
             specMap[specName] = (specMap[specName] ?? 0) + 1;
 
+            // Resolve sub-specialty code to readable name
             if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') {
-              subSpecMap[s.subSpecialty!] = (subSpecMap[s.subSpecialty!] ?? 0) + 1;
+              final subSpecName = specLookup[s.subSpecialty!] ?? s.subSpecialty!;
+              subSpecMap[subSpecName] = (subSpecMap[subSpecName] ?? 0) + 1;
             }
           }
         } else {
@@ -170,12 +181,18 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                     LayoutBuilder(
                       builder: (context, constraints) {
                         if (constraints.maxWidth > 700) {
-                          return Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          return Column(
                             children: [
-                              Expanded(flex: 3, child: _buildDoctorsBySpecialtyCard()),
-                              const SizedBox(width: 16),
-                              Expanded(flex: 2, child: _buildRecentConsentLogsCard()),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(flex: 3, child: _buildDoctorsBySpecialtyCard()),
+                                  const SizedBox(width: 16),
+                                  Expanded(flex: 2, child: _buildRecentConsentLogsCard()),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              _buildDoctorsBySubSpecialtyCard(),
                             ],
                           );
                         } else {
