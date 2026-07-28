@@ -18,6 +18,17 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   List<HcpProfileSubmission> _submissions = [];
   bool _isLoading = true;
 
+  // Filter & Sort State
+  bool _showFilters = true;
+  bool _isAscending = false;
+  String _sortField = 'Created On';
+
+  final TextEditingController _idFilterCtrl = TextEditingController();
+  final TextEditingController _doctorNameFilterCtrl = TextEditingController();
+  final TextEditingController _typeFilterCtrl = TextEditingController();
+  String _practiceFilter = 'All';
+  String _statusFilter = 'All';
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +47,88 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     } catch (e) {
       setState(() => _isLoading = false);
     }
+  }
+
+  List<HcpProfileSubmission> _getFilteredAndSortedSubmissions() {
+    List<HcpProfileSubmission> list = List.from(_submissions);
+
+    if (_idFilterCtrl.text.trim().isNotEmpty) {
+      final q = _idFilterCtrl.text.trim().toLowerCase();
+      list = list.where((item) => (item.name ?? '').toLowerCase().contains(q)).toList();
+    }
+    if (_doctorNameFilterCtrl.text.trim().isNotEmpty) {
+      final q = _doctorNameFilterCtrl.text.trim().toLowerCase();
+      list = list.where((item) {
+        final name = (item.hcpFullName ?? item.hcpName).toLowerCase();
+        final fn = (item.firstName ?? '').toLowerCase();
+        final ln = (item.lastName ?? '').toLowerCase();
+        return name.contains(q) || fn.contains(q) || ln.contains(q);
+      }).toList();
+    }
+    if (_typeFilterCtrl.text.trim().isNotEmpty) {
+      final q = _typeFilterCtrl.text.trim().toLowerCase();
+      list = list.where((item) => (item.hcpType ?? '').toLowerCase().contains(q)).toList();
+    }
+    if (_practiceFilter != 'All') {
+      list = list.where((item) => (item.hcpPractice ?? '').toLowerCase() == _practiceFilter.toLowerCase()).toList();
+    }
+    if (_statusFilter != 'All') {
+      list = list.where((item) {
+        final raw = item.status ?? item.workflowState ?? item.applicationStatus ?? '';
+        final sLower = raw.toLowerCase();
+        if (_statusFilter == 'Rejected') {
+          return sLower.contains('reject') || item.docstatus == 2;
+        } else if (_statusFilter == 'Approved') {
+          return sLower.contains('appr') || sLower.contains('applied') || item.docstatus == 1;
+        } else if (_statusFilter == 'Pending Approval') {
+          return sLower.contains('pend') || sLower.contains('draft') || item.docstatus == 0;
+        }
+        return true;
+      }).toList();
+    }
+
+    list.sort((a, b) {
+      int cmp = 0;
+      switch (_sortField) {
+        case 'Name of Doctor':
+          cmp = (a.hcpFullName ?? a.hcpName).compareTo(b.hcpFullName ?? b.hcpName);
+          break;
+        case 'First Name':
+          cmp = (a.firstName ?? '').compareTo(b.firstName ?? '');
+          break;
+        case 'Middle Name':
+          cmp = (a.middleName ?? '').compareTo(b.middleName ?? '');
+          break;
+        case 'Last Name':
+          cmp = (a.lastName ?? '').compareTo(b.lastName ?? '');
+          break;
+        case 'ID':
+          cmp = (a.name ?? '').compareTo(b.name ?? '');
+          break;
+        case 'Type':
+          cmp = (a.hcpType ?? '').compareTo(b.hcpType ?? '');
+          break;
+        case 'Practice':
+          cmp = (a.hcpPractice ?? '').compareTo(b.hcpPractice ?? '');
+          break;
+        case 'Status':
+          final sa = a.status ?? a.workflowState ?? a.applicationStatus ?? '';
+          final sb = b.status ?? b.workflowState ?? b.applicationStatus ?? '';
+          cmp = sa.compareTo(sb);
+          break;
+        case 'Institution':
+          cmp = (a.institution ?? '').compareTo(b.institution ?? '');
+          break;
+        case 'Last Updated On':
+        case 'Created On':
+        default:
+          cmp = (a.submissionDate ?? '').compareTo(b.submissionDate ?? '');
+          break;
+      }
+      return _isAscending ? cmp : -cmp;
+    });
+
+    return list;
   }
 
   void _startNewSubmission() {
@@ -517,8 +610,211 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     );
   }
 
+  Widget _buildFilterAndSortBar() {
+    return Container(
+      color: const Color(0xFF18181B),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  backgroundColor: const Color(0xFF27272A),
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Color(0xFF3F3F46)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: Icon(_showFilters ? Icons.filter_alt_off : Icons.filter_alt, size: 16, color: Colors.white70),
+                label: Text(_showFilters ? 'Filter ×' : '= Filter', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  setState(() {
+                    _showFilters = !_showFilters;
+                  });
+                },
+              ),
+              const Spacer(),
+              IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFF27272A),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF3F3F46))),
+                ),
+                icon: Icon(
+                  _isAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                tooltip: _isAscending ? 'Sort Ascending' : 'Sort Descending',
+                onPressed: () {
+                  setState(() {
+                    _isAscending = !_isAscending;
+                  });
+                },
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF27272A),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF3F3F46)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _sortField,
+                    dropdownColor: const Color(0xFF18181B),
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                    items: const [
+                      DropdownMenuItem(value: 'Last Updated On', child: Text('Last Updated On')),
+                      DropdownMenuItem(value: 'Name of Doctor', child: Text('Name of Doctor')),
+                      DropdownMenuItem(value: 'ID', child: Text('ID')),
+                      DropdownMenuItem(value: 'Created On', child: Text('Created On')),
+                      DropdownMenuItem(value: 'Status', child: Text('Status')),
+                      DropdownMenuItem(value: 'First Name', child: Text('First Name')),
+                      DropdownMenuItem(value: 'Middle Name', child: Text('Middle Name')),
+                      DropdownMenuItem(value: 'Last Name', child: Text('Last Name')),
+                      DropdownMenuItem(value: 'Type', child: Text('Type')),
+                      DropdownMenuItem(value: 'Practice', child: Text('Practice')),
+                      DropdownMenuItem(value: 'Institution', child: Text('Institution')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _sortField = val;
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_showFilters) ...[
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 130,
+                    height: 36,
+                    child: TextField(
+                      controller: _idFilterCtrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'ID',
+                        hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                        filled: true,
+                        fillColor: const Color(0xFF27272A),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 160,
+                    height: 36,
+                    child: TextField(
+                      controller: _doctorNameFilterCtrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'Name of Doctor',
+                        hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                        filled: true,
+                        fillColor: const Color(0xFF27272A),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  SizedBox(
+                    width: 120,
+                    height: 36,
+                    child: TextField(
+                      controller: _typeFilterCtrl,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'Type',
+                        hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
+                        filled: true,
+                        fillColor: const Color(0xFF27272A),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF27272A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF3F3F46)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _practiceFilter,
+                        dropdownColor: const Color(0xFF18181B),
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        items: const [
+                          DropdownMenuItem(value: 'All', child: Text('Practice: All')),
+                          DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                          DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                          DropdownMenuItem(value: 'Both', child: Text('Both')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _practiceFilter = val);
+                        },
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF27272A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF3F3F46)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _statusFilter,
+                        dropdownColor: const Color(0xFF18181B),
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        items: const [
+                          DropdownMenuItem(value: 'All', child: Text('Status: All')),
+                          DropdownMenuItem(value: 'Pending Approval', child: Text('Pending Approval')),
+                          DropdownMenuItem(value: 'Approved', child: Text('Approved')),
+                          DropdownMenuItem(value: 'Rejected', child: Text('Rejected')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _statusFilter = val);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredList = _getFilteredAndSortedSubmissions();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
@@ -534,67 +830,74 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         ],
       ),
       drawer: const AppDrawer(currentItem: DrawerItem.submissionsFact),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF0B192C)))
-          : _submissions.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inbox_rounded, size: 64, color: const Color(0xFF0066FF).withOpacity(0.3)),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'No HCP Profile Submissions found.',
-                        style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadSubmissions,
-                  color: const Color(0xFF0B192C),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: _submissions.length,
-                    itemBuilder: (ctx, idx) {
-                      final item = _submissions[idx];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        elevation: 1,
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(0xFF0066FF).withOpacity(0.1),
-                            child: const Icon(Icons.assignment_rounded, color: Color(0xFF0066FF)),
-                          ),
-                          title: Text(
-                            item.name ?? 'HCP-PROF-2026-00030',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace', color: Color(0xFF0F172A), fontSize: 14),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const SizedBox(height: 2),
-                              Text(item.hcpFullName ?? item.hcpName, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 13)),
-                              const SizedBox(height: 2),
-                              Text('${item.hcpType ?? "HCP"} • ${item.submissionDate ?? "No date"}',
-                                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                            ],
-                          ),
-                          trailing: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              _buildStatusBadge(item),
-                            ],
-                          ),
-                          onTap: () => _showSubmissionDetail(item),
+      body: Column(
+        children: [
+          _buildFilterAndSortBar(),
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF0B192C)))
+                : filteredList.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.inbox_rounded, size: 64, color: const Color(0xFF0066FF).withOpacity(0.3)),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'No matching HCP Profile Submissions found.',
+                              style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold),
+                            ),
+                          ],
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadSubmissions,
+                        color: const Color(0xFF0B192C),
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(12),
+                          itemCount: filteredList.length,
+                          itemBuilder: (ctx, idx) {
+                            final item = filteredList[idx];
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 1,
+                              child: ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                leading: CircleAvatar(
+                                  backgroundColor: const Color(0xFF0066FF).withOpacity(0.1),
+                                  child: const Icon(Icons.assignment_rounded, color: Color(0xFF0066FF)),
+                                ),
+                                title: Text(
+                                  item.name ?? 'HCP-PROF-2026-00030',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace', color: Color(0xFF0F172A), fontSize: 14),
+                                ),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const SizedBox(height: 2),
+                                    Text(item.hcpFullName ?? item.hcpName, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 13)),
+                                    const SizedBox(height: 2),
+                                    Text('${item.hcpType ?? "HCP"} • ${item.submissionDate ?? "No date"}',
+                                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                  ],
+                                ),
+                                trailing: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    _buildStatusBadge(item),
+                                  ],
+                                ),
+                                onTap: () => _showSubmissionDetail(item),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: const Color(0xFF0066FF),
         icon: const Icon(Icons.add, color: Colors.white),
