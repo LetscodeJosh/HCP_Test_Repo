@@ -1870,16 +1870,31 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                               ],
                             ),
                           ),
-                          ..._selectedSpecialties.map((s) => Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(s.specialtyName ?? 'Family Medicine', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                                Text(s.subSpecialtyName ?? 'Sports Medicine', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                              ],
-                            ),
-                          )),
+                          ..._selectedSpecialties.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final s = entry.value;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(child: Text(s.specialtyName ?? 'Family Medicine', style: const TextStyle(color: Colors.white, fontSize: 13))),
+                                  Expanded(child: Text(s.subSpecialtyName ?? 'Sports Medicine', style: const TextStyle(color: Colors.white70, fontSize: 13))),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedSpecialties.removeAt(idx);
+                                      });
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 8),
+                                      child: Icon(Icons.close, size: 14, color: Colors.white54),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ],
                       ),
                     ),
@@ -1970,17 +1985,33 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                               ],
                             ),
                           ),
-                          ..._selectedWorkplaces.map((w) => Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(w.workplaceName ?? 'Manila Doctors Hospital', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                                Text(w.cityTitle ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                                Text(w.provinceTitle ?? 'Metro Manila-Manila', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                              ],
-                            ),
-                          )),
+                          ..._selectedWorkplaces.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final w = entry.value;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(child: Text(w.workplaceName ?? 'Manila Doctors Hospital', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                                  Text(w.cityTitle ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                  const SizedBox(width: 4),
+                                  Text(w.provinceTitle ?? 'Metro Manila-Manila', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedWorkplaces.removeAt(idx);
+                                      });
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.close, size: 14, color: Colors.white54),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ],
                       ),
                     ),
@@ -2018,16 +2049,31 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                               ],
                             ),
                           ),
-                          ..._contacts.map((c) => Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(c.contactNumber ?? '123435', style: const TextStyle(color: Colors.white, fontSize: 12)),
-                                Text(c.emailAddress ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                              ],
-                            ),
-                          )),
+                          ..._contacts.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final c = entry.value;
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(child: Text(c.contactNumber ?? '123435', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                                  Expanded(child: Text(c.emailAddress ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _contacts.removeAt(idx);
+                                      });
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.close, size: 14, color: Colors.white54),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
                         ],
                       ),
                     ),
