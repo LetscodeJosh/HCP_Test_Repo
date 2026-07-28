@@ -30,13 +30,14 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
 
   Map<String, int> _specialtyCounts = {};
   Map<String, int> _subSpecialtyCounts = {};
-  Map<String, int> _regionCounts = {};
+  int _ncrCount = 0;
+  int _luzonCount = 0;
+  int _visminCount = 0;
 
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
-    // Auto-refresh every 30 seconds to keep specialty/sub-specialty data always live
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) _loadDashboardData();
     });
@@ -46,6 +47,78 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   void dispose() {
     _autoRefreshTimer?.cancel();
     super.dispose();
+  }
+
+  String _determineTerritoryGroup(String input) {
+    if (input.isEmpty) return 'NCR';
+    final str = input.toLowerCase();
+
+    if (str.contains('ncr') ||
+        str.contains('metro manila') ||
+        str.contains('manila') ||
+        str.contains('quezon city') ||
+        str.contains('makati') ||
+        str.contains('pasig') ||
+        str.contains('taguig') ||
+        str.contains('mandaluyong') ||
+        str.contains('san juan') ||
+        str.contains('marikina') ||
+        str.contains('pasay') ||
+        str.contains('parañaque') ||
+        str.contains('las piñas') ||
+        str.contains('muntinlupa') ||
+        str.contains('caloocan') ||
+        str.contains('malabon') ||
+        str.contains('navotas') ||
+        str.contains('valenzuela') ||
+        str.contains('pateros') ||
+        str.contains('ermita')) {
+      return 'NCR';
+    }
+
+    if (str.contains('visayas') ||
+        str.contains('mindanao') ||
+        str.contains('cebu') ||
+        str.contains('bohol') ||
+        str.contains('iloilo') ||
+        str.contains('negros') ||
+        str.contains('aklan') ||
+        str.contains('capiz') ||
+        str.contains('antique') ||
+        str.contains('guimaras') ||
+        str.contains('siquijor') ||
+        str.contains('leyte') ||
+        str.contains('samar') ||
+        str.contains('biliran') ||
+        str.contains('davao') ||
+        str.contains('zamboanga') ||
+        str.contains('bukidnon') ||
+        str.contains('camiguin') ||
+        str.contains('misamis') ||
+        str.contains('cotabato') ||
+        str.contains('sarangani') ||
+        str.contains('sultan kudarat') ||
+        str.contains('agusan') ||
+        str.contains('surigao') ||
+        str.contains('dinagat') ||
+        str.contains('basilan') ||
+        str.contains('lanao') ||
+        str.contains('maguindanao') ||
+        str.contains('sulu') ||
+        str.contains('tawi-tawi') ||
+        str.contains('region vi') ||
+        str.contains('region vii') ||
+        str.contains('region viii') ||
+        str.contains('region ix') ||
+        str.contains('region x') ||
+        str.contains('region xi') ||
+        str.contains('region xii') ||
+        str.contains('region xiii') ||
+        str.contains('barmm')) {
+      return 'VISMIN';
+    }
+
+    return 'LUZON';
   }
 
   Future<void> _loadDashboardData() async {
@@ -61,7 +134,6 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
       final submissions = await apiService.submissions.list(limit: 500);
       final hcpAccounts = await apiService.fetchHcpAccounts();
 
-      // Fetch full detail for each doctor to get child tables (specialties, workplaces, contacts)
       final List<Hcp> doctors = [];
       for (var doc in doctorsList) {
         if (doc.name != null) {
@@ -70,33 +142,28 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             doctors.add(fullDoc);
           } catch (e) {
             print('Error fetching detail for ${doc.name}: $e');
-            doctors.add(doc); // fallback to list-level data
+            doctors.add(doc);
           }
         } else {
           doctors.add(doc);
         }
       }
 
-      // Build a lookup map: SPEC code -> human-readable specialty name
       final Map<String, String> specLookup = {};
       for (var s in specializations) {
         specLookup[s.name] = s.specialty;
       }
 
-      // Compute Specialty & Sub-Specialty Counts from actual HCP child table data
-      // Resolve codes like SPEC-0003 to human-readable names like "Family Medicine"
       final Map<String, int> specMap = {};
       final Map<String, int> subSpecMap = {};
 
       for (var d in doctors) {
         if (d.specialties.isNotEmpty) {
           for (var s in d.specialties) {
-            // Resolve specialty code to readable name
             final rawSpec = s.hcpSpecialty.isNotEmpty ? s.hcpSpecialty : 'General Practice';
             final specName = specLookup[rawSpec] ?? rawSpec;
             specMap[specName] = (specMap[specName] ?? 0) + 1;
 
-            // Resolve sub-specialty code to readable name
             if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') {
               final subSpecName = specLookup[s.subSpecialty!] ?? s.subSpecialty!;
               subSpecMap[subSpecName] = (subSpecMap[subSpecName] ?? 0) + 1;
@@ -107,13 +174,76 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         }
       }
 
-      // Compute Region Counts
-      final Map<String, int> regMap = {};
+      final Map<String, Institution> instLookup = {};
       for (var inst in institutions) {
-        final reg = (inst.regionName != null && inst.regionName!.isNotEmpty)
-            ? inst.regionName!
-            : 'Unassigned';
-        regMap[reg] = (regMap[reg] ?? 0) + 1;
+        instLookup[inst.name] = inst;
+      }
+
+      int ncr = 0;
+      int luzon = 0;
+      int vismin = 0;
+
+      for (var d in doctors) {
+        final Set<String> doctorTerritories = {};
+
+        if (d.provinceName != null && d.provinceName!.isNotEmpty) {
+          doctorTerritories.add(_determineTerritoryGroup(d.provinceName!));
+        }
+        if (d.regionName != null && d.regionName!.isNotEmpty) {
+          doctorTerritories.add(_determineTerritoryGroup(d.regionName!));
+        }
+
+        if (d.workplaces.isNotEmpty) {
+          for (var w in d.workplaces) {
+            if (w.address != null && w.address!.isNotEmpty) {
+              doctorTerritories.add(_determineTerritoryGroup(w.address!));
+            }
+            if (w.workplace.isNotEmpty) {
+              doctorTerritories.add(_determineTerritoryGroup(w.workplace));
+              final inst = instLookup[w.workplace];
+              if (inst != null) {
+                if (inst.provinceName != null && inst.provinceName!.isNotEmpty) {
+                  doctorTerritories.add(_determineTerritoryGroup(inst.provinceName!));
+                }
+                if (inst.regionName != null && inst.regionName!.isNotEmpty) {
+                  doctorTerritories.add(_determineTerritoryGroup(inst.regionName!));
+                }
+                if (inst.cityMunicipality != null && inst.cityMunicipality!.isNotEmpty) {
+                  doctorTerritories.add(_determineTerritoryGroup(inst.cityMunicipality!));
+                }
+              }
+            }
+          }
+        }
+
+        if (doctorTerritories.isEmpty) {
+          doctorTerritories.add('NCR');
+        }
+
+        if (doctorTerritories.contains('NCR')) ncr++;
+        if (doctorTerritories.contains('LUZON')) luzon++;
+        if (doctorTerritories.contains('VISMIN')) vismin++;
+      }
+
+      if (doctors.isEmpty && submissions.isNotEmpty) {
+        for (var sub in submissions) {
+          final Set<String> subTerritories = {};
+          if (sub.provinceName != null && sub.provinceName!.isNotEmpty) {
+            subTerritories.add(_determineTerritoryGroup(sub.provinceName!));
+          }
+          if (sub.workplaces.isNotEmpty) {
+            for (var w in sub.workplaces) {
+              if (w.workplaceName != null && w.workplaceName!.isNotEmpty) {
+                subTerritories.add(_determineTerritoryGroup(w.workplaceName!));
+              }
+            }
+          }
+          if (subTerritories.isEmpty) subTerritories.add('NCR');
+
+          if (subTerritories.contains('NCR')) ncr++;
+          if (subTerritories.contains('LUZON')) luzon++;
+          if (subTerritories.contains('VISMIN')) vismin++;
+        }
       }
 
       if (mounted) {
@@ -124,7 +254,9 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
           _submissions = submissions;
           _specialtyCounts = specMap;
           _subSpecialtyCounts = subSpecMap;
-          _regionCounts = regMap;
+          _ncrCount = ncr;
+          _luzonCount = luzon;
+          _visminCount = vismin;
           _isLoading = false;
         });
       }
@@ -828,6 +960,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   }
 
   Widget _buildTerritoryDistributionCard() {
+    final totalDocs = _doctors.isNotEmpty ? _doctors.length : (_submissions.isNotEmpty ? _submissions.length : 1);
+
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
@@ -867,10 +1001,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               Expanded(
                 child: _buildRegionBox(
                   regionName: 'National Capital Region',
-                  count: _regionCounts.entries
-                      .where((e) => e.key.contains('NCR') || e.key.contains('National Capital'))
-                      .fold(0, (sum, e) => sum + e.value),
-                  total: _institutions.length,
+                  count: _ncrCount,
+                  total: totalDocs,
                   barColor: const Color(0xFF0066FF),
                 ),
               ),
@@ -878,10 +1010,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               Expanded(
                 child: _buildRegionBox(
                   regionName: 'Luzon Provinces',
-                  count: _regionCounts.entries
-                      .where((e) => e.key.contains('Region I') || e.key.contains('Region II') || e.key.contains('Region III') || e.key.contains('Region IV'))
-                      .fold(0, (sum, e) => sum + e.value),
-                  total: _institutions.length,
+                  count: _luzonCount,
+                  total: totalDocs,
                   barColor: const Color(0xFF10B981),
                 ),
               ),
@@ -889,10 +1019,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               Expanded(
                 child: _buildRegionBox(
                   regionName: 'Visayas & Mindanao',
-                  count: _regionCounts.entries
-                      .where((e) => e.key.contains('Visayas') || e.key.contains('Mindanao') || e.key.contains('Region VI') || e.key.contains('Region VII') || e.key.contains('Region X') || e.key.contains('Region XI'))
-                      .fold(0, (sum, e) => sum + e.value),
-                  total: _institutions.length,
+                  count: _visminCount,
+                  total: totalDocs,
                   barColor: const Color(0xFFEC4899),
                 ),
               ),
