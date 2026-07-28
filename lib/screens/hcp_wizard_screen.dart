@@ -1084,6 +1084,16 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     bool newIsActive = true;
     bool isSaving = false;
 
+    final List<HcpSpecialty> newSpecialtiesList = [
+      HcpSpecialty(hcpSpecialty: 'Family Medicine', subSpecialty: 'Sports Medicine'),
+    ];
+    final List<HcpWorkplace> newWorkplacesList = [
+      HcpWorkplace(workplace: 'Manila Doctors Hospital', address: 'Ermita, Metro Manila-Manila'),
+    ];
+    final List<HcpContact> newContactsList = [
+      HcpContact(contactValue: '123435', contactType: ''),
+    ];
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -1149,6 +1159,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                       hcpType: newHcpType,
                                       hcpPractice: newPractice,
                                       isActive: newIsActive,
+                                      specialties: newSpecialtiesList,
+                                      workplaces: newWorkplacesList,
+                                      contacts: newContactsList,
                                     );
 
                                     final created = await apiService.createDoctor(newDoctor);
@@ -1310,16 +1323,34 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                               ],
                                             ),
                                           ),
-                                          Padding(
-                                            padding: const EdgeInsets.all(12.0),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: const [
-                                                Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                                Text('Sports Medicine', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                                              ],
-                                            ),
-                                          ),
+                                          if (newSpecialtiesList.isEmpty)
+                                            const Padding(
+                                              padding: EdgeInsets.all(12),
+                                              child: Text('No specialty added', style: TextStyle(color: Colors.white54, fontSize: 12)),
+                                            )
+                                          else
+                                            ...newSpecialtiesList.asMap().entries.map((entry) {
+                                              final idx = entry.key;
+                                              final s = entry.value;
+                                              return Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(child: Text(s.hcpSpecialty, style: const TextStyle(color: Colors.white, fontSize: 13))),
+                                                    Expanded(child: Text(s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13))),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        setModalState(() {
+                                                          newSpecialtiesList.removeAt(idx);
+                                                        });
+                                                      },
+                                                      child: const Icon(Icons.close, size: 14, color: Colors.white54),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
                                         ],
                                       ),
                                     ),
@@ -1329,8 +1360,63 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                       child: ElevatedButton.icon(
                                         style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
                                         icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                                        label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                        onPressed: () {},
+                                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                        onPressed: () {
+                                          String? selSpec = _specializations.isNotEmpty ? _specializations.first.name : 'Family Medicine';
+                                          String? selSub = _specializations.isNotEmpty ? _specializations.first.name : 'Sports Medicine';
+                                          showDialog(
+                                            context: context,
+                                            builder: (dialogCtx) => AlertDialog(
+                                              backgroundColor: const Color(0xFF1C1C1E),
+                                              title: const Text('Add Specialty', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                              content: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  DropdownButtonFormField<String>(
+                                                    value: selSpec,
+                                                    dropdownColor: const Color(0xFF27272A),
+                                                    style: const TextStyle(color: Colors.white),
+                                                    decoration: const InputDecoration(labelText: 'Specialty', labelStyle: TextStyle(color: Colors.white70)),
+                                                    items: _specializations.map((sp) => DropdownMenuItem(value: sp.name, child: Text(sp.specialty))).toList(),
+                                                    onChanged: (val) => selSpec = val,
+                                                  ),
+                                                  const SizedBox(height: 10),
+                                                  DropdownButtonFormField<String>(
+                                                    value: selSub,
+                                                    dropdownColor: const Color(0xFF27272A),
+                                                    style: const TextStyle(color: Colors.white),
+                                                    decoration: const InputDecoration(labelText: 'Sub Specialty', labelStyle: TextStyle(color: Colors.white70)),
+                                                    items: _specializations.map((sp) => DropdownMenuItem(value: sp.name, child: Text(sp.specialty))).toList(),
+                                                    onChanged: (val) => selSub = val,
+                                                  ),
+                                                ],
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.pop(dialogCtx),
+                                                  child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                                                ),
+                                                ElevatedButton(
+                                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
+                                                  onPressed: () {
+                                                    if (selSpec != null) {
+                                                      final specMatch = _specializations.firstWhere((s) => s.name == selSpec, orElse: () => _specializations.first);
+                                                      final subMatch = _specializations.firstWhere((s) => s.name == selSub, orElse: () => _specializations.first);
+                                                      setModalState(() {
+                                                        newSpecialtiesList.add(HcpSpecialty(
+                                                          hcpSpecialty: specMatch.specialty,
+                                                          subSpecialty: subMatch.specialty,
+                                                        ));
+                                                      });
+                                                      Navigator.pop(dialogCtx);
+                                                    }
+                                                  },
+                                                  child: const Text('Add Row', style: TextStyle(color: Colors.white)),
+                                                ),
+                                              ],
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                   ],
@@ -1410,17 +1496,35 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                               ],
                                             ),
                                           ),
-                                          Padding(
-                                            padding: const EdgeInsets.all(10.0),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: const [
-                                                Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                                Text('Ermita', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                                                Text('Metro Manila-Manila', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                                              ],
-                                            ),
-                                          ),
+                                          if (newWorkplacesList.isEmpty)
+                                            const Padding(
+                                              padding: EdgeInsets.all(10),
+                                              child: Text('No workplace added', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                                            )
+                                          else
+                                            ...newWorkplacesList.asMap().entries.map((entry) {
+                                              final idx = entry.key;
+                                              final w = entry.value;
+                                              return Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(child: Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                                                    Text(w.address?.split(',').first ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                                    const SizedBox(width: 4),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        setModalState(() {
+                                                          newWorkplacesList.removeAt(idx);
+                                                        });
+                                                      },
+                                                      child: const Icon(Icons.close, size: 14, color: Colors.white54),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
                                         ],
                                       ),
                                     ),
@@ -1428,8 +1532,47 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
                                       icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                      onPressed: () {},
+                                      label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                      onPressed: () {
+                                        String? selInst = _institutions.isNotEmpty ? _institutions.first.name : null;
+                                        showDialog(
+                                          context: context,
+                                          builder: (dialogCtx) => AlertDialog(
+                                            backgroundColor: const Color(0xFF1C1C1E),
+                                            title: const Text('Add Workplace', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                            content: DropdownButtonFormField<String>(
+                                              value: selInst,
+                                              dropdownColor: const Color(0xFF27272A),
+                                              style: const TextStyle(color: Colors.white),
+                                              decoration: const InputDecoration(labelText: 'Workplace / Hospital', labelStyle: TextStyle(color: Colors.white70)),
+                                              items: _institutions.map((i) => DropdownMenuItem(value: i.name, child: Text(i.institutionName))).toList(),
+                                              onChanged: (val) => selInst = val,
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(dialogCtx),
+                                                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                                              ),
+                                              ElevatedButton(
+                                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
+                                                onPressed: () {
+                                                  if (selInst != null) {
+                                                    final instMatch = _institutions.firstWhere((i) => i.name == selInst, orElse: () => _institutions.first);
+                                                    setModalState(() {
+                                                      newWorkplacesList.add(HcpWorkplace(
+                                                        workplace: instMatch.institutionName,
+                                                        address: '${instMatch.cityMunicipality ?? "Ermita"}, ${instMatch.regionName ?? "Metro Manila-Manila"}',
+                                                      ));
+                                                    });
+                                                    Navigator.pop(dialogCtx);
+                                                  }
+                                                },
+                                                child: const Text('Add Row', style: TextStyle(color: Colors.white)),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),
@@ -1458,16 +1601,35 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                               ],
                                             ),
                                           ),
-                                          Padding(
-                                            padding: const EdgeInsets.all(10.0),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: const [
-                                                Text('123435', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                                Text('', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                                              ],
-                                            ),
-                                          ),
+                                          if (newContactsList.isEmpty)
+                                            const Padding(
+                                              padding: EdgeInsets.all(10),
+                                              child: Text('No contact added', style: TextStyle(color: Colors.white54, fontSize: 11)),
+                                            )
+                                          else
+                                            ...newContactsList.asMap().entries.map((entry) {
+                                              final idx = entry.key;
+                                              final c = entry.value;
+                                              return Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                child: Row(
+                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  children: [
+                                                    Expanded(child: Text(c.contactValue, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                                                    Text(c.contactType ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                                    const SizedBox(width: 4),
+                                                    GestureDetector(
+                                                      onTap: () {
+                                                        setModalState(() {
+                                                          newContactsList.removeAt(idx);
+                                                        });
+                                                      },
+                                                      child: const Icon(Icons.close, size: 14, color: Colors.white54),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
                                         ],
                                       ),
                                     ),
@@ -1475,8 +1637,54 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                     ElevatedButton.icon(
                                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
                                       icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                      onPressed: () {},
+                                      label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                      onPressed: () {
+                                        String phone = '';
+                                        String email = '';
+                                        showDialog(
+                                          context: context,
+                                          builder: (dialogCtx) => AlertDialog(
+                                            backgroundColor: const Color(0xFF1C1C1E),
+                                            title: const Text('Add Contact Info', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                            content: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                TextFormField(
+                                                  style: const TextStyle(color: Colors.white),
+                                                  decoration: const InputDecoration(labelText: 'Mobile/Phone Number', labelStyle: TextStyle(color: Colors.white70)),
+                                                  onChanged: (val) => phone = val,
+                                                ),
+                                                TextFormField(
+                                                  style: const TextStyle(color: Colors.white),
+                                                  decoration: const InputDecoration(labelText: 'Email Address', labelStyle: TextStyle(color: Colors.white70)),
+                                                  onChanged: (val) => email = val,
+                                                ),
+                                              ],
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(dialogCtx),
+                                                child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                                              ),
+                                              ElevatedButton(
+                                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
+                                                onPressed: () {
+                                                  if (phone.isNotEmpty || email.isNotEmpty) {
+                                                    setModalState(() {
+                                                      newContactsList.add(HcpContact(
+                                                        contactValue: phone.isNotEmpty ? phone : '123435',
+                                                        contactType: email,
+                                                      ));
+                                                    });
+                                                    Navigator.pop(dialogCtx);
+                                                  }
+                                                },
+                                                child: const Text('Add Row', style: TextStyle(color: Colors.white)),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ],
                                 ),
