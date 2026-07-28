@@ -20,7 +20,16 @@ class ApiService extends ChangeNotifier {
   }
 
   String selectedProgram = 'COREnergy';
-  List<String> availablePrograms = ['COREnergy'];
+  List<String> availablePrograms = [
+    'Abbott Diabetes Care',
+    'COREnergy',
+    'NES',
+    'Nurturemed',
+    'PCH 1',
+    'Pharmabest',
+    'TSTACCO',
+    'TSTACC1',
+  ];
 
   // Offline Mode variables
   bool _isOffline = false;
@@ -356,17 +365,16 @@ class ApiService extends ChangeNotifier {
 
   Future<void> fetchAvailablePrograms() async {
     try {
-      final accounts = await hcpAccounts.list(fields: ['account_or_program']);
+      final accounts = await hcpAccounts.list(fields: ['account_or_program', 'account_name', 'name']);
       final names = accounts
-          .map((a) => a.accountName)
+          .map((a) => a.accountName.isNotEmpty ? a.accountName : (a.name ?? ''))
           .where((name) => name.isNotEmpty)
           .toSet()
           .toList();
       if (names.isNotEmpty) {
-        availablePrograms = names;
-        if (!availablePrograms.contains(selectedProgram)) {
-          selectedProgram = availablePrograms.first;
-        }
+        final set = {...availablePrograms, ...names};
+        final list = set.toList()..sort();
+        availablePrograms = list;
         notifyListeners();
       }
     } catch (e) {

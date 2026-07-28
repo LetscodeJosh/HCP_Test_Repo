@@ -54,6 +54,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   List<Institution> _institutions = [];
   List<Specialization> _specializations = [];
   List<HcpType> _hcpTypes = [];
+  List<HcpSurveyTemplate> _allSurveyTemplates = [];
   HcpSurveyTemplate? _activeSurvey;
 
   @override
@@ -166,6 +167,22 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     });
   }
 
+  void _updateActiveSurveyForProgram(String program) {
+    if (_allSurveyTemplates.isNotEmpty) {
+      final matched = _allSurveyTemplates.firstWhere(
+        (t) => t.isActive && (t.accountOrProgram == program || t.templateName.contains(program)),
+        orElse: () => _allSurveyTemplates.firstWhere((t) => t.isActive, orElse: () => _allSurveyTemplates.first),
+      );
+      setState(() {
+        _activeSurvey = matched;
+        _surveyAnswers.clear();
+        for (var q in matched.questions) {
+          _surveyAnswers[q.question] = '';
+        }
+      });
+    }
+  }
+
   Future<void> _loadLookups() async {
     setState(() => _isLoading = true);
     final apiService = Provider.of<ApiService>(context, listen: false);
@@ -181,20 +198,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         _institutions = insts;
         _specializations = specs;
         _hcpTypes = types;
+        _allSurveyTemplates = templates;
 
         if (_hcpTypes.isNotEmpty && (_selectedHcpType == null || _selectedHcpType!.isEmpty)) {
           _selectedHcpType = _hcpTypes.first.name;
         }
 
-        if (templates.isNotEmpty) {
-          _activeSurvey = templates.firstWhere(
-            (t) => t.isActive && (t.accountOrProgram == apiService.selectedProgram || t.templateName.contains(apiService.selectedProgram)),
-            orElse: () => templates.firstWhere((t) => t.isActive, orElse: () => templates.first),
-          );
-          for (var q in _activeSurvey!.questions) {
-            _surveyAnswers[q.question] = '';
-          }
-        }
+        _updateActiveSurveyForProgram(apiService.selectedProgram);
         _isLoading = false;
       });
     } catch (e) {
@@ -2116,7 +2126,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             ),
             items: apiService.availablePrograms.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
             onChanged: (val) {
-              if (val != null) apiService.setProgram(val);
+              if (val != null) {
+                apiService.setProgram(val);
+                _updateActiveSurveyForProgram(val);
+              }
             },
           ),
           const SizedBox(height: 20),
