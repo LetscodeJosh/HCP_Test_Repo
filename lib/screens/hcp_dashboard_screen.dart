@@ -43,47 +43,44 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     final apiService = Provider.of<ApiService>(context, listen: false);
 
     try {
-      final doctors = await apiService.fetchDoctors();
+      final doctorsList = await apiService.fetchDoctors();
       final institutions = await apiService.fetchInstitutions();
       final specializations = await apiService.fetchSpecializations();
       final submissions = await apiService.submissions.list(limit: 500);
       final hcpAccounts = await apiService.fetchHcpAccounts();
 
-      // Filter hcpAccounts for selected program if matched
-      final matchedAccounts = hcpAccounts.where((a) {
-        if (apiService.selectedProgram.isEmpty) return true;
-        return a.accountName.toLowerCase().contains(apiService.selectedProgram.toLowerCase());
-      }).toList();
-
-      final allowedIds = matchedAccounts.map((a) => a.hcp).whereType<String>().toSet();
-
-      final filteredDoctors = allowedIds.isNotEmpty
-          ? doctors.where((d) => allowedIds.contains(d.name)).toList()
-          : doctors;
-
-      // Compute Specialty & Sub-Specialty Counts
-      final Map<String, int> specMap = {};
-      final Map<String, int> subSpecMap = {};
-
-      for (var d in filteredDoctors) {
-        final spec = d.specialties.isNotEmpty
-            ? d.specialties.first.hcpSpecialty
-            : 'General Practice';
-        specMap[spec] = (specMap[spec] ?? 0) + 1;
-
-        for (var s in d.specialties) {
-          if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') {
-            subSpecMap[s.subSpecialty!] = (subSpecMap[s.subSpecialty!] ?? 0) + 1;
+      // Fetch full detail for each doctor to get child tables (specialties, workplaces, contacts)
+      final List<Hcp> doctors = [];
+      for (var doc in doctorsList) {
+        if (doc.name != null) {
+          try {
+            final fullDoc = await apiService.fetchDoctorDetail(doc.name!);
+            doctors.add(fullDoc);
+          } catch (e) {
+            print('Error fetching detail for ${doc.name}: $e');
+            doctors.add(doc); // fallback to list-level data
           }
+        } else {
+          doctors.add(doc);
         }
       }
 
-      // Also aggregate sub-specialties from HCP Account records
-      for (var acc in (matchedAccounts.isNotEmpty ? matchedAccounts : hcpAccounts)) {
-        for (var spec in acc.specialties) {
-          if (spec.subSpecialty != null && spec.subSpecialty!.isNotEmpty && spec.subSpecialty != '-') {
-            subSpecMap[spec.subSpecialty!] = (subSpecMap[spec.subSpecialty!] ?? 0) + 1;
+      // Compute Specialty & Sub-Specialty Counts from actual HCP child table data
+      final Map<String, int> specMap = {};
+      final Map<String, int> subSpecMap = {};
+
+      for (var d in doctors) {
+        if (d.specialties.isNotEmpty) {
+          for (var s in d.specialties) {
+            final specName = s.hcpSpecialty.isNotEmpty ? s.hcpSpecialty : 'General Practice';
+            specMap[specName] = (specMap[specName] ?? 0) + 1;
+
+            if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') {
+              subSpecMap[s.subSpecialty!] = (subSpecMap[s.subSpecialty!] ?? 0) + 1;
+            }
           }
+        } else {
+          specMap['General Practice'] = (specMap['General Practice'] ?? 0) + 1;
         }
       }
 
