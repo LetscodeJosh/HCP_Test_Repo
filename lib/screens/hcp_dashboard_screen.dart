@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/hcp.dart';
@@ -20,6 +21,7 @@ class HcpDashboardScreen extends StatefulWidget {
 
 class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   bool _isLoading = true;
+  Timer? _autoRefreshTimer;
 
   List<Hcp> _doctors = [];
   List<Institution> _institutions = [];
@@ -34,6 +36,16 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   void initState() {
     super.initState();
     _loadDashboardData();
+    // Auto-refresh every 30 seconds to keep specialty/sub-specialty data always live
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) _loadDashboardData();
+    });
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadDashboardData() async {
@@ -181,18 +193,21 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                     LayoutBuilder(
                       builder: (context, constraints) {
                         if (constraints.maxWidth > 700) {
-                          return Column(
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(flex: 3, child: _buildDoctorsBySpecialtyCard()),
-                                  const SizedBox(width: 16),
-                                  Expanded(flex: 2, child: _buildRecentConsentLogsCard()),
-                                ],
+                              Expanded(
+                                flex: 3,
+                                child: Column(
+                                  children: [
+                                    _buildDoctorsBySpecialtyCard(),
+                                    const SizedBox(height: 16),
+                                    _buildDoctorsBySubSpecialtyCard(),
+                                  ],
+                                ),
                               ),
-                              const SizedBox(height: 16),
-                              _buildDoctorsBySubSpecialtyCard(),
+                              const SizedBox(width: 16),
+                              Expanded(flex: 2, child: _buildRecentConsentLogsCard()),
                             ],
                           );
                         } else {
