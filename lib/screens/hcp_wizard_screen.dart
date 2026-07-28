@@ -315,19 +315,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
     } else if (_surveyAnswers.isNotEmpty) {
       _surveyAnswers.forEach((qText, ansText) {
-        final validAns = ansText.trim().isNotEmpty ? ansText.trim() : 'N/A';
-        answersList.add(SubmissionAnswer(
-          surveyQuestion: qText,
-          questionText: qText,
-          answer: validAns,
-        ));
+        if (qText.trim().isNotEmpty) {
+          final validAns = ansText.trim().isNotEmpty ? ansText.trim() : 'N/A';
+          answersList.add(SubmissionAnswer(
+            surveyQuestion: qText.trim(),
+            questionText: qText.trim(),
+            answer: validAns,
+          ));
+        }
       });
-    } else {
-      answersList.add(SubmissionAnswer(
-        surveyQuestion: 'SQ-00001',
-        questionText: 'HCP Profiling Consent & Verification',
-        answer: 'Verified',
-      ));
     }
 
     final changesMap = {
