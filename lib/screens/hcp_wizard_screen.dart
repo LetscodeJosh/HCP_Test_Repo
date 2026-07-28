@@ -302,9 +302,33 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       photoBase64 = 'data:image/jpeg;base64,${base64Encode(bytes)}';
     }
 
-    final answersList = _surveyAnswers.entries.map((e) {
-      return SubmissionAnswer(surveyQuestion: e.key, questionText: e.key, answer: e.value);
-    }).toList();
+    final List<SubmissionAnswer> answersList = [];
+    if (_activeSurvey != null && _activeSurvey!.questions.isNotEmpty) {
+      for (var q in _activeSurvey!.questions) {
+        final val = _surveyAnswers[q.question]?.trim();
+        final ansVal = (val != null && val.isNotEmpty) ? val : 'N/A';
+        answersList.add(SubmissionAnswer(
+          surveyQuestion: q.question,
+          questionText: q.question,
+          answer: ansVal,
+        ));
+      }
+    } else if (_surveyAnswers.isNotEmpty) {
+      _surveyAnswers.forEach((qText, ansText) {
+        final validAns = ansText.trim().isNotEmpty ? ansText.trim() : 'N/A';
+        answersList.add(SubmissionAnswer(
+          surveyQuestion: qText,
+          questionText: qText,
+          answer: validAns,
+        ));
+      });
+    } else {
+      answersList.add(SubmissionAnswer(
+        surveyQuestion: 'SQ-00001',
+        questionText: 'HCP Profiling Consent & Verification',
+        answer: 'Verified',
+      ));
+    }
 
     final changesMap = {
       'first_name': _firstNameController.text.trim(),

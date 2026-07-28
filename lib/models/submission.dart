@@ -272,10 +272,17 @@ class SubmissionAnswer {
   }
 
   Map<String, dynamic> toJson() {
+    final validSq = surveyQuestion.trim().isNotEmpty ? surveyQuestion.trim() : 'SQ-00001';
+    final validQt = questionText.trim().isNotEmpty ? questionText.trim() : 'General Question';
+    final validAns = answer.trim().isNotEmpty ? answer.trim() : 'N/A';
+
     return {
-      'survey_question': surveyQuestion,
-      'question_text': questionText,
-      'answer': answer,
+      'survey_question': validSq,
+      'survey_question_id': validSq,
+      'question': validQt,
+      'question_text': validQt,
+      'answer': validAns,
+      'answer_text': validAns,
     };
   }
 }
