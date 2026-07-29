@@ -886,10 +886,18 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: const Text('HCP Profile Submissions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        title: const Text('HCP Profile Submissions', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: const Color(0xFF0B192C),
         foregroundColor: Colors.white,
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: Container(
+            color: Colors.white.withOpacity(0.3),
+            height: 1.0,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white),
@@ -901,9 +909,64 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       body: Column(
         children: [
           _buildFilterAndSortBar(),
+
+          // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
+          Container(
+            decoration: const BoxDecoration(
+              color: Color(0xFF0B192C),
+              border: Border(
+                top: BorderSide(color: Colors.white38, width: 1.0),
+                bottom: BorderSide(color: Colors.white12, width: 1.0),
+              ),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  const SizedBox(width: 16),
+                  const Expanded(
+                    flex: 3,
+                    child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                  const Expanded(
+                    flex: 4,
+                    child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                  const Expanded(
+                    flex: 2,
+                    child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                  const Expanded(
+                    flex: 3,
+                    child: Text('Submission Date', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                  const Expanded(
+                    flex: 3,
+                    child: Text('Status', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                  ),
+                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                  SizedBox(
+                    width: 45,
+                    child: Text(
+                      '${filteredList.length} of ${_submissions.length}',
+                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                      textAlign: TextAlign.right,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                ],
+              ),
+            ),
+          ),
+
+          // Clean White Card Rows for Unified Interface
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF0B192C)))
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF)))
                 : filteredList.isEmpty
                     ? Center(
                         child: Column(
@@ -920,44 +983,72 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       )
                     : RefreshIndicator(
                         onRefresh: _loadSubmissions,
-                        color: const Color(0xFF0B192C),
-                        child: ListView.builder(
-                          padding: const EdgeInsets.all(12),
+                        color: const Color(0xFF0066FF),
+                        child: ListView.separated(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
                           itemCount: filteredList.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 2),
                           itemBuilder: (ctx, idx) {
                             final item = filteredList[idx];
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 1,
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                                leading: CircleAvatar(
-                                  backgroundColor: const Color(0xFF0066FF).withOpacity(0.1),
-                                  child: const Icon(Icons.assignment_rounded, color: Color(0xFF0066FF)),
-                                ),
-                                title: Text(
-                                  item.name ?? 'HCP-PROF-2026-00030',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontFamily: 'monospace', color: Color(0xFF0F172A), fontSize: 14),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 2),
-                                    Text(item.hcpFullName ?? item.hcpName, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A), fontSize: 13)),
-                                    const SizedBox(height: 2),
-                                    Text('${item.hcpType ?? "HCP"} • ${item.submissionDate ?? "No date"}',
-                                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                  ],
-                                ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    _buildStatusBadge(item),
-                                  ],
-                                ),
+                            return Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                              ),
+                              child: InkWell(
                                 onTap: () => _showSubmissionDetail(item),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  child: Row(
+                                    children: [
+                                      // ID
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          item.name ?? 'HCP-PROF-2026-00030',
+                                          style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.bold),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Name of Doctor
+                                      Expanded(
+                                        flex: 4,
+                                        child: Text(
+                                          item.hcpFullName ?? item.hcpName,
+                                          style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Type
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          item.hcpType ?? 'HCP',
+                                          style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Submission Date
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          item.submissionDate ?? 'No date',
+                                          style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Status Badge
+                                      Expanded(
+                                        flex: 3,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: _buildStatusBadge(item),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 45),
+                                    ],
+                                  ),
+                                ),
                               ),
                             );
                           },
@@ -967,7 +1058,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0066FF),
+        backgroundColor: const Color(0xFF0B192C),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Add HCP Profile Submission', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: _startNewSubmission,
