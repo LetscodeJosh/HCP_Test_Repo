@@ -28,7 +28,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
 
   bool _isLoading = true;
 
-  // ERPNext Matching Filters (Image 2 & Image 4)
+  // ERPNext Matching Filters (Darkish Blue Theme)
   bool _showFilters = true;
   String _idQuery = '';
   String _nameQuery = '';
@@ -114,7 +114,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     });
   }
 
-  // --- DOCTOR'S INFORMATION SHEET (Matching Image 3) ---
+  // --- DOCTOR'S INFORMATION SHEET (Darkish Blue & White Modal) ---
   Future<void> _openDoctorProfile(Hcp doctor) async {
     final apiService = Provider.of<ApiService>(context, listen: false);
     Hcp fullDoctor = doctor;
@@ -141,7 +141,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
           return Container(
             height: MediaQuery.of(context).size.height * 0.92,
             decoration: const BoxDecoration(
-              color: Color(0xFF18181B),
+              color: Color(0xFF0B192C),
               borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
             ),
             child: Column(
@@ -153,7 +153,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     margin: const EdgeInsets.only(top: 10, bottom: 8),
                     width: 40,
                     height: 4,
-                    decoration: BoxDecoration(color: const Color(0xFF3F3F46), borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(color: const Color(0xFF334155), borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
                 Expanded(
@@ -162,7 +162,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Title Header (Image 3)
+                        // Title Header (Darkish Blue & White Theme)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
@@ -187,15 +187,15 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Name of Doctor', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
+                                  const Text('Name of Doctor', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                                   const SizedBox(height: 6),
                                   Container(
                                     width: double.infinity,
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF27272A),
+                                      color: const Color(0xFF1E293B),
                                       borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                      border: Border.all(color: const Color(0xFF334155)),
                                     ),
                                     child: Text(
                                       doctorFullName.isNotEmpty ? doctorFullName : (fullDoctor.name ?? 'Edward Soriano'),
@@ -223,14 +223,14 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Doctor Photo Container (Image 3)
+                        // Doctor Photo Container
                         Container(
                           width: 180,
                           height: 200,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF27272A),
+                            color: const Color(0xFF1E293B),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFF3F3F46)),
+                            border: Border.all(color: const Color(0xFF334155)),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
@@ -255,20 +255,21 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 style: const TextStyle(color: Colors.white, fontSize: 12),
                                 decoration: InputDecoration(
                                   labelText: 'Photo',
-                                  labelStyle: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 11),
+                                  labelStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                                   filled: true,
-                                  fillColor: const Color(0xFF27272A),
+                                  fillColor: const Color(0xFF1E293B),
                                   isDense: true,
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Color(0xFF334155))),
                                 ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF3F3F46),
+                                backgroundColor: const Color(0xFF1E293B),
                                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                side: const BorderSide(color: Color(0xFF334155)),
                               ),
                               onPressed: () {
                                 photoUrlCtrl.clear();
@@ -279,10 +280,10 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        const Divider(color: Color(0xFF3F3F46)),
+                        const Divider(color: Color(0xFF334155)),
                         const SizedBox(height: 12),
 
-                        // PERSONAL Section (Image 3)
+                        // PERSONAL Section
                         const Text('PERSONAL', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                         const SizedBox(height: 12),
                         Wrap(
@@ -296,10 +297,10 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        const Divider(color: Color(0xFF3F3F46)),
+                        const Divider(color: Color(0xFF334155)),
                         const SizedBox(height: 12),
 
-                        // SPECIALIZATION / TYPE / PRACTICE Section (Image 3)
+                        // SPECIALIZATION / TYPE / PRACTICE Section
                         const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                         const SizedBox(height: 12),
                         Row(
@@ -313,21 +314,21 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 children: [
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF27272A),
+                                      color: const Color(0xFF1E293B),
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                      border: Border.all(color: const Color(0xFF334155)),
                                     ),
                                     child: Column(
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                          color: const Color(0xFF18181B),
+                                          color: const Color(0xFF0F172A),
                                           child: Row(
                                             children: const [
                                               Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
                                               SizedBox(width: 10),
-                                              Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold))),
-                                              Expanded(child: Text('Sub Specialty', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold))),
+                                              Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold))),
+                                              Expanded(child: Text('Sub Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold))),
                                               Icon(Icons.settings, color: Colors.white54, size: 14),
                                             ],
                                           ),
@@ -369,7 +370,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
                                     onPressed: () {},
                                     child: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
                                   ),
@@ -392,10 +393,10 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        const Divider(color: Color(0xFF3F3F46)),
+                        const Divider(color: Color(0xFF334155)),
                         const SizedBox(height: 12),
 
-                        // WORKPLACES / CONTACT INFO Section (Image 3)
+                        // WORKPLACES / CONTACT INFO Section
                         const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                         const SizedBox(height: 12),
                         Row(
@@ -408,23 +409,23 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 children: [
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF27272A),
+                                      color: const Color(0xFF1E293B),
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                      border: Border.all(color: const Color(0xFF334155)),
                                     ),
                                     child: Column(
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                          color: const Color(0xFF18181B),
+                                          color: const Color(0xFF0F172A),
                                           child: Row(
                                             children: const [
                                               Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
                                               SizedBox(width: 6),
-                                              Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold))),
-                                              Text('City', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                              Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold))),
+                                              Text('City', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
                                               SizedBox(width: 8),
-                                              Text('Province', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                              Text('Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
                                               SizedBox(width: 6),
                                               Icon(Icons.settings, color: Colors.white54, size: 14),
                                             ],
@@ -467,7 +468,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
                                     onPressed: () {},
                                     child: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
                                   ),
@@ -483,21 +484,21 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 children: [
                                   Container(
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF27272A),
+                                      color: const Color(0xFF1E293B),
                                       borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                      border: Border.all(color: const Color(0xFF334155)),
                                     ),
                                     child: Column(
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                                          color: const Color(0xFF18181B),
+                                          color: const Color(0xFF0F172A),
                                           child: Row(
                                             children: const [
                                               Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
                                               SizedBox(width: 6),
-                                              Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold))),
-                                              Expanded(child: Text('Email Address', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold))),
+                                              Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold))),
+                                              Expanded(child: Text('Email Address', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold))),
                                               Icon(Icons.settings, color: Colors.white54, size: 14),
                                             ],
                                           ),
@@ -533,7 +534,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                   ),
                                   const SizedBox(height: 8),
                                   ElevatedButton(
-                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E293B)),
                                     onPressed: () {},
                                     child: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
                                   ),
@@ -560,7 +561,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       children: [
         Row(
           children: [
-            Text(label, style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
+            Text(label, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
             if (isMandatory)
               const Text(' *', style: TextStyle(color: Color(0xFFFF453A), fontSize: 12, fontWeight: FontWeight.bold)),
           ],
@@ -570,9 +571,9 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFF27272A),
+            color: const Color(0xFF1E293B),
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFF3F3F46)),
+            border: Border.all(color: const Color(0xFF334155)),
           ),
           child: Text(
             value.isNotEmpty ? value : '-',
@@ -734,7 +735,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     );
   }
 
-  // --- ERPNext Filter Bar Matching Image 2 & Image 4 ---
+  // --- ERPNext Filter Bar (Darkish Blue #0B192C Theme) ---
   Widget _buildFilterAndSortBar() {
     return Container(
       color: const Color(0xFF0B192C),
@@ -832,7 +833,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
-                // ID Filter
+                // ID Filter Box
                 SizedBox(
                   width: 120,
                   child: TextField(
@@ -854,7 +855,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   ),
                 ),
 
-                // Name of Doctor Filter
+                // Name of Doctor Filter Box
                 SizedBox(
                   width: 160,
                   child: TextField(
@@ -979,7 +980,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFFF4F6F9), // Soft Light Background for Darkish Blue & White combination
       appBar: AppBar(
         centerTitle: true,
         title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
@@ -998,150 +999,165 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
         child: _isLoading
             ? const Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056B3)),
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0066FF)),
                 ),
               )
             : Column(
                 children: [
                   _buildFilterAndSortBar(),
 
-                  // Table Header Row Matching Image 2
+                  // Darkish Blue Table Header Strip
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    color: const Color(0xFF1E1E1E),
+                    color: const Color(0xFF0B192C),
                     child: Row(
                       children: [
-                        const Icon(Icons.check_box_outline_blank, color: Colors.white38, size: 18),
+                        const Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 18),
                         const SizedBox(width: 12),
                         const Expanded(
                           flex: 3,
-                          child: Text('Name of Doctor', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                          child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(
                           width: 65,
-                          child: Text('Is Active', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                          child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const Expanded(
                           flex: 2,
-                          child: Text('Institution', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                          child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const Expanded(
                           flex: 2,
-                          child: Text('Practice', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                          child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const Expanded(
                           flex: 2,
-                          child: Text('Type', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                          child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const Expanded(
                           flex: 2,
-                          child: Text('ID', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                          child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         Text(
                           '${_filteredDoctors.length} of ${_allDoctors.length}',
-                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                          style: const TextStyle(color: Colors.white70, fontSize: 11),
                         ),
                       ],
                     ),
                   ),
-                  const Divider(height: 1, color: Color(0xFF2C2C2E)),
 
-                  // Doctor List Rows (Matching Image 2)
+                  // Clean White Card Rows for Darkish Blue & White Combination
                   Expanded(
                     child: _filteredDoctors.isEmpty
                         ? const Center(
-                            child: Text('No doctors match your criteria.', style: TextStyle(color: Color(0xFF8E8E93))),
+                            child: Text('No doctors match your criteria.', style: TextStyle(color: Color(0xFF64748B))),
                           )
                         : ListView.separated(
+                            padding: const EdgeInsets.symmetric(vertical: 6),
                             itemCount: _filteredDoctors.length,
-                            separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF2C2C2E)),
+                            separatorBuilder: (_, __) => const SizedBox(height: 4),
                             itemBuilder: (ctx, index) {
                               final doctor = _filteredDoctors[index];
                               final fullName = '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' && doctor.middleName!.isNotEmpty ? doctor.middleName! + ' ' : ''}${doctor.lastName}';
                               final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
 
-                              return InkWell(
-                                onTap: () => _openDoctorProfile(doctor),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  color: const Color(0xFF18181B),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.check_box_outline_blank, color: Colors.white38, size: 18),
-                                      const SizedBox(width: 12),
-                                      // Name of Doctor
-                                      Expanded(
-                                        flex: 3,
-                                        child: Text(
-                                          fullName,
-                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      // Is Active Check Icon
-                                      SizedBox(
-                                        width: 65,
-                                        child: Icon(
-                                          doctor.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
-                                          color: doctor.isActive ? const Color(0xFF38BDF8) : Colors.white24,
-                                          size: 18,
-                                        ),
-                                      ),
-                                      // Institution
-                                      Expanded(
-                                        flex: 2,
-                                        child: Text(
-                                          doctor.institution ?? '',
-                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      // Practice Tag Capsule (Image 2)
-                                      Expanded(
-                                        flex: 2,
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFF27272A),
-                                            borderRadius: BorderRadius.circular(12),
-                                            border: Border.all(color: const Color(0xFF3F3F46)),
+                              return Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.03),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(8),
+                                  onTap: () => _openDoctorProfile(doctor),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                    child: Row(
+                                      children: [
+                                        const Icon(Icons.check_box_outline_blank, color: Color(0xFF94A3B8), size: 18),
+                                        const SizedBox(width: 12),
+                                        // Name of Doctor (Dark Blue text on White card)
+                                        Expanded(
+                                          flex: 3,
+                                          child: Text(
+                                            fullName,
+                                            style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              const CircleAvatar(radius: 3, backgroundColor: Colors.white70),
-                                              const SizedBox(width: 4),
-                                              Flexible(
-                                                child: Text(
-                                                  doctor.hcpPractice,
-                                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                                                  overflow: TextOverflow.ellipsis,
+                                        ),
+                                        // Is Active Check Icon
+                                        SizedBox(
+                                          width: 65,
+                                          child: Icon(
+                                            doctor.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
+                                            color: doctor.isActive ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
+                                            size: 18,
+                                          ),
+                                        ),
+                                        // Institution
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            doctor.institution ?? '',
+                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        // Practice Capsule Tag
+                                        Expanded(
+                                          flex: 2,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF1F5F9),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: const Color(0xFFCBD5E1)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const CircleAvatar(radius: 3, backgroundColor: Color(0xFF0B192C)),
+                                                const SizedBox(width: 4),
+                                                Flexible(
+                                                  child: Text(
+                                                    doctor.hcpPractice,
+                                                    style: const TextStyle(color: Color(0xFF0B192C), fontSize: 11, fontWeight: FontWeight.w600),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
                                                 ),
-                                              ),
-                                            ],
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      // Type
-                                      Expanded(
-                                        flex: 2,
-                                        child: Text(
-                                          typeLabel,
-                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
-                                          overflow: TextOverflow.ellipsis,
+                                        const SizedBox(width: 8),
+                                        // Type
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            typeLabel,
+                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                      ),
-                                      // ID
-                                      Expanded(
-                                        flex: 2,
-                                        child: Text(
-                                          doctor.name ?? '',
-                                          style: const TextStyle(color: Colors.white54, fontFamily: 'monospace', fontSize: 11),
-                                          overflow: TextOverflow.ellipsis,
+                                        // ID
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            doctor.name ?? '',
+                                            style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               );
