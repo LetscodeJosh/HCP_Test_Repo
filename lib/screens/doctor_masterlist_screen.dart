@@ -932,45 +932,61 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 children: [
                   _buildFilterAndSortBar(),
 
-                  // Darkish Blue Table Header Strip
+                  // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    color: const Color(0xFF0B192C),
-                    child: Row(
-                      children: [
-                        const Expanded(
-                          flex: 4,
-                          child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        const SizedBox(
-                          width: 75,
-                          child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        const Expanded(
-                          flex: 3,
-                          child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        const Expanded(
-                          flex: 3,
-                          child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        const Expanded(
-                          flex: 2,
-                          child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        const Expanded(
-                          flex: 2,
-                          child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        SizedBox(
-                          width: 45,
-                          child: Text(
-                            '${_filteredDoctors.length} of ${_allDoctors.length}',
-                            style: const TextStyle(color: Colors.white70, fontSize: 11),
-                            textAlign: TextAlign.right,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0B192C),
+                      border: Border(
+                        top: BorderSide(color: Colors.white38, width: 1.0),
+                        bottom: BorderSide(color: Colors.white12, width: 1.0),
+                      ),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: IntrinsicHeight(
+                      child: Row(
+                        children: [
+                          const SizedBox(width: 16),
+                          const Expanded(
+                            flex: 4,
+                            child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                           ),
-                        ),
-                      ],
+                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                          const SizedBox(
+                            width: 75,
+                            child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                          const Expanded(
+                            flex: 3,
+                            child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                          const Expanded(
+                            flex: 3,
+                            child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                          const Expanded(
+                            flex: 2,
+                            child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                          const Expanded(
+                            flex: 2,
+                            child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                          SizedBox(
+                            width: 45,
+                            child: Text(
+                              '${_filteredDoctors.length} of ${_allDoctors.length}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                        ],
+                      ),
                     ),
                   ),
 
