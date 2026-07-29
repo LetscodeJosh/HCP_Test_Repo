@@ -1012,22 +1012,20 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     color: const Color(0xFF0B192C),
                     child: Row(
                       children: [
-                        const Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 18),
-                        const SizedBox(width: 12),
                         const Expanded(
-                          flex: 3,
+                          flex: 4,
                           child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const SizedBox(
-                          width: 65,
+                          width: 75,
                           child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const Expanded(
-                          flex: 2,
+                          flex: 3,
                           child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const Expanded(
-                          flex: 2,
+                          flex: 3,
                           child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
                         const Expanded(
@@ -1038,55 +1036,47 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                           flex: 2,
                           child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         ),
-                        Text(
-                          '${_filteredDoctors.length} of ${_allDoctors.length}',
-                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                        SizedBox(
+                          width: 45,
+                          child: Text(
+                            '${_filteredDoctors.length} of ${_allDoctors.length}',
+                            style: const TextStyle(color: Colors.white70, fontSize: 11),
+                            textAlign: TextAlign.right,
+                          ),
                         ),
                       ],
                     ),
                   ),
 
-                  // Clean White Card Rows for Darkish Blue & White Combination
+                  // Clean White Card Rows with Exact Flex Alignment
                   Expanded(
                     child: _filteredDoctors.isEmpty
                         ? const Center(
                             child: Text('No doctors match your criteria.', style: TextStyle(color: Color(0xFF64748B))),
                           )
                         : ListView.separated(
-                            padding: const EdgeInsets.symmetric(vertical: 6),
+                            padding: const EdgeInsets.symmetric(vertical: 4),
                             itemCount: _filteredDoctors.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 4),
+                            separatorBuilder: (_, __) => const SizedBox(height: 2),
                             itemBuilder: (ctx, index) {
                               final doctor = _filteredDoctors[index];
                               final fullName = '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' && doctor.middleName!.isNotEmpty ? doctor.middleName! + ' ' : ''}${doctor.lastName}';
                               final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
 
                               return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 8),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   color: Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: const Color(0xFFE2E8F0)),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.03),
-                                      blurRadius: 4,
-                                      offset: const Offset(0, 2),
-                                    ),
-                                  ],
+                                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
                                 ),
                                 child: InkWell(
-                                  borderRadius: BorderRadius.circular(8),
                                   onTap: () => _openDoctorProfile(doctor),
                                   child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                     child: Row(
                                       children: [
-                                        const Icon(Icons.check_box_outline_blank, color: Color(0xFF94A3B8), size: 18),
-                                        const SizedBox(width: 12),
-                                        // Name of Doctor (Dark Blue text on White card)
+                                        // Name of Doctor
                                         Expanded(
-                                          flex: 3,
+                                          flex: 4,
                                           child: Text(
                                             fullName,
                                             style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
@@ -1095,49 +1085,54 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                         ),
                                         // Is Active Check Icon
                                         SizedBox(
-                                          width: 65,
-                                          child: Icon(
-                                            doctor.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
-                                            color: doctor.isActive ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
-                                            size: 18,
+                                          width: 75,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Icon(
+                                              doctor.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
+                                              color: doctor.isActive ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
+                                              size: 18,
+                                            ),
                                           ),
                                         ),
                                         // Institution
                                         Expanded(
-                                          flex: 2,
+                                          flex: 3,
                                           child: Text(
-                                            doctor.institution ?? '',
+                                            (doctor.institution != null && doctor.institution!.isNotEmpty) ? doctor.institution! : '-',
                                             style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        // Practice Capsule Tag
+                                        // Practice Tag Capsule
                                         Expanded(
-                                          flex: 2,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFF1F5F9),
-                                              borderRadius: BorderRadius.circular(12),
-                                              border: Border.all(color: const Color(0xFFCBD5E1)),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                const CircleAvatar(radius: 3, backgroundColor: Color(0xFF0B192C)),
-                                                const SizedBox(width: 4),
-                                                Flexible(
-                                                  child: Text(
-                                                    doctor.hcpPractice,
-                                                    style: const TextStyle(color: Color(0xFF0B192C), fontSize: 11, fontWeight: FontWeight.w600),
-                                                    overflow: TextOverflow.ellipsis,
+                                          flex: 3,
+                                          child: Align(
+                                            alignment: Alignment.centerLeft,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFF1F5F9),
+                                                borderRadius: BorderRadius.circular(12),
+                                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  const CircleAvatar(radius: 3, backgroundColor: Color(0xFF0B192C)),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      doctor.hcpPractice,
+                                                      style: const TextStyle(color: Color(0xFF0B192C), fontSize: 11, fontWeight: FontWeight.w600),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
                                                   ),
-                                                ),
-                                              ],
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
                                         // Type
                                         Expanded(
                                           flex: 2,
@@ -1156,6 +1151,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
+                                        const SizedBox(width: 45),
                                       ],
                                     ),
                                   ),
