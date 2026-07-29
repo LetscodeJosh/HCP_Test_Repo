@@ -287,15 +287,16 @@ class AppDrawer extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFF0066FF) : Colors.transparent,
+        color: isSelected ? const Color(0xFF1E3A5F) : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
+        border: isSelected ? Border.all(color: const Color(0xFF38BDF8).withOpacity(0.5), width: 1) : null,
       ),
       child: ListTile(
         dense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
         leading: Icon(
           icon,
-          color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+          color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
           size: 22,
         ),
         title: Text(
@@ -306,9 +307,7 @@ class AppDrawer extends StatelessWidget {
             fontSize: 14,
           ),
         ),
-        trailing: isSelected
-            ? const Icon(Icons.chevron_right_rounded, color: Colors.white, size: 18)
-            : null,
+        trailing: isSelected ? const Icon(Icons.chevron_right_rounded, color: Color(0xFF38BDF8), size: 18) : null,
         onTap: onTap,
       ),
     );

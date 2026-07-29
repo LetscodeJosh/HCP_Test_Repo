@@ -646,6 +646,13 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
         backgroundColor: const Color(0xFF0B192C),
         foregroundColor: Colors.white,
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: Container(
+            color: Colors.white.withOpacity(0.3),
+            height: 1.0,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white),

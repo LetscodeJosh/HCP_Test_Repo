@@ -905,6 +905,13 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
         title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: const Color(0xFF0B192C),
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1.0),
+          child: Container(
+            color: Colors.white.withOpacity(0.3),
+            height: 1.0,
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
@@ -1083,7 +1090,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
               ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0066FF),
+        backgroundColor: const Color(0xFF0B192C),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Add HCP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: _showAddDoctorDialog,
