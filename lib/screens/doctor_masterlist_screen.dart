@@ -27,13 +27,16 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   List<HcpType> _hcpTypes = [];
 
   bool _isLoading = true;
-  String _searchQuery = '';
-  
-  // ERPNext Matching Filters
+
+  // ERPNext Matching Filters (Image 2 & Image 4)
+  bool _showFilters = true;
+  String _idQuery = '';
+  String _nameQuery = '';
   String? _selectedTypeFilter;
   String? _selectedPracticeFilter;
   bool _onlyIsActive = false;
-  bool _onlyIsPendingApproval = false;
+  String _sortBy = 'Name of Doctor';
+  bool _isAscending = true;
 
   @override
   void initState() {
@@ -77,19 +80,41 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       _filteredDoctors = _allDoctors.where((doctor) {
         final nameStr = '${doctor.firstName} ${doctor.middleName ?? ''} ${doctor.lastName}'.toLowerCase();
         final idStr = (doctor.name ?? '').toLowerCase();
-        final queryLower = _searchQuery.toLowerCase().trim();
-        final matchesSearch = queryLower.isEmpty || nameStr.contains(queryLower) || idStr.contains(queryLower);
 
-        final matchesType = _selectedTypeFilter == null || doctor.hcpType == _selectedTypeFilter;
-        final matchesPractice = _selectedPracticeFilter == null || doctor.hcpPractice == _selectedPracticeFilter;
+        final matchesId = _idQuery.isEmpty || idStr.contains(_idQuery.toLowerCase().trim());
+        final matchesName = _nameQuery.isEmpty || nameStr.contains(_nameQuery.toLowerCase().trim());
+        final matchesType = _selectedTypeFilter == null || _selectedTypeFilter == 'All' || doctor.hcpType == _selectedTypeFilter;
+        final matchesPractice = _selectedPracticeFilter == null || _selectedPracticeFilter == 'All' || doctor.hcpPractice == _selectedPracticeFilter;
         final matchesIsActive = !_onlyIsActive || doctor.isActive;
-        final matchesIsPending = !_onlyIsPendingApproval || doctor.isPendingApproval;
 
-        return matchesSearch && matchesType && matchesPractice && matchesIsActive && matchesIsPending;
+        return matchesId && matchesName && matchesType && matchesPractice && matchesIsActive;
       }).toList();
+
+      _filteredDoctors.sort((a, b) {
+        int cmp = 0;
+        switch (_sortBy) {
+          case 'ID':
+            cmp = (a.name ?? '').compareTo(b.name ?? '');
+            break;
+          case 'Type':
+            cmp = a.hcpType.compareTo(b.hcpType);
+            break;
+          case 'Practice':
+            cmp = a.hcpPractice.compareTo(b.hcpPractice);
+            break;
+          case 'Name of Doctor':
+          default:
+            final aName = '${a.firstName} ${a.lastName}';
+            final bName = '${b.firstName} ${b.lastName}';
+            cmp = aName.compareTo(bName);
+            break;
+        }
+        return _isAscending ? cmp : -cmp;
+      });
     });
   }
 
+  // --- DOCTOR'S INFORMATION SHEET (Matching Image 3) ---
   Future<void> _openDoctorProfile(Hcp doctor) async {
     final apiService = Provider.of<ApiService>(context, listen: false);
     Hcp fullDoctor = doctor;
@@ -101,232 +126,430 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       }
     }
 
-    final doctorFullName = '${fullDoctor.firstName} ${fullDoctor.middleName != null && fullDoctor.middleName != '-' ? fullDoctor.middleName! + ' ' : ''}${fullDoctor.lastName}'.trim();
+    final doctorFullName = '${fullDoctor.firstName} ${fullDoctor.middleName != null && fullDoctor.middleName != '-' && fullDoctor.middleName!.isNotEmpty ? fullDoctor.middleName! + ' ' : ''}${fullDoctor.lastName}'.trim();
+    final photoUrlCtrl = TextEditingController(text: fullDoctor.hcpPhoto ?? 'https://pngimg.com/uploads/doctor/doctor_PNG16003.png');
+    bool isActive = fullDoctor.isActive;
+
+    final specLookup = {for (var s in _specializations) s.name: s.specialty};
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.85,
-        maxChildSize: 0.95,
-        minChildSize: 0.5,
-        expand: false,
-        builder: (ctx, scrollController) => Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF18181B),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: SingleChildScrollView(
-            controller: scrollController,
-            padding: const EdgeInsets.all(20),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.92,
+            decoration: const BoxDecoration(
+              color: Color(0xFF18181B),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Modal Handle
                 Center(
                   child: Container(
-                    width: 36,
+                    margin: const EdgeInsets.only(top: 10, bottom: 8),
+                    width: 40,
                     height: 4,
                     decoration: BoxDecoration(color: const Color(0xFF3F3F46), borderRadius: BorderRadius.circular(2)),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 22,
-                      backgroundColor: const Color(0xFF38BDF8).withOpacity(0.15),
-                      child: const Icon(Icons.person, color: Color(0xFF38BDF8), size: 24),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            doctorFullName,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                          ),
-                          Text(
-                            fullDoctor.name ?? 'HCP-0000012',
-                            style: const TextStyle(color: Color(0xFFA1A1AA), fontFamily: 'monospace', fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // BASIC INFO (ERPNext v15 Read-only Layout)
-                const Text('BASIC INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: _buildReadonlyField('First Name *', fullDoctor.firstName, isMandatory: true)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _buildReadonlyField('Middle Name *', fullDoctor.middleName ?? '-', isMandatory: true)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: _buildReadonlyField('Last Name *', fullDoctor.lastName, isMandatory: true)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _buildReadonlyField('Birth Date', fullDoctor.birthDate ?? '05-30-2003')),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // SPECIALIZATION / TYPE / PRACTICE (ERPNext v15 Read-only Layout)
-                const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(child: _buildReadonlyField('Type *', fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident', isMandatory: true)),
-                    const SizedBox(width: 8),
-                    Expanded(child: _buildReadonlyField('Practice *', fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Dispensing', isMandatory: true)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF27272A),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF3F3F46)),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        color: const Color(0xFF18181B),
-                        child: Row(
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Title Header (Image 3)
+                        Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text('Specialty Name', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
-                            Text('Sub Specialty Name', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                          children: [
+                            const Text(
+                              "DOCTOR'S INFORMATION SHEET",
+                              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.white70),
+                              onPressed: () => Navigator.pop(ctx),
+                            ),
                           ],
                         ),
-                      ),
-                      if (fullDoctor.specialties.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(12.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              Text('Sports Medicine', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                            ],
-                          ),
-                        )
-                      else
-                        ...fullDoctor.specialties.map((s) => Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(s.hcpSpecialty, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                              Text(s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                            ],
-                          ),
-                        )),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
+                        const SizedBox(height: 16),
 
-                // WORKPLACES / CONTACT INFO (ERPNext v15 Read-only Layout)
-                const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 10),
-                Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF27272A),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF3F3F46)),
-                  ),
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        color: const Color(0xFF18181B),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text('Workplace Name', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
-                            Text('Location', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                        // Name of Doctor Field & Is Active Checkbox
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Name of Doctor', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
+                                  const SizedBox(height: 6),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF27272A),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                    ),
+                                    child: Text(
+                                      doctorFullName.isNotEmpty ? doctorFullName : (fullDoctor.name ?? 'Edward Soriano'),
+                                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: isActive,
+                                  activeColor: const Color(0xFF0066FF),
+                                  side: const BorderSide(color: Colors.white70),
+                                  onChanged: (val) {
+                                    if (val != null) setModalState(() => isActive = val);
+                                  },
+                                ),
+                                const Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
                           ],
                         ),
-                      ),
-                      if (fullDoctor.workplaces.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.all(12.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 13)),
-                              Text('Ermita, Metro Manila', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                            ],
-                          ),
-                        )
-                      else
-                        ...fullDoctor.workplaces.map((w) => Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                              Text(w.address ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                            ],
-                          ),
-                        )),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF27272A),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: const Color(0xFF3F3F46)),
-                  ),
-                  child: fullDoctor.contacts.isEmpty
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: const [
-                            Text('Mobile/Phone Number: 123435', style: TextStyle(color: Colors.white, fontSize: 13)),
-                            Text('Email: None', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                          ],
-                        )
-                      : Column(
-                          children: fullDoctor.contacts.map((c) => Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(c.contactValue, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                              Text(c.contactType, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                            ],
-                          )).toList(),
-                        ),
-                ),
+                        const SizedBox(height: 16),
 
-                const SizedBox(height: 24),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF27272A),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        // Doctor Photo Container (Image 3)
+                        Container(
+                          width: 180,
+                          height: 200,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF27272A),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF3F3F46)),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.network(
+                              photoUrlCtrl.text.isNotEmpty
+                                  ? photoUrlCtrl.text
+                                  : 'https://pngimg.com/uploads/doctor/doctor_PNG16003.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Center(
+                                child: Icon(Icons.person, size: 70, color: Colors.white38),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 220,
+                              child: TextField(
+                                controller: photoUrlCtrl,
+                                style: const TextStyle(color: Colors.white, fontSize: 12),
+                                decoration: InputDecoration(
+                                  labelText: 'Photo',
+                                  labelStyle: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 11),
+                                  filled: true,
+                                  fillColor: const Color(0xFF27272A),
+                                  isDense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF3F3F46),
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                              ),
+                              onPressed: () {
+                                photoUrlCtrl.clear();
+                                setModalState(() {});
+                              },
+                              child: const Text('Clear', style: TextStyle(color: Colors.white, fontSize: 12)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        const Divider(color: Color(0xFF3F3F46)),
+                        const SizedBox(height: 12),
+
+                        // PERSONAL Section (Image 3)
+                        const Text('PERSONAL', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            SizedBox(width: 170, child: _buildReadonlyField('First Name *', fullDoctor.firstName, isMandatory: true)),
+                            SizedBox(width: 170, child: _buildReadonlyField('Middle Name *', fullDoctor.middleName ?? '', isMandatory: true)),
+                            SizedBox(width: 170, child: _buildReadonlyField('Last Name *', fullDoctor.lastName, isMandatory: true)),
+                            SizedBox(width: 170, child: _buildReadonlyField('Birth Date', fullDoctor.birthDate ?? '')),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        const Divider(color: Color(0xFF3F3F46)),
+                        const SizedBox(height: 12),
+
+                        // SPECIALIZATION / TYPE / PRACTICE Section (Image 3)
+                        const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Specialty & Sub Specialty Table
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF27272A),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                          color: const Color(0xFF18181B),
+                                          child: Row(
+                                            children: const [
+                                              Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                              SizedBox(width: 10),
+                                              Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold))),
+                                              Expanded(child: Text('Sub Specialty', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold))),
+                                              Icon(Icons.settings, color: Colors.white54, size: 14),
+                                            ],
+                                          ),
+                                        ),
+                                        if (fullDoctor.specialties.isNotEmpty)
+                                          ...fullDoctor.specialties.map((s) {
+                                            final rawSpec = s.hcpSpecialty;
+                                            final specName = specLookup[rawSpec] ?? rawSpec;
+                                            final rawSub = s.subSpecialty ?? '';
+                                            final subName = specLookup[rawSub] ?? rawSub;
+                                            return Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                              child: Row(
+                                                children: [
+                                                  const Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(child: Text(specName, style: const TextStyle(color: Colors.white, fontSize: 12))),
+                                                  Expanded(child: Text(subName.isNotEmpty ? subName : 'General Practice', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                                                  const Icon(Icons.edit_outlined, color: Colors.white54, size: 14),
+                                                ],
+                                              ),
+                                            );
+                                          })
+                                        else
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                            child: Row(
+                                              children: const [
+                                                Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                                SizedBox(width: 10),
+                                                Expanded(child: Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 12))),
+                                                Expanded(child: Text('General Practice', style: TextStyle(color: Colors.white70, fontSize: 12))),
+                                                Icon(Icons.edit_outlined, color: Colors.white54, size: 14),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                    onPressed: () {},
+                                    child: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+
+                            // Type * & Practice * Dropdowns
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildReadonlyField('Type *', fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident', isMandatory: true),
+                                  const SizedBox(height: 12),
+                                  _buildReadonlyField('Practice *', fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Prescribing', isMandatory: true),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        const Divider(color: Color(0xFF3F3F46)),
+                        const SizedBox(height: 12),
+
+                        // WORKPLACES / CONTACT INFO Section (Image 3)
+                        const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        const SizedBox(height: 12),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Workplaces Table
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF27272A),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                          color: const Color(0xFF18181B),
+                                          child: Row(
+                                            children: const [
+                                              Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                              SizedBox(width: 6),
+                                              Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold))),
+                                              Text('City', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                              SizedBox(width: 8),
+                                              Text('Province', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold)),
+                                              SizedBox(width: 6),
+                                              Icon(Icons.settings, color: Colors.white54, size: 14),
+                                            ],
+                                          ),
+                                        ),
+                                        if (fullDoctor.workplaces.isNotEmpty)
+                                          ...fullDoctor.workplaces.map((w) => Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(child: Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 11))),
+                                                    Text(w.address ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                                                    const SizedBox(width: 8),
+                                                    const Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                                                    const SizedBox(width: 6),
+                                                    const Icon(Icons.edit_outlined, color: Colors.white54, size: 14),
+                                                  ],
+                                                ),
+                                              ))
+                                        else
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                            child: Row(
+                                              children: const [
+                                                Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                                SizedBox(width: 6),
+                                                Expanded(child: Text('Metro Cavite Health ...', style: TextStyle(color: Colors.white, fontSize: 11))),
+                                                Text('', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                                                SizedBox(width: 8),
+                                                Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                                                SizedBox(width: 6),
+                                                Icon(Icons.edit_outlined, color: Colors.white54, size: 14),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                    onPressed: () {},
+                                    child: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+
+                            // Contact Info Table
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF27272A),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFF3F3F46)),
+                                    ),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                          color: const Color(0xFF18181B),
+                                          child: Row(
+                                            children: const [
+                                              Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                              SizedBox(width: 6),
+                                              Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold))),
+                                              Expanded(child: Text('Email Address', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold))),
+                                              Icon(Icons.settings, color: Colors.white54, size: 14),
+                                            ],
+                                          ),
+                                        ),
+                                        if (fullDoctor.contacts.isNotEmpty)
+                                          ...fullDoctor.contacts.map((c) => Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                                child: Row(
+                                                  children: [
+                                                    const Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                                    const SizedBox(width: 6),
+                                                    Expanded(child: Text(c.contactValue, style: const TextStyle(color: Colors.white, fontSize: 11))),
+                                                    Expanded(child: Text(c.contactType, style: const TextStyle(color: Colors.white70, fontSize: 11))),
+                                                    const Icon(Icons.edit_outlined, color: Colors.white54, size: 14),
+                                                  ],
+                                                ),
+                                              ))
+                                        else
+                                          Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                            child: Row(
+                                              children: const [
+                                                Icon(Icons.check_box_outline_blank, color: Colors.white54, size: 16),
+                                                SizedBox(width: 6),
+                                                Expanded(child: Text('1234567890', style: TextStyle(color: Colors.white, fontSize: 11))),
+                                                Expanded(child: Text('email@email.com', style: TextStyle(color: Colors.white70, fontSize: 11))),
+                                                Icon(Icons.edit_outlined, color: Colors.white54, size: 14),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF27272A)),
+                                    onPressed: () {},
+                                    child: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ),
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('Close Profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                   ),
                 ),
               ],
             ),
-          ),
-        ),
+          );
+        },
       ),
     );
   }
@@ -345,13 +568,16 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
         const SizedBox(height: 4),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: const Color(0xFF27272A),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(6),
             border: Border.all(color: const Color(0xFF3F3F46)),
           ),
-          child: Text(value, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+          child: Text(
+            value.isNotEmpty ? value : '-',
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          ),
         ),
       ],
     );
@@ -411,71 +637,37 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   validator: (val) => val == null || val.isEmpty ? 'Required' : null,
                   onSaved: (val) => lastName = val!,
                 ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: selectedType,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Color(0xFF1C1C1E)),
-                  decoration: const InputDecoration(
-                    labelText: 'HCP Type *',
-                    labelStyle: TextStyle(color: Color(0xFF636366)),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
-                  ),
-                  validator: (val) => val == null || val.isEmpty ? 'Please select an HCP Type' : null,
-                  items: _hcpTypes.map((t) => DropdownMenuItem(
-                    value: t.name,
-                    child: Text(t.typeName, style: const TextStyle(color: Color(0xFF1C1C1E))),
-                  )).toList(),
+                  decoration: const InputDecoration(labelText: 'Type *'),
+                  items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
                   onChanged: (val) => selectedType = val,
                 ),
-                DropdownButtonFormField<String>(
-                  value: selectedSpecialty,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Color(0xFF1C1C1E)),
-                  decoration: const InputDecoration(
-                    labelText: 'Primary Specialty *',
-                    labelStyle: TextStyle(color: Color(0xFF636366)),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
-                  ),
-                  items: _specializations.map((s) => DropdownMenuItem(
-                    value: s.name,
-                    child: Text(s.specialty, style: const TextStyle(color: Color(0xFF1C1C1E))),
-                  )).toList(),
-                  onChanged: (val) => selectedSpecialty = val,
-                ),
-                DropdownButtonFormField<String>(
-                  value: selectedWorkplace,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Color(0xFF1C1C1E)),
-                  decoration: const InputDecoration(
-                    labelText: 'Workplace / Institution *',
-                    labelStyle: TextStyle(color: Color(0xFF636366)),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
-                  ),
-                  items: _institutions.map((i) => DropdownMenuItem(
-                    value: i.name,
-                    child: Text(i.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E))),
-                  )).toList(),
-                  onChanged: (val) => selectedWorkplace = val,
-                ),
+                const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   value: selectedPractice,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Color(0xFF1C1C1E)),
-                  decoration: const InputDecoration(
-                    labelText: 'Practice Mode *',
-                    labelStyle: TextStyle(color: Color(0xFF636366)),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Practice *'),
                   items: const [
-                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing', style: TextStyle(color: Color(0xFF1C1C1E)))),
-                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing', style: TextStyle(color: Color(0xFF1C1C1E)))),
-                    DropdownMenuItem(value: 'Both', child: Text('Both', style: TextStyle(color: Color(0xFF1C1C1E)))),
+                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                    DropdownMenuItem(value: 'Both', child: Text('Both')),
                   ],
                   onChanged: (val) => selectedPractice = val!,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedSpecialty,
+                  decoration: const InputDecoration(labelText: 'Specialty'),
+                  items: _specializations.map((s) => DropdownMenuItem(value: s.name, child: Text(s.specialty))).toList(),
+                  onChanged: (val) => selectedSpecialty = val,
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: selectedWorkplace,
+                  decoration: const InputDecoration(labelText: 'Workplace'),
+                  items: _institutions.map((i) => DropdownMenuItem(value: i.name, child: Text(i.institutionName))).toList(),
+                  onChanged: (val) => selectedWorkplace = val,
                 ),
               ],
             ),
@@ -492,10 +684,10 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
               if (formKey.currentState!.validate()) {
                 formKey.currentState!.save();
                 Navigator.pop(ctx);
-                setState(() => _isLoading = true);
-
                 final apiService = Provider.of<ApiService>(context, listen: false);
+
                 try {
+                  setState(() => _isLoading = true);
                   final reqMiddleName = middleName.trim().isNotEmpty ? middleName.trim() : '-';
                   final reqSpec = selectedSpecialty ?? (_specializations.isNotEmpty ? _specializations.first.name : '');
                   final reqWork = selectedWorkplace ?? (_institutions.isNotEmpty ? _institutions.first.name : '');
@@ -510,7 +702,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     workplaces: reqWork.isNotEmpty ? [HcpWorkplace(workplace: reqWork)] : [],
                   );
                   final savedDoctor = await apiService.createDoctor(newDoctor);
-                  
+
                   final newHcpAccount = HcpAccount(
                     accountName: apiService.selectedProgram,
                     territory: 'All Territories',
@@ -542,12 +734,255 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     );
   }
 
+  // --- ERPNext Filter Bar Matching Image 2 & Image 4 ---
+  Widget _buildFilterAndSortBar() {
+    return Container(
+      color: const Color(0xFF0B192C),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              // Filter Toggle Button
+              InkWell(
+                onTap: () => setState(() => _showFilters = !_showFilters),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.filter_list, color: Colors.white70, size: 16),
+                      const SizedBox(width: 6),
+                      Text(
+                        _showFilters ? 'Filter ✕' : 'Filter',
+                        style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const Spacer(),
+
+              // Sort Direction Button
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _isAscending = !_isAscending;
+                    _applyFilters();
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: Icon(
+                    _isAscending ? Icons.arrow_downward : Icons.arrow_upward,
+                    color: Colors.white,
+                    size: 16,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Sort Dropdown
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _sortBy,
+                    dropdownColor: const Color(0xFF1E293B),
+                    icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
+                    style: const TextStyle(color: Colors.white, fontSize: 13),
+                    items: const [
+                      DropdownMenuItem(value: 'Name of Doctor', child: Text('Name of Doctor')),
+                      DropdownMenuItem(value: 'ID', child: Text('ID')),
+                      DropdownMenuItem(value: 'Type', child: Text('Type')),
+                      DropdownMenuItem(value: 'Practice', child: Text('Practice')),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _sortBy = val;
+                          _applyFilters();
+                        });
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (_showFilters) ...[
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                // ID Filter
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    onChanged: (val) {
+                      _idQuery = val;
+                      _applyFilters();
+                    },
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'ID',
+                      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                      filled: true,
+                      fillColor: const Color(0xFF1E293B),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                    ),
+                  ),
+                ),
+
+                // Name of Doctor Filter
+                SizedBox(
+                  width: 160,
+                  child: TextField(
+                    onChanged: (val) {
+                      _nameQuery = val;
+                      _applyFilters();
+                    },
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    decoration: InputDecoration(
+                      hintText: 'Name of Doctor',
+                      hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                      filled: true,
+                      fillColor: const Color(0xFF1E293B),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
+                      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF38BDF8))),
+                    ),
+                  ),
+                ),
+
+                // Is Active Checkbox Filter
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _onlyIsActive = !_onlyIsActive;
+                      _applyFilters();
+                    });
+                  },
+                  child: Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _onlyIsActive ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _onlyIsActive ? Icons.check_box : Icons.check_box_outline_blank,
+                          color: _onlyIsActive ? const Color(0xFF38BDF8) : Colors.white54,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Type Filter Dropdown
+                Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedTypeFilter,
+                      dropdownColor: const Color(0xFF1E293B),
+                      hint: const Text('Type', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 18),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedTypeFilter = val;
+                          _applyFilters();
+                        });
+                      },
+                      items: [
+                        const DropdownMenuItem<String>(value: null, child: Text('All Types')),
+                        ..._hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Practice Filter Dropdown
+                Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedPracticeFilter,
+                      dropdownColor: const Color(0xFF1E293B),
+                      hint: const Text('Practice', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                      icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 18),
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      onChanged: (val) {
+                        setState(() {
+                          _selectedPracticeFilter = val;
+                          _applyFilters();
+                        });
+                      },
+                      items: const [
+                        DropdownMenuItem<String>(value: null, child: Text('All Practices')),
+                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                        DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                        DropdownMenuItem(value: 'Both', child: Text('Both')),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6F9),
+      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        centerTitle: true,
+        title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: const Color(0xFF0B192C),
         elevation: 0,
         actions: [
@@ -555,226 +990,169 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadData,
           ),
-          IconButton(
-            icon: const Icon(Icons.add, color: Colors.white),
-            onPressed: _showAddDoctorDialog,
-          ),
         ],
       ),
       drawer: const AppDrawer(currentItem: DrawerItem.doctorManagement),
-      body: _isLoading
-          ? const Center(
-              child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056B3)),
-              ),
-            )
-          : Column(
-              children: [
-                // ERPNext Filter Bar Matching Screenshot
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  color: Colors.white,
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Color(0xFFE5E5EA))),
-                  ),
-                  child: Column(
-                    children: [
-                      // Search ID / Name of Doctor
-                      TextField(
-                        onChanged: (val) {
-                          _searchQuery = val;
-                          _applyFilters();
-                        },
-                        style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 14),
-                        decoration: InputDecoration(
-                          hintText: 'Search by ID or Name of Doctor...',
-                          hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
-                          prefixIcon: const Icon(Icons.search, color: Color(0xFF8E8E93)),
-                          filled: true,
-                          fillColor: const Color(0xFFF4F6F9),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      // Dropdown Filters: Type & Practice
-                      Row(
-                        children: [
-                          // Type Filter
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFD1D1D6)),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  isExpanded: true,
-                                  value: _selectedTypeFilter,
-                                  dropdownColor: Colors.white,
-                                  hint: const Text('Type', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
-                                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
-                                  style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 12),
-                                  onChanged: (val) {
-                                    _selectedTypeFilter = val;
-                                    _applyFilters();
-                                  },
-                                  items: [
-                                    const DropdownMenuItem<String>(value: null, child: Text('All Types')),
-                                    ..._hcpTypes.map((t) => DropdownMenuItem(
-                                          value: t.name,
-                                          child: Text(t.typeName, style: const TextStyle(color: Color(0xFF1C1C1E))),
-                                        )),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Practice Filter
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: const Color(0xFFD1D1D6)),
-                              ),
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<String>(
-                                  isExpanded: true,
-                                  value: _selectedPracticeFilter,
-                                  dropdownColor: Colors.white,
-                                  hint: const Text('Practice', style: TextStyle(color: Color(0xFF8E8E93), fontSize: 12)),
-                                  icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF8E8E93)),
-                                  style: const TextStyle(color: Color(0xFF1C1C1E), fontSize: 12),
-                                  onChanged: (val) {
-                                    _selectedPracticeFilter = val;
-                                    _applyFilters();
-                                  },
-                                  items: const [
-                                    DropdownMenuItem<String>(value: null, child: Text('All Practices')),
-                                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
-                                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
-                                    DropdownMenuItem(value: 'Both', child: Text('Both')),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // Checkbox Filter Chips: Is Active & Is Pending Approval
-                      Row(
-                        children: [
-                          FilterChip(
-                            label: const Text('Is Active', style: TextStyle(fontSize: 12)),
-                            selected: _onlyIsActive,
-                            selectedColor: const Color(0xFF0056B3).withOpacity(0.15),
-                            checkmarkColor: const Color(0xFF0056B3),
-                            onSelected: (val) {
-                              _onlyIsActive = val;
-                              _applyFilters();
-                            },
-                          ),
-                          const SizedBox(width: 8),
-                          FilterChip(
-                            label: const Text('Is Pending Approval', style: TextStyle(fontSize: 12)),
-                            selected: _onlyIsPendingApproval,
-                            selectedColor: const Color(0xFFFF9500).withOpacity(0.15),
-                            checkmarkColor: const Color(0xFFFF9500),
-                            onSelected: (val) {
-                              _onlyIsPendingApproval = val;
-                              _applyFilters();
-                            },
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+      body: RefreshIndicator(
+        onRefresh: _loadData,
+        child: _isLoading
+            ? const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0056B3)),
                 ),
-                // Doctor List Table View (Matching ERPNext columns)
-                Expanded(
-                  child: _filteredDoctors.isEmpty
-                      ? const Center(
-                          child: Text('No doctors match your criteria.', style: TextStyle(color: Color(0xFF8E8E93))),
-                        )
-                      : ListView.builder(
-                          itemCount: _filteredDoctors.length,
-                          itemBuilder: (ctx, index) {
-                            final doctor = _filteredDoctors[index];
-                            final fullName = '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' ? doctor.middleName! + ' ' : ''}${doctor.lastName}';
-                            final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
+              )
+            : Column(
+                children: [
+                  _buildFilterAndSortBar(),
 
-                            return Card(
-                              margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                              elevation: 1,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              child: ListTile(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                                leading: Icon(
-                                  doctor.isActive ? Icons.check_circle : Icons.radio_button_unchecked,
-                                  color: doctor.isActive ? const Color(0xFF34C759) : const Color(0xFFC7C7CC),
-                                  size: 22,
-                                ),
-                                title: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        fullName,
-                                        style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold, fontSize: 15),
-                                      ),
-                                    ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFE5E5EA),
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        doctor.hcpPractice,
-                                        style: const TextStyle(color: Color(0xFF3A3A3C), fontSize: 11, fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                subtitle: Padding(
-                                  padding: const EdgeInsets.only(top: 6.0),
+                  // Table Header Row Matching Image 2
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    color: const Color(0xFF1E1E1E),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_box_outline_blank, color: Colors.white38, size: 18),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          flex: 3,
+                          child: Text('Name of Doctor', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(
+                          width: 65,
+                          child: Text('Is Active', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        const Expanded(
+                          flex: 2,
+                          child: Text('Institution', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        const Expanded(
+                          flex: 2,
+                          child: Text('Practice', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        const Expanded(
+                          flex: 2,
+                          child: Text('Type', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        const Expanded(
+                          flex: 2,
+                          child: Text('ID', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        Text(
+                          '${_filteredDoctors.length} of ${_allDoctors.length}',
+                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Divider(height: 1, color: Color(0xFF2C2C2E)),
+
+                  // Doctor List Rows (Matching Image 2)
+                  Expanded(
+                    child: _filteredDoctors.isEmpty
+                        ? const Center(
+                            child: Text('No doctors match your criteria.', style: TextStyle(color: Color(0xFF8E8E93))),
+                          )
+                        : ListView.separated(
+                            itemCount: _filteredDoctors.length,
+                            separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF2C2C2E)),
+                            itemBuilder: (ctx, index) {
+                              final doctor = _filteredDoctors[index];
+                              final fullName = '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' && doctor.middleName!.isNotEmpty ? doctor.middleName! + ' ' : ''}${doctor.lastName}';
+                              final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
+
+                              return InkWell(
+                                onTap: () => _openDoctorProfile(doctor),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                  color: const Color(0xFF18181B),
                                   child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        '$typeLabel • ${doctor.institution ?? "No Institution"}',
-                                        style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
+                                      const Icon(Icons.check_box_outline_blank, color: Colors.white38, size: 18),
+                                      const SizedBox(width: 12),
+                                      // Name of Doctor
+                                      Expanded(
+                                        flex: 3,
+                                        child: Text(
+                                          fullName,
+                                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
-                                      Text(
-                                        doctor.name ?? '',
-                                        style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace', fontSize: 12),
+                                      // Is Active Check Icon
+                                      SizedBox(
+                                        width: 65,
+                                        child: Icon(
+                                          doctor.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
+                                          color: doctor.isActive ? const Color(0xFF38BDF8) : Colors.white24,
+                                          size: 18,
+                                        ),
+                                      ),
+                                      // Institution
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          doctor.institution ?? '',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // Practice Tag Capsule (Image 2)
+                                      Expanded(
+                                        flex: 2,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF27272A),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: const Color(0xFF3F3F46)),
+                                          ),
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              const CircleAvatar(radius: 3, backgroundColor: Colors.white70),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  doctor.hcpPractice,
+                                                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      // Type
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          typeLabel,
+                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      // ID
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          doctor.name ?? '',
+                                          style: const TextStyle(color: Colors.white54, fontFamily: 'monospace', fontSize: 11),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                onTap: () => _openDoctorProfile(doctor),
-                              ),
-                            );
-                          },
-                        ),
-                ),
-              ],
-            ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0056B3),
+        backgroundColor: const Color(0xFF0066FF),
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Add HCP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         onPressed: _showAddDoctorDialog,
