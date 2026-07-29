@@ -582,7 +582,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             TextFormField(
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                labelText: 'Email Address',
+                labelText: 'Email Address / Type',
                 labelStyle: TextStyle(color: Color(0xFF8E8E93)),
                 enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C3E))),
               ),
@@ -611,6 +611,233 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             child: const Text('Add Row', style: TextStyle(color: Colors.white)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showEditSpecialtyDialog(int index) {
+    final s = _selectedSpecialties[index];
+    String? selSpec = s.hcpSpecialty;
+    String? selSub = s.subSpecialty;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          final subOptions = _specializations.where((sp) => !sp.isGroup).toList();
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Edit Specialization', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: _specializations.any((sp) => sp.name == selSpec) ? selSpec : (_specializations.isNotEmpty ? _specializations.first.name : null),
+                    dropdownColor: const Color(0xFF2C2C2E),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Specialty Name',
+                      labelStyle: TextStyle(color: Color(0xFF8E8E93)),
+                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C3E))),
+                    ),
+                    items: _specializations.map((sp) => DropdownMenuItem(value: sp.name, child: Text(sp.specialty))).toList(),
+                    onChanged: (val) => setDlgState(() => selSpec = val),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: subOptions.any((sp) => sp.name == selSub) ? selSub : null,
+                    dropdownColor: const Color(0xFF2C2C2E),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Sub Specialty Name',
+                      labelStyle: TextStyle(color: Color(0xFF8E8E93)),
+                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C3E))),
+                    ),
+                    items: subOptions.map((sp) => DropdownMenuItem(value: sp.name, child: Text(sp.specialty))).toList(),
+                    onChanged: (val) => setDlgState(() => selSub = val),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
+                onPressed: () {
+                  if (selSpec != null) {
+                    final specLookup = {for (var sp in _specializations) sp.name: sp.specialty};
+                    setState(() {
+                      _selectedSpecialties[index] = SubmissionSpecialty(
+                        hcpSpecialty: selSpec,
+                        specialtyName: specLookup[selSpec] ?? selSpec,
+                        subSpecialty: selSub,
+                        subSpecialtyName: selSub != null ? (specLookup[selSub] ?? selSub) : null,
+                      );
+                    });
+                  }
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditWorkplaceDialog(int index) {
+    final w = _selectedWorkplaces[index];
+    String? selectedInst = w.hcpWorkplace;
+    final addrCtrl = TextEditingController(text: w.workplaceName ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Edit Workplace', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  DropdownButtonFormField<String>(
+                    value: _institutions.any((i) => i.name == selectedInst) ? selectedInst : (_institutions.isNotEmpty ? _institutions.first.name : null),
+                    dropdownColor: const Color(0xFF2C2C2E),
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Workplace Institution',
+                      labelStyle: TextStyle(color: Color(0xFF8E8E93)),
+                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C3E))),
+                    ),
+                    items: _institutions.map((inst) => DropdownMenuItem(value: inst.name, child: Text(inst.institutionName))).toList(),
+                    onChanged: (val) {
+                      setDlgState(() {
+                        selectedInst = val;
+                        final instObj = _institutions.firstWhere((i) => i.name == val, orElse: () => _institutions.first);
+                        addrCtrl.text = instObj.institutionName;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: addrCtrl,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      labelText: 'Address / Workplace Name',
+                      labelStyle: TextStyle(color: Color(0xFF8E8E93)),
+                      enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C3E))),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
+                onPressed: () {
+                  if (selectedInst != null) {
+                    final instObj = _institutions.firstWhere((i) => i.name == selectedInst, orElse: () => _institutions.first);
+                    setState(() {
+                      _selectedWorkplaces[index] = SubmissionWorkplace(
+                        hcpWorkplace: selectedInst,
+                        workplaceName: addrCtrl.text.isNotEmpty ? addrCtrl.text : instObj.institutionName,
+                        cityMunicipality: instObj.cityMunicipality,
+                        cityTitle: instObj.cityMunicipality,
+                        provinceName: instObj.provinceName,
+                        provinceTitle: instObj.provinceName,
+                      );
+                    });
+                  }
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditContactDialog(int index) {
+    final c = _contacts[index];
+    final numCtrl = TextEditingController(text: c.contactNumber ?? '');
+    String contactType = c.emailAddress ?? 'Mobile';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDlgState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF1C1C1E),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Text('Edit Contact Info', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                  controller: numCtrl,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Contact Value / Phone Number',
+                    labelStyle: TextStyle(color: Color(0xFF8E8E93)),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C3E))),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: contactType,
+                  dropdownColor: const Color(0xFF2C2C2E),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    labelText: 'Type / Email',
+                    labelStyle: TextStyle(color: Color(0xFF8E8E93)),
+                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C3E))),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Mobile', child: Text('Mobile')),
+                    DropdownMenuItem(value: 'Phone', child: Text('Phone')),
+                    DropdownMenuItem(value: 'Email', child: Text('Email')),
+                  ],
+                  onChanged: (val) => setDlgState(() => contactType = val!),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
+                onPressed: () {
+                  if (numCtrl.text.isNotEmpty) {
+                    setState(() {
+                      _contacts[index] = SubmissionContact(
+                        contactNumber: numCtrl.text.trim(),
+                        emailAddress: contactType,
+                      );
+                    });
+                  }
+                  Navigator.pop(ctx);
+                },
+                child: const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1903,25 +2130,42 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           ..._selectedSpecialties.asMap().entries.map((entry) {
                             final idx = entry.key;
                             final s = entry.value;
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(child: Text(s.specialtyName ?? 'Family Medicine', style: const TextStyle(color: Colors.white, fontSize: 13))),
-                                  Expanded(child: Text(s.subSpecialtyName ?? 'Sports Medicine', style: const TextStyle(color: Colors.white70, fontSize: 13))),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedSpecialties.removeAt(idx);
-                                      });
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 8),
-                                      child: Icon(Icons.close, size: 14, color: Colors.white54),
+
+                            final specLookup = {for (var sp in _specializations) sp.name: sp.specialty};
+                            final rawSpec = (s.specialtyName != null && s.specialtyName!.isNotEmpty) ? s.specialtyName! : (s.hcpSpecialty ?? '');
+                            final specName = specLookup[rawSpec] ?? rawSpec;
+                            final rawSub = (s.subSpecialtyName != null && s.subSpecialtyName!.isNotEmpty && s.subSpecialtyName != '-') ? s.subSpecialtyName! : (s.subSpecialty ?? '-');
+                            final subName = specLookup[rawSub] ?? rawSub;
+
+                            return InkWell(
+                              onTap: () => _showEditSpecialtyDialog(idx),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: Text(specName, style: const TextStyle(color: Colors.white, fontSize: 13))),
+                                    Expanded(child: Text(subName, style: const TextStyle(color: Colors.white70, fontSize: 13))),
+                                    GestureDetector(
+                                      onTap: () => _showEditSpecialtyDialog(idx),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedSpecialties.removeAt(idx);
+                                        });
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 8),
+                                        child: Icon(Icons.close, size: 14, color: Colors.white54),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           }),
@@ -2018,27 +2262,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           ..._selectedWorkplaces.asMap().entries.map((entry) {
                             final idx = entry.key;
                             final w = entry.value;
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(child: Text(w.workplaceName ?? 'Manila Doctors Hospital', style: const TextStyle(color: Colors.white, fontSize: 12))),
-                                  Text(w.cityTitle ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                                  const SizedBox(width: 4),
-                                  Text(w.provinceTitle ?? 'Metro Manila-Manila', style: const TextStyle(color: Colors.white70, fontSize: 12)),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedWorkplaces.removeAt(idx);
-                                      });
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 6),
-                                      child: Icon(Icons.close, size: 14, color: Colors.white54),
+                            return InkWell(
+                              onTap: () => _showEditWorkplaceDialog(idx),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: Text(w.workplaceName ?? 'Manila Doctors Hospital', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                                    Text(w.cityTitle ?? 'Ermita', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                    const SizedBox(width: 4),
+                                    Text(w.provinceTitle ?? 'Metro Manila-Manila', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                                    GestureDetector(
+                                      onTap: () => _showEditWorkplaceDialog(idx),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedWorkplaces.removeAt(idx);
+                                        });
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 6),
+                                        child: Icon(Icons.close, size: 14, color: Colors.white54),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           }),
@@ -2082,25 +2336,35 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           ..._contacts.asMap().entries.map((entry) {
                             final idx = entry.key;
                             final c = entry.value;
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(child: Text(c.contactNumber ?? '123435', style: const TextStyle(color: Colors.white, fontSize: 12))),
-                                  Expanded(child: Text(c.emailAddress ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12))),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _contacts.removeAt(idx);
-                                      });
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 6),
-                                      child: Icon(Icons.close, size: 14, color: Colors.white54),
+                            return InkWell(
+                              onTap: () => _showEditContactDialog(idx),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: Text(c.contactNumber ?? '123435', style: const TextStyle(color: Colors.white, fontSize: 12))),
+                                    Expanded(child: Text(c.emailAddress ?? '', style: const TextStyle(color: Colors.white70, fontSize: 12))),
+                                    GestureDetector(
+                                      onTap: () => _showEditContactDialog(idx),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _contacts.removeAt(idx);
+                                        });
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 6),
+                                        child: Icon(Icons.close, size: 14, color: Colors.white54),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           }),
@@ -2244,13 +2508,227 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
   // --- CHANGES STEP ---
   Widget _buildChangesStep() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final specLookup = {for (var s in _specializations) s.name: s.specialty};
+
+    final List<Map<String, String>> basicChanges = [];
+    if (widget.doctor != null) {
+      if (_lastNameController.text.trim() != (widget.doctor!.lastName ?? '')) {
+        basicChanges.add({
+          'field': 'last_name',
+          'label': 'Last Name',
+          'old': widget.doctor!.lastName ?? '-',
+          'new': _lastNameController.text.trim(),
+        });
+      }
+      if (_firstNameController.text.trim() != (widget.doctor!.firstName ?? '')) {
+        basicChanges.add({
+          'field': 'first_name',
+          'label': 'First Name',
+          'old': widget.doctor!.firstName ?? '-',
+          'new': _firstNameController.text.trim(),
+        });
+      }
+      if (_middleNameController.text.trim() != (widget.doctor!.middleName ?? '')) {
+        basicChanges.add({
+          'field': 'middle_name',
+          'label': 'Middle Name',
+          'old': widget.doctor!.middleName ?? '-',
+          'new': _middleNameController.text.trim(),
+        });
+      }
+      if (_selectedHcpType != widget.doctor!.hcpType) {
+        basicChanges.add({
+          'field': 'hcp_type',
+          'label': 'HCP Type',
+          'old': widget.doctor!.hcpType ?? '-',
+          'new': _selectedHcpType ?? '-',
+        });
+      }
+      if (_selectedPractice != widget.doctor!.hcpPractice) {
+        basicChanges.add({
+          'field': 'hcp_practice',
+          'label': 'HCP Practice',
+          'old': widget.doctor!.hcpPractice ?? '-',
+          'new': _selectedPractice,
+        });
+      }
+    } else {
+      basicChanges.add({
+        'field': 'first_name',
+        'label': 'First Name',
+        'old': 'New Doctor',
+        'new': _firstNameController.text.trim(),
+      });
+      basicChanges.add({
+        'field': 'last_name',
+        'label': 'Last Name',
+        'old': 'New Doctor',
+        'new': _lastNameController.text.trim(),
+      });
+    }
+
+    final changesMap = {
+      'submission': _selectedDoctor?.name ?? 'HCP-PROF-2026-00031',
+      'hcp': _selectedDoctor?.name ?? 'HCP-0000012',
+      'generated_on': DateTime.now().toString().split('.').first,
+      'generated_by': apiService.loggedInEmail ?? 'jptan@profinsights.biz',
+      'version': 1,
+      'changes': {
+        'basic_information': basicChanges.map((c) => {
+          'field': c['field'],
+          'label': c['label'],
+          'operation': 'modified',
+          'old': c['old'],
+          'new': c['new'],
+        }).toList(),
+        'specializations': {
+          'added': _selectedSpecialties.map((s) => {
+            'hcp_specialty': s.hcpSpecialty ?? 'SPEC-00003',
+            'sub_specialty': s.subSpecialty ?? 'SPEC-00101',
+          }).toList(),
+          'removed': [],
+        },
+        'workplaces': {
+          'added': _selectedWorkplaces.map((w) => {
+            'hcp_workplace': w.hcpWorkplace ?? 'INST-00005',
+          }).toList(),
+          'removed': [],
+        },
+        'contact_information': {
+          'added': _contacts.map((c) => {
+            'contact_number': c.contactNumber ?? '12345',
+            'email': c.emailAddress ?? 'None',
+          }).toList(),
+          'removed': [],
+        },
+      },
+    };
+
+    final jsonPrettyStr = const JsonEncoder.withIndent('  ').convert(changesMap);
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text('Summary of Changes', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 16),
+
+          if (basicChanges.isNotEmpty) ...[
+            const Text('Basic Information', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...basicChanges.map((c) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(c['label']!, style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text('From: ${c['old']} → To: ${c['new']}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 14),
+          ],
+
+          const Text('Specializations', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          if (_selectedSpecialties.isNotEmpty) ...[
+            Row(
+              children: const [
+                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                SizedBox(width: 6),
+                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ..._selectedSpecialties.map((s) {
+              final rawSpec = (s.specialtyName != null && s.specialtyName!.isNotEmpty) ? s.specialtyName! : (s.hcpSpecialty ?? '');
+              final specName = specLookup[rawSpec] ?? rawSpec;
+              final rawSub = (s.subSpecialtyName != null && s.subSpecialtyName!.isNotEmpty && s.subSpecialtyName != '-') ? s.subSpecialtyName! : (s.subSpecialty ?? '');
+              final subName = specLookup[rawSub] ?? rawSub;
+              return Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Specialty: ${s.hcpSpecialty ?? specName}${subName.isNotEmpty ? ", Sub: ${s.subSpecialty ?? subName}" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              );
+            }),
+          ] else
+            const Padding(
+              padding: EdgeInsets.only(left: 4.0, bottom: 4.0),
+              child: Text('No specializations added.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            ),
           const SizedBox(height: 14),
+
+          const Text('Workplaces', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          if (_selectedWorkplaces.isNotEmpty) ...[
+            Row(
+              children: const [
+                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                SizedBox(width: 6),
+                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ..._selectedWorkplaces.map((w) {
+              return Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('${w.hcpWorkplace ?? w.workplaceName ?? "INST-00005"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              );
+            }),
+          ] else
+            const Padding(
+              padding: EdgeInsets.only(left: 4.0, bottom: 4.0),
+              child: Text('No workplaces added.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            ),
+          const SizedBox(height: 14),
+
+          const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          if (_contacts.isNotEmpty) ...[
+            Row(
+              children: const [
+                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                SizedBox(width: 6),
+                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            ..._contacts.map((c) {
+              return Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Contact No.: ${c.contactNumber ?? "None"}, Email: ${c.emailAddress ?? "None"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              );
+            }),
+          ] else
+            const Padding(
+              padding: EdgeInsets.only(left: 4.0, bottom: 4.0),
+              child: Text('No contact information added.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            ),
+          const SizedBox(height: 20),
+
+          const Text('Changes JSON', style: TextStyle(color: Colors.white70, fontSize: 13)),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF18181B),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF27272A)),
+            ),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Text(
+                jsonPrettyStr,
+                style: const TextStyle(color: Color(0xFF38BDF8), fontFamily: 'monospace', fontSize: 11),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
 
           DropdownButtonFormField<String>(
             value: _applicationStatus,
@@ -2272,28 +2750,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             onChanged: (val) {
               if (val != null) setState(() => _applicationStatus = val);
             },
-          ),
-          const SizedBox(height: 20),
-
-          const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Color(0xFF34C759), size: 18),
-              const SizedBox(width: 6),
-              Text('Added (${_contacts.length} Contacts)', style: const TextStyle(color: Color(0xFF34C759), fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          const Text('Specialties & Workplaces', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Icon(Icons.check_circle_rounded, color: Color(0xFF0066FF), size: 18),
-              const SizedBox(width: 6),
-              Text('Linked ${_selectedSpecialties.length} Specialties, ${_selectedWorkplaces.length} Workplaces', style: const TextStyle(color: Color(0xFF0066FF), fontWeight: FontWeight.bold)),
-            ],
           ),
         ],
       ),

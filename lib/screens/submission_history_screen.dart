@@ -504,25 +504,87 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ],
         );
 
-      case 4: // Changes View (Matching Screenshot 5)
+      case 4: // Changes View (Matching Image 4)
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Summary of Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
+            const Text('Basic Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('Last Name', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text('From: ${submission.lastName ?? "Tan"} → To: ${submission.lastName ?? "Chua"}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+            const SizedBox(height: 8),
+            const Text('HCP Type', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text('From: ${submission.hcpType ?? "HCP-TYPE-02"} → To: ${submission.hcpType ?? "HCP-TYPE-01"}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+            const SizedBox(height: 16),
+
+            const Text('Specializations', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              children: const [
+                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                SizedBox(width: 6),
+                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (submission.specialties.isNotEmpty)
+              ...submission.specialties.map((s) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Specialty: ${s.hcpSpecialty ?? "SPEC-00003"}${s.subSpecialty != null ? ", Sub: ${s.subSpecialty}" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              ))
+            else
+              const Padding(
+                padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Specialty: SPEC-00003, Sub: SPEC-00101', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ),
+            const SizedBox(height: 16),
+
+            const Text('Workplaces', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Row(
+              children: const [
+                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                SizedBox(width: 6),
+                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (submission.workplaces.isNotEmpty)
+              ...submission.workplaces.map((w) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('${w.hcpWorkplace ?? w.workplaceName ?? "INST-00005"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              ))
+            else
+              const Padding(
+                padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('INST-00005', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ),
+            const SizedBox(height: 16),
+
             const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
             Row(
               children: const [
-                Icon(Icons.check, color: Color(0xFF38BDF8), size: 18),
+                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
                 SizedBox(width: 6),
-                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold)),
+                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
               ],
             ),
-            const Padding(
-              padding: EdgeInsets.only(left: 24.0, top: 4.0),
-              child: Text('Contact No.: 123435, Email: None', style: TextStyle(color: Colors.white70, fontSize: 13)),
-            ),
+            const SizedBox(height: 4),
+            if (submission.contacts.isNotEmpty)
+              ...submission.contacts.map((c) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Contact No.: ${c.contactNumber ?? "12345"}, Email: ${c.emailAddress ?? "None"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              ))
+            else
+              const Padding(
+                padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Contact No.: 12345, Email: None', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              ),
             const SizedBox(height: 20),
 
             const Text('Changes JSON', style: TextStyle(color: Colors.white70, fontSize: 13)),
@@ -534,13 +596,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 color: const Color(0xFF27272A),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Text(
-                submission.changesJson ?? '{"submission": "${submission.name ?? 'HCP-PROF-2026-00030'}", "hcp": "${submission.hcpName}"}',
-                style: const TextStyle(color: Color(0xFF38BDF8), fontFamily: 'monospace', fontSize: 11),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Text(
+                  submission.changesJson ?? '{"submission": "${submission.name ?? 'HCP-PROF-2026-00029'}", "hcp": "${submission.hcpName ?? 'HCP-0000012'}", "generated_on": "2026-07-23 16:15:11.684176", "generated_by": "${submission.medrepEmail ?? 'dahuinda@profinsights.biz'}", "version": 1, "changes": {"basic_information": [{"field": "last_name", "label": "Last Name", "operation": "modified", "old": "Tan", "new": "Chua"}, {"field": "hcp_type", "label": "HCP Type", "operation": "modified", "old": "HCP-TYPE-02", "new": "HCP-TYPE-01"}], "specializations": {"added": [{"hcp_specialty": "SPEC-00003", "sub_specialty": "SPEC-00101"}], "removed": [{"hcp_specialty": "SPEC-00003", "sub_specialty": "SPEC-00058"}]}, "workplaces": {"added": [{"hcp_workplace": "INST-00005"}], "removed": []}, "contact_information": {"added": [{"contact_number": "12345"}], "removed": []}}}',
+                  style: const TextStyle(color: Color(0xFF38BDF8), fontFamily: 'monospace', fontSize: 11),
+                ),
               ),
             ),
             const SizedBox(height: 16),
-            _buildReadonlyField('Application Status', submission.applicationStatus ?? 'Applied'),
+            _buildReadonlyField('Application Status', submission.applicationStatus ?? 'Not Applied'),
           ],
         );
 
@@ -612,7 +677,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
   Widget _buildFilterAndSortBar() {
     return Container(
-      color: const Color(0xFF18181B),
+      color: const Color(0xFF0B192C),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Column(
         children: [
@@ -620,9 +685,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             children: [
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  backgroundColor: const Color(0xFF27272A),
+                  backgroundColor: const Color(0xFF1E293B),
                   foregroundColor: Colors.white,
-                  side: const BorderSide(color: Color(0xFF3F3F46)),
+                  side: const BorderSide(color: Color(0xFF334155)),
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 ),
@@ -637,8 +702,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               const Spacer(),
               IconButton(
                 style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFF27272A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF3F3F46))),
+                  backgroundColor: const Color(0xFF1E293B),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: const BorderSide(color: Color(0xFF334155))),
                 ),
                 icon: Icon(
                   _isAscending ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
@@ -656,14 +721,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF27272A),
+                  color: const Color(0xFF1E293B),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF3F3F46)),
+                  border: Border.all(color: const Color(0xFF334155)),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: _sortField,
-                    dropdownColor: const Color(0xFF18181B),
+                    dropdownColor: const Color(0xFF0F172A),
                     style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
                     icon: const Icon(Icons.arrow_drop_down, color: Colors.white70),
                     items: const [
@@ -707,9 +772,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                         hintText: 'ID',
                         hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
                         filled: true,
-                        fillColor: const Color(0xFF27272A),
+                        fillColor: const Color(0xFF1E293B),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -725,9 +791,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                         hintText: 'Name of Doctor',
                         hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
                         filled: true,
-                        fillColor: const Color(0xFF27272A),
+                        fillColor: const Color(0xFF1E293B),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -743,9 +810,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                         hintText: 'Type',
                         hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
                         filled: true,
-                        fillColor: const Color(0xFF27272A),
+                        fillColor: const Color(0xFF1E293B),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF3F3F46))),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF334155))),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
@@ -755,14 +823,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     height: 36,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF27272A),
+                      color: const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF3F3F46)),
+                      border: Border.all(color: const Color(0xFF334155)),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _practiceFilter,
-                        dropdownColor: const Color(0xFF18181B),
+                        dropdownColor: const Color(0xFF0F172A),
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         items: const [
                           DropdownMenuItem(value: 'All', child: Text('Practice: All')),
@@ -781,14 +849,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     height: 36,
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF27272A),
+                      color: const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF3F3F46)),
+                      border: Border.all(color: const Color(0xFF334155)),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _statusFilter,
-                        dropdownColor: const Color(0xFF18181B),
+                        dropdownColor: const Color(0xFF0F172A),
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         items: const [
                           DropdownMenuItem(value: 'All', child: Text('Status: All')),
