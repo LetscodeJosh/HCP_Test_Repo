@@ -184,7 +184,7 @@ class AppDrawer extends StatelessWidget {
                 _buildMenuItem(
                   context,
                   icon: Icons.badge_rounded,
-                  title: 'HCP Account',
+                  title: 'Doctor Account',
                   isSelected: currentItem == DrawerItem.doctorAccount,
                   onTap: () {
                     Navigator.of(context).pop();
@@ -220,6 +220,27 @@ class AppDrawer extends StatelessWidget {
                     Navigator.of(context).pop();
                     _showInstitutionsModal(context);
                   },
+                ),
+              ],
+            ),
+          ),
+
+          // App Version & Credits (Just above Log Out)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: const [
+                Icon(Icons.info_outline_rounded, color: Color(0xFF64748B), size: 14),
+                SizedBox(width: 6),
+                Text(
+                  'HCP V1.0',
+                  style: TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
                 ),
               ],
             ),

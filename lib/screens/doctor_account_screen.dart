@@ -642,7 +642,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
         centerTitle: true,
-        title: const Text('Doctor Listing', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
+        title: const Text('Doctor Account', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 18)),
         backgroundColor: const Color(0xFF0B192C),
         foregroundColor: Colors.white,
         elevation: 0,
