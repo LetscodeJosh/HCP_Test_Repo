@@ -992,6 +992,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ? 'New HCP Profile Submission (Dr. ${_selectedDoctor!.firstName} ${_selectedDoctor!.lastName})'
               : 'New HCP Profile Submission',
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
         ),
         backgroundColor: const Color(0xFF1C1C1E),
         foregroundColor: Colors.white,

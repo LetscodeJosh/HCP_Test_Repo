@@ -186,30 +186,33 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 Container(
                   color: const Color(0xFF09090B),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: List.generate(tabTitles.length, (idx) {
-                      final isSelected = activeDetailTab == idx;
-                      return GestureDetector(
-                        onTap: () => setModalState(() => activeDetailTab = idx),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isSelected ? const Color(0xFF27272A) : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                            border: isSelected ? Border.all(color: const Color(0xFF3F3F46)) : null,
-                          ),
-                          child: Text(
-                            tabTitles[idx],
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : const Color(0xFFA1A1AA),
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              fontSize: 13,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: List.generate(tabTitles.length, (idx) {
+                        final isSelected = activeDetailTab == idx;
+                        return GestureDetector(
+                          onTap: () => setModalState(() => activeDetailTab = idx),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF27272A) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: isSelected ? Border.all(color: const Color(0xFF3F3F46)) : null,
+                            ),
+                            child: Text(
+                              tabTitles[idx],
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : const Color(0xFFA1A1AA),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
-                        ),
-                      );
-                    }),
+                        );
+                      }),
+                    ),
                   ),
                 ),
 

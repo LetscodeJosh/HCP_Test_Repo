@@ -156,9 +156,12 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          "DOCTOR'S INFORMATION SHEET",
-                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                        const Expanded(
+                          child: Text(
+                            "DOCTOR'S INFORMATION SHEET",
+                            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.white70),
@@ -190,6 +193,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 child: Text(
                                   doctorFullName.isNotEmpty ? doctorFullName : (fullDoctor.name ?? 'Edward Soriano'),
                                   style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -270,185 +274,202 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     const Divider(color: Color(0xFF334155)),
                     const SizedBox(height: 12),
 
-                    // SPECIALIZATION / TYPE / PRACTICE Section
-                    const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                    const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Specialty & Sub Specialty Table (Read-only)
-                        Expanded(
-                          flex: 2,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF334155)),
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
+                    // SPECIALIZATION / TYPE & PRACTICE (Responsive Layout)
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final specWidget = Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                color: const Color(0xFF0F172A),
+                                child: Row(
+                                  children: const [
+                                    Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    Expanded(child: Text('Sub Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ),
+                              if (fullDoctor.specialties.isNotEmpty)
+                                ...fullDoctor.specialties.map((s) {
+                                  final rawSpec = s.hcpSpecialty;
+                                  final specName = specLookup[rawSpec] ?? rawSpec;
+                                  final rawSub = s.subSpecialty ?? '';
+                                  final subName = specLookup[rawSub] ?? rawSub;
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    child: Row(
+                                      children: [
+                                        Expanded(child: Text(specName, style: const TextStyle(color: Colors.white, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                        Expanded(child: Text(subName.isNotEmpty ? subName : 'General Practice', style: const TextStyle(color: Colors.white70, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                      ],
+                                    ),
+                                  );
+                                })
+                              else
+                                Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                  color: const Color(0xFF0F172A),
                                   child: Row(
                                     children: const [
-                                      Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold))),
-                                      Expanded(child: Text('Sub Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold))),
+                                      Expanded(child: Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('General Practice', style: TextStyle(color: Colors.white70, fontSize: 12), overflow: TextOverflow.ellipsis)),
                                     ],
                                   ),
                                 ),
-                                if (fullDoctor.specialties.isNotEmpty)
-                                  ...fullDoctor.specialties.map((s) {
-                                    final rawSpec = s.hcpSpecialty;
-                                    final specName = specLookup[rawSpec] ?? rawSpec;
-                                    final rawSub = s.subSpecialty ?? '';
-                                    final subName = specLookup[rawSub] ?? rawSub;
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      child: Row(
-                                        children: [
-                                          Expanded(child: Text(specName, style: const TextStyle(color: Colors.white, fontSize: 12))),
-                                          Expanded(child: Text(subName.isNotEmpty ? subName : 'General Practice', style: const TextStyle(color: Colors.white70, fontSize: 12))),
-                                        ],
-                                      ),
-                                    );
-                                  })
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                    child: Row(
-                                      children: const [
-                                        Expanded(child: Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 12))),
-                                        Expanded(child: Text('General Practice', style: TextStyle(color: Colors.white70, fontSize: 12))),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-
-                        // Type & Practice Fields (Read-only)
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _buildReadonlyField('Type *', fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident', isMandatory: true),
-                              const SizedBox(height: 12),
-                              _buildReadonlyField('Practice *', fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Prescribing', isMandatory: true),
                             ],
                           ),
-                        ),
-                      ],
+                        );
+
+                        final typePracticeWidget = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildReadonlyField('Type *', fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident', isMandatory: true),
+                            const SizedBox(height: 12),
+                            _buildReadonlyField('Practice *', fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Prescribing', isMandatory: true),
+                          ],
+                        );
+
+                        if (constraints.maxWidth < 600) {
+                          return Column(
+                            children: [
+                              specWidget,
+                              const SizedBox(height: 16),
+                              typePracticeWidget,
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(flex: 2, child: specWidget),
+                            const SizedBox(width: 16),
+                            Expanded(child: typePracticeWidget),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
                     const Divider(color: Color(0xFF334155)),
                     const SizedBox(height: 12),
 
-                    // WORKPLACES / CONTACT INFO Section
+                    // WORKPLACES / CONTACT INFO Section (Responsive Layout)
                     const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                     const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Workplaces Table (Read-only)
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF334155)),
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final workplacesWidget = Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                color: const Color(0xFF0F172A),
+                                child: Row(
+                                  children: const [
+                                    Expanded(flex: 2, child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    Expanded(child: Text('City', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    SizedBox(width: 4),
+                                    Expanded(child: Text('Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ),
+                              if (fullDoctor.workplaces.isNotEmpty)
+                                ...fullDoctor.workplaces.map((w) => Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      child: Row(
+                                        children: [
+                                          Expanded(flex: 2, child: Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                          Expanded(child: Text(w.address ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                          const SizedBox(width: 4),
+                                          const Expanded(child: Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                        ],
+                                      ),
+                                    ))
+                              else
+                                Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  color: const Color(0xFF0F172A),
                                   child: Row(
                                     children: const [
-                                      Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold))),
-                                      Text('City', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
-                                      SizedBox(width: 8),
-                                      Text('Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold)),
+                                      Expanded(flex: 2, child: Text('Metro Cavite Health ...', style: TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                      SizedBox(width: 4),
+                                      Expanded(child: Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
                                     ],
                                   ),
                                 ),
-                                if (fullDoctor.workplaces.isNotEmpty)
-                                  ...fullDoctor.workplaces.map((w) => Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                        child: Row(
-                                          children: [
-                                            Expanded(child: Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 11))),
-                                            Text(w.address ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11)),
-                                            const SizedBox(width: 8),
-                                            const Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                                          ],
-                                        ),
-                                      ))
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    child: Row(
-                                      children: const [
-                                        Expanded(child: Text('Metro Cavite Health ...', style: TextStyle(color: Colors.white, fontSize: 11))),
-                                        Text('', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                                        SizedBox(width: 8),
-                                        Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(width: 16),
+                        );
 
-                        // Contact Info Table (Read-only)
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1E293B),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF334155)),
-                            ),
-                            child: Column(
-                              children: [
-                                Container(
+                        final contactWidget = Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                color: const Color(0xFF0F172A),
+                                child: Row(
+                                  children: const [
+                                    Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    Expanded(child: Text('Email Address', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ),
+                              if (fullDoctor.contacts.isNotEmpty)
+                                ...fullDoctor.contacts.map((c) => Padding(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      child: Row(
+                                        children: [
+                                          Expanded(child: Text(c.contactValue, style: const TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                          Expanded(child: Text(c.contactType, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                        ],
+                                      ),
+                                    ))
+                              else
+                                Padding(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                  color: const Color(0xFF0F172A),
                                   child: Row(
                                     children: const [
-                                      Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold))),
-                                      Expanded(child: Text('Email Address', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold))),
+                                      Expanded(child: Text('1234567890', style: TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('email@email.com', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
                                     ],
                                   ),
                                 ),
-                                if (fullDoctor.contacts.isNotEmpty)
-                                  ...fullDoctor.contacts.map((c) => Padding(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                        child: Row(
-                                          children: [
-                                            Expanded(child: Text(c.contactValue, style: const TextStyle(color: Colors.white, fontSize: 11))),
-                                            Expanded(child: Text(c.contactType, style: const TextStyle(color: Colors.white70, fontSize: 11))),
-                                          ],
-                                        ),
-                                      ))
-                                else
-                                  Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                    child: Row(
-                                      children: const [
-                                        Expanded(child: Text('1234567890', style: TextStyle(color: Colors.white, fontSize: 11))),
-                                        Expanded(child: Text('email@email.com', style: TextStyle(color: Colors.white70, fontSize: 11))),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
+                            ],
                           ),
-                        ),
-                      ],
+                        );
+
+                        if (constraints.maxWidth < 600) {
+                          return Column(
+                            children: [
+                              workplacesWidget,
+                              const SizedBox(height: 16),
+                              contactWidget,
+                            ],
+                          );
+                        }
+                        return Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(child: workplacesWidget),
+                            const SizedBox(width: 16),
+                            Expanded(child: contactWidget),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
                     SizedBox(

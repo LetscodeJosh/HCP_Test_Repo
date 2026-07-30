@@ -173,9 +173,12 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          "HCP ACCOUNT DETAILS",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
+                        const Expanded(
+                          child: Text(
+                            "HCP ACCOUNT DETAILS",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.white70),
@@ -199,10 +202,12 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                               Text(
                                 doctorFullName,
                                 style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white),
+                                overflow: TextOverflow.ellipsis,
                               ),
                               Text(
                                 fullAccount.name ?? 'HCP-ACC-00004',
                                 style: const TextStyle(color: Color(0xFF94A3B8), fontFamily: 'monospace', fontSize: 13),
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ],
                           ),
@@ -225,17 +230,31 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                     const Divider(color: Color(0xFF334155)),
                     const SizedBox(height: 12),
 
-                    // DOCTOR INFO (Read-only)
+                    // DOCTOR INFO (Read-only Responsive Row/Column)
                     const Text('DOCTOR INFO', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
                     const SizedBox(height: 4),
                     const Text('Contains related information about the doctor being covered', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        Expanded(child: _buildReadonlyField('HCP Name', doctorFullName)),
-                        const SizedBox(width: 8),
-                        Expanded(child: _buildReadonlyField('HCP/Doctor Unique ID', hcpUniqueId)),
-                      ],
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        if (constraints.maxWidth < 500) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _buildReadonlyField('HCP Name', doctorFullName),
+                              const SizedBox(height: 10),
+                              _buildReadonlyField('HCP/Doctor Unique ID', hcpUniqueId),
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: _buildReadonlyField('HCP Name', doctorFullName)),
+                            const SizedBox(width: 8),
+                            Expanded(child: _buildReadonlyField('HCP/Doctor Unique ID', hcpUniqueId)),
+                          ],
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
                     const Divider(color: Color(0xFF334155)),
@@ -256,10 +275,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             color: const Color(0xFF0F172A),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: const [
-                                Text('Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
-                                Text('Sub-Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                                Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                Expanded(child: Text('Sub-Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                               ],
                             ),
                           ),
@@ -267,10 +285,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             const Padding(
                               padding: EdgeInsets.all(12.0),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                  Text('Sports Medicine', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                                  Expanded(child: Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                  Expanded(child: Text('Sports Medicine', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
                                 ],
                               ),
                             )
@@ -278,10 +295,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             ...fullAccount.specialties.map((s) => Padding(
                               padding: const EdgeInsets.all(12.0),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(s.specialty, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                                  Text(s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                  Expanded(child: Text(s.specialty, style: const TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                  Expanded(child: Text(s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
                                 ],
                               ),
                             )),
@@ -307,10 +323,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             color: const Color(0xFF0F172A),
                             child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: const [
-                                Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
-                                Text('City / Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold)),
+                                Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                Expanded(child: Text('City / Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                               ],
                             ),
                           ),
@@ -318,10 +333,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             const Padding(
                               padding: EdgeInsets.all(12.0),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 13)),
-                                  Text('Ermita, Metro Manila', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                                  Expanded(child: Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                  Expanded(child: Text('Ermita, Metro Manila', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
                                 ],
                               ),
                             )
@@ -329,10 +343,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             ...fullAccount.workplaces.map((w) => Padding(
                               padding: const EdgeInsets.all(12.0),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 13)),
-                                  Text('${w.city ?? ""}${w.province != null ? ", " + w.province! : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                                  Expanded(child: Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                  Expanded(child: Text('${w.city ?? ""}${w.province != null ? ", " + w.province! : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
                                 ],
                               ),
                             )),

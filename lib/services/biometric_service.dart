@@ -13,8 +13,11 @@ class BiometricService {
   static Future<bool> isBiometricAvailable() async {
     try {
       final bool canAuthenticateWithBiometrics = await _auth.canCheckBiometrics;
-      final bool canAuthenticate = canAuthenticateWithBiometrics || await _auth.isDeviceSupported();
-      return canAuthenticate;
+      final bool isSupported = await _auth.isDeviceSupported();
+      final List<BiometricType> availableBiometrics = await _auth.getAvailableBiometrics();
+      
+      return (canAuthenticateWithBiometrics || isSupported) &&
+          (availableBiometrics.isNotEmpty || isSupported);
     } catch (e) {
       return false;
     }
@@ -32,11 +35,15 @@ class BiometricService {
   /// Trigger biometric prompt (Face ID / Touch ID / Fingerprint)
   static Future<bool> authenticate() async {
     try {
+      final bool isAvailable = await isBiometricAvailable();
+      if (!isAvailable) return false;
+
       return await _auth.authenticate(
         localizedReason: 'Authenticate to log in to PIMS HCP',
         options: const AuthenticationOptions(
           stickyAuth: true,
-          biometricOnly: true,
+          biometricOnly: false,
+          useErrorDialogs: true,
         ),
       );
     } on PlatformException catch (e) {

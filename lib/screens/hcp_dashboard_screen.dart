@@ -374,7 +374,9 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   Widget _buildMetricsRow(String syncRatePercent) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = (constraints.maxWidth - 12) / 2;
+        final cardWidth = constraints.maxWidth > 700
+            ? (constraints.maxWidth - 36) / 4
+            : (constraints.maxWidth - 12) / 2;
         return Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -434,7 +436,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   }) {
     return Container(
       width: width,
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
@@ -457,32 +459,35 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF64748B),
-                    letterSpacing: 0.5,
+                    letterSpacing: 0.3,
                   ),
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
+              const SizedBox(width: 4),
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: iconColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                child: Icon(icon, color: iconColor, size: 20),
+                child: Icon(icon, color: iconColor, size: 18),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             value,
             style: const TextStyle(
-              fontSize: 26,
+              fontSize: 24,
               fontWeight: FontWeight.bold,
               color: Color(0xFF0F172A),
             ),
+            overflow: TextOverflow.ellipsis,
           ),
           if (progressValue != null) ...[
             const SizedBox(height: 6),
@@ -500,9 +505,10 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
           Text(
             subtitle,
             style: const TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               color: Color(0xFF94A3B8),
             ),
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -531,36 +537,69 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.groups_rounded,
-                  label: 'Doctor Listing',
-                  subtitle: 'HCP Masterlist',
-                  color: const Color(0xFF0066FF),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _buildActionButton(
-                  icon: Icons.account_box_rounded,
-                  label: 'Doctor Account',
-                  subtitle: 'Program Coverage',
-                  color: const Color(0xFF0066FF),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
-                    );
-                  },
-                ),
-              ),
-            ],
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 500) {
+                return Column(
+                  children: [
+                    _buildActionButton(
+                      icon: Icons.groups_rounded,
+                      label: 'Doctor Listing',
+                      subtitle: 'HCP Masterlist',
+                      color: const Color(0xFF0066FF),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _buildActionButton(
+                      icon: Icons.account_box_rounded,
+                      label: 'Doctor Account',
+                      subtitle: 'Program Coverage',
+                      color: const Color(0xFF0066FF),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
+                        );
+                      },
+                    ),
+                  ],
+                );
+              }
+              return Row(
+                children: [
+                  Expanded(
+                    child: _buildActionButton(
+                      icon: Icons.groups_rounded,
+                      label: 'Doctor Listing',
+                      subtitle: 'HCP Masterlist',
+                      color: const Color(0xFF0066FF),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _buildActionButton(
+                      icon: Icons.account_box_rounded,
+                      label: 'Doctor Account',
+                      subtitle: 'Program Coverage',
+                      color: const Color(0xFF0066FF),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
         ],
       ),
@@ -603,6 +642,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                       fontWeight: FontWeight.bold,
                       color: color,
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     subtitle,
@@ -610,6 +651,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                       fontSize: 11,
                       color: Color(0xFF64748B),
                     ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
