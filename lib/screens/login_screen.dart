@@ -8,6 +8,7 @@ import 'doctor_masterlist_screen.dart';
 import 'submission_history_screen.dart';
 import 'hcp_dashboard_screen.dart';
 import 'list_screen.dart';
+import 'credits_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -138,15 +139,54 @@ class _LoginScreenState extends State<LoginScreen> {
             height: double.infinity,
             fit: BoxFit.cover,
           ),
-          // Soft blue theme overlay
-          Container(
-            color: const Color(0xFF0056B3).withOpacity(0.15),
-          ),
-          // Blur Filter
+          // Subtle overlay & slight blur filter for theme harmony
           BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+            filter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
             child: Container(
-              color: Colors.black.withOpacity(0.1),
+              color: Colors.black.withOpacity(0.15),
+            ),
+          ),
+          // Top-right Credits Button (Three Dots)
+          Positioned(
+            top: 12,
+            right: 16,
+            child: SafeArea(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (context) => SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.88,
+                        child: const CreditsScreen(),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(20),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.85),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.more_vert,
+                      color: Color(0xFF0056B3),
+                      size: 24,
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
           // Login Form

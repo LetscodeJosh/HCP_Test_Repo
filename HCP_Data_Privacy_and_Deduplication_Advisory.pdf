@@ -109,3 +109,33 @@ trailer
 startxref
 6262
 %%EOF
+6 0 obj
+<< /Type /Page /MediaBox [ 0 0 612 792 ] /Parent 11 0 R /Resources << /ProcSet
+[ /PDF /Text /ImageB /ImageC /ImageI ] /Font 1 0 R >> /Rotate 0 /Trans <<
+>> /Contents 12 0 R >>
+endobj
+8 0 obj
+<< /Type /Page /MediaBox [ 0 0 612 792 ] /Parent 11 0 R /Resources << /ProcSet
+[ /PDF /Text /ImageB /ImageC /ImageI ] /Font 1 0 R >> /Rotate 0 /Trans <<
+>> /Contents 13 0 R >>
+endobj
+10 0 obj
+<< /Subject (\(unspecified\)) /Author (\(anonymous\)) /Trapped /False /Title
+(\(anonymous\)) /CreationDate (D:20260729054924Z00'00') /ModDate (D:20260729060920Z00'00')
+/Creator (\(unspecified\)) /Producer (macOS Version 12.7.6 \(Build 21H1320\) Quartz PDFContext, AppendMode 1.1)
+/Keywords () >>
+endobj
+xref
+0 1
+0000000000 65535 f 
+6 1
+0000006756 00000 n 
+8 1
+0000006947 00000 n 
+10 1
+0000007138 00000 n 
+trailer
+<< /ID [<4480B2863FF5A2F005994A12F092419E><B41448BB63A984FBD1F35D8A0003686F> ] /Root 9 0 R /Size 14 /Prev 6262 /Info 10 0 R >> 
+startxref
+7450
+%%EOF
