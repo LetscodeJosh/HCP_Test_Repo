@@ -1105,6 +1105,25 @@ class ApiService extends ChangeNotifier {
     }
   }
 
+  /// Fetch full details of a specific HCP Profile Submission including child tables and changes
+  Future<HcpProfileSubmission> fetchSubmissionDetail(String name) async {
+    final url = Uri.parse(
+      '$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(name)}',
+    );
+    try {
+      final response = await http.get(url, headers: _headers);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return HcpProfileSubmission.fromJson(body['data']);
+      } else {
+        throw Exception('Failed to load submission details: ${response.body}');
+      }
+    } catch (e) {
+      print('Fetch submission detail error: $e');
+      rethrow;
+    }
+  }
+
   /// Create a new HCP Profile Submission record
   Future<HcpProfileSubmission> createSubmission(HcpProfileSubmission submission) async {
     final url = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission');
@@ -1123,6 +1142,59 @@ class ApiService extends ChangeNotifier {
     } catch (e) {
       print('Create submission error: $e');
       rethrow;
+    }
+  }
+
+  /// Sync HCP Account in ERPNext for the doctor under active program
+  Future<void> syncHcpAccount({
+    required String hcpId,
+    required String hcpFullName,
+    required String program,
+    required String territory,
+    String? salesPerson,
+    String? userId,
+    List<HcpAccountSpecialization> specialties = const [],
+    List<HcpAccountWorkplace> workplaces = const [],
+    List<HcpAccountContact> contacts = const [],
+  }) async {
+    try {
+      // Check if HCP Account already exists for this doctor and program
+      final searchUrl = Uri.parse(
+        '$baseUrl/api/resource/HCP%20Account?filters=[["hcp","=","$hcpId"],["account_or_program","=","$program"]]&fields=["name"]',
+      );
+      final searchResp = await http.get(searchUrl, headers: _headers);
+      String? existingAccountName;
+      if (searchResp.statusCode == 200) {
+        final searchBody = jsonDecode(searchResp.body);
+        final List<dynamic> data = searchBody['data'] ?? [];
+        if (data.isNotEmpty) {
+          existingAccountName = data[0]['name'];
+        }
+      }
+
+      final accountData = HcpAccount(
+        name: existingAccountName,
+        accountName: program,
+        territory: territory,
+        salesPerson: salesPerson ?? loggedInFullName ?? 'Jorge Mengorio',
+        userId: userId ?? loggedInEmail ?? 'jptan@profinsights.biz',
+        hcp: hcpId,
+        hcpName: hcpFullName,
+        specialties: specialties,
+        workplaces: workplaces,
+        contacts: contacts,
+        isActive: true,
+      );
+
+      if (existingAccountName != null) {
+        final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(existingAccountName)}');
+        await http.put(updateUrl, headers: _headers, body: jsonEncode(accountData.toJson()));
+      } else {
+        final createUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account');
+        await http.post(createUrl, headers: _headers, body: jsonEncode(accountData.toJson()));
+      }
+    } catch (e) {
+      print('Sync HCP Account error (non-fatal): $e');
     }
   }
 

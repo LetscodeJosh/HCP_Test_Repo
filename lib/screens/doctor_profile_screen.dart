@@ -523,26 +523,28 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
         Color statusColor;
         String statusLabel;
         IconData statusIcon;
-        switch (sub.docstatus) {
-          case 0:
-            statusColor = const Color(0xFFFF9F0A);
-            statusLabel = 'Draft';
-            statusIcon = Icons.edit_note;
-            break;
-          case 1:
-            statusColor = const Color(0xFF30D158);
-            statusLabel = 'Submitted';
-            statusIcon = Icons.check_circle;
-            break;
-          case 2:
-            statusColor = const Color(0xFFFF453A);
-            statusLabel = 'Cancelled';
-            statusIcon = Icons.cancel;
-            break;
-          default:
-            statusColor = const Color(0xFF8E8E93);
-            statusLabel = 'Unknown';
-            statusIcon = Icons.help;
+        final workflow = sub.workflowState ?? sub.status ?? (sub.docstatus == 1 ? 'Approved' : (sub.docstatus == 2 ? 'Cancelled' : 'Draft'));
+        final wLower = workflow.toLowerCase();
+        if (wLower.contains('reject')) {
+          statusColor = const Color(0xFFFF453A);
+          statusLabel = 'Rejected';
+          statusIcon = Icons.cancel;
+        } else if (wLower.contains('cancel')) {
+          statusColor = const Color(0xFFFF453A);
+          statusLabel = 'Cancelled';
+          statusIcon = Icons.block;
+        } else if (wLower.contains('appr')) {
+          statusColor = const Color(0xFF30D158);
+          statusLabel = 'Approved';
+          statusIcon = Icons.check_circle;
+        } else if (wLower.contains('pend')) {
+          statusColor = const Color(0xFFFF9F0A);
+          statusLabel = 'Pending Approval';
+          statusIcon = Icons.schedule;
+        } else {
+          statusColor = const Color(0xFF8E8E93);
+          statusLabel = workflow;
+          statusIcon = Icons.edit_note;
         }
 
         return Container(

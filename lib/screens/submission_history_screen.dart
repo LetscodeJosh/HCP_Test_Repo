@@ -74,14 +74,24 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
     if (_statusFilter != 'All') {
       list = list.where((item) {
-        final raw = item.status ?? item.workflowState ?? item.applicationStatus ?? '';
-        final sLower = raw.toLowerCase();
-        if (_statusFilter == 'Rejected') {
-          return sLower.contains('reject') || item.docstatus == 2;
-        } else if (_statusFilter == 'Approved') {
-          return sLower.contains('appr') || sLower.contains('applied') || item.docstatus == 1;
-        } else if (_statusFilter == 'Pending Approval') {
-          return sLower.contains('pend') || sLower.contains('draft') || item.docstatus == 0;
+        final wf = (item.workflowState ?? item.status ?? '').toLowerCase();
+        final app = (item.applicationStatus ?? '').toLowerCase();
+        final filter = _statusFilter.toLowerCase();
+
+        if (filter == 'pending approval') {
+          return wf.contains('pend') || item.docstatus == 0;
+        } else if (filter == 'approved') {
+          return wf.contains('appr') || item.docstatus == 1;
+        } else if (filter == 'draft') {
+          return wf.contains('draft');
+        } else if (filter == 'rejected') {
+          return wf.contains('reject') || item.docstatus == 2;
+        } else if (filter == 'cancelled') {
+          return wf.contains('cancel');
+        } else if (filter == 'applied') {
+          return app == 'applied';
+        } else if (filter == 'not applied') {
+          return app == 'not applied';
         }
         return true;
       }).toList();
@@ -140,6 +150,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
   void _showSubmissionDetail(HcpProfileSubmission submission) {
     int activeDetailTab = 0;
+    HcpProfileSubmission currentSub = submission;
+    bool isFetchingFull = submission.name != null;
 
     showModalBottomSheet(
       context: context,
@@ -148,6 +160,21 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           final tabTitles = ['Step 1', 'Step 2', 'Step 3', 'Others', 'Changes'];
+
+          if (isFetchingFull && submission.name != null) {
+            final apiService = Provider.of<ApiService>(context, listen: false);
+            apiService.fetchSubmissionDetail(submission.name!).then((full) {
+              setModalState(() {
+                currentSub = full;
+                isFetchingFull = false;
+              });
+            }).catchError((_) {
+              setModalState(() {
+                isFetchingFull = false;
+              });
+            });
+            isFetchingFull = false;
+          }
 
           return Container(
             height: MediaQuery.of(context).size.height * 0.9,
@@ -219,7 +246,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
-                    child: _buildDetailTabContent(activeDetailTab, submission),
+                    child: _buildDetailTabContent(activeDetailTab, currentSub),
                   ),
                 ),
               ],
@@ -232,7 +259,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
   Widget _buildDetailTabContent(int tabIdx, HcpProfileSubmission submission) {
     switch (tabIdx) {
-      case 0: // Step 1 View (Matching Screenshot 1)
+      case 0: // Step 1 View
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -315,7 +342,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ],
         );
 
-      case 1: // Step 2 View (Matching Screenshot 2)
+      case 1: // Step 2 View
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -449,8 +476,47 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(w.workplaceName ?? w.hcpWorkplace ?? 'Hospital', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                          Text(w.cityTitle ?? 'Manila', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                          Text(w.workplaceName ?? w.hcpWorkplace ?? 'Institution', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          Text('${w.cityMunicipality ?? w.cityTitle ?? ''} ${w.provinceName ?? w.provinceTitle ?? ''}'.trim(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                        ],
+                      ),
+                    )),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF27272A),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFF3F3F46)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    color: const Color(0xFF18181B),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: const [
+                        Text('Mobile / Phone Number', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                        Text('Email Address', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ),
+                  if (submission.contacts.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(12.0),
+                      child: Text('12345 • email@email.com', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    )
+                  else
+                    ...submission.contacts.map((c) => Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(c.contactNumber ?? 'N/A', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          Text(c.emailAddress ?? 'None', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                         ],
                       ),
                     )),
@@ -460,7 +526,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ],
         );
 
-      case 2: // Step 3 View (Matching Screenshot 3)
+      case 2: // Step 3 View
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -493,101 +559,228 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ],
         );
 
-      case 3: // Others View (Matching Screenshot 4)
+      case 3: // Others View
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildReadonlyField('Submission Date', submission.submissionDate ?? '07-24-2026 10:41:54'),
+            _buildReadonlyField('Submission Date', submission.submissionDate ?? 'N/A'),
             const SizedBox(height: 6),
             const Text('Asia/Manila', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
             const SizedBox(height: 16),
-            _buildReadonlyField('Territory Code', 'AD0110'),
+            _buildReadonlyField('Territory Code', submission.territory ?? 'AD0110'),
             const SizedBox(height: 12),
-            _buildReadonlyField('Medrep Email Address', submission.medrepEmail ?? 'jptan@profinsights.biz'),
+            _buildReadonlyField('Territory Manager / Medrep', submission.salesPerson ?? submission.medrepEmail ?? 'jptan@profinsights.biz'),
+            const SizedBox(height: 12),
+            _buildReadonlyField('User ID', submission.userId ?? submission.medrepEmail ?? 'jptan@profinsights.biz'),
+            const SizedBox(height: 12),
+            _buildReadonlyField('Account / Program', submission.accountOrProgram ?? 'COREnergy'),
+            const SizedBox(height: 12),
+            _buildReadonlyField('Workflow State', submission.workflowState ?? 'Pending Approval'),
+            const SizedBox(height: 12),
+            _buildReadonlyField('Application Status', submission.applicationStatus ?? 'Not Applied'),
           ],
         );
 
-      case 4: // Changes View (Matching Image 4)
+      case 4: // Changes View
+        Map<String, dynamic>? parsedChanges;
+        if (submission.changesJson != null && submission.changesJson!.trim().isNotEmpty) {
+          try {
+            parsedChanges = jsonDecode(submission.changesJson!);
+          } catch (_) {}
+        }
+
+        final changesMap = parsedChanges != null && parsedChanges['changes'] is Map ? parsedChanges['changes'] as Map<String, dynamic> : null;
+        final basicInfoList = changesMap != null && changesMap['basic_information'] is List ? (changesMap['basic_information'] as List) : [];
+        final specAdded = changesMap != null && changesMap['specializations'] is Map && changesMap['specializations']['added'] is List ? (changesMap['specializations']['added'] as List) : [];
+        final specRemoved = changesMap != null && changesMap['specializations'] is Map && changesMap['specializations']['removed'] is List ? (changesMap['specializations']['removed'] as List) : [];
+        final wpAdded = changesMap != null && changesMap['workplaces'] is Map && changesMap['workplaces']['added'] is List ? (changesMap['workplaces']['added'] as List) : [];
+        final wpRemoved = changesMap != null && changesMap['workplaces'] is Map && changesMap['workplaces']['removed'] is List ? (changesMap['workplaces']['removed'] as List) : [];
+        final contactAdded = changesMap != null && changesMap['contact_information'] is Map && changesMap['contact_information']['added'] is List ? (changesMap['contact_information']['added'] as List) : [];
+        final contactRemoved = changesMap != null && changesMap['contact_information'] is Map && changesMap['contact_information']['removed'] is List ? (changesMap['contact_information']['removed'] as List) : [];
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Summary of Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Summary of Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: submission.applicationStatus == 'Applied' ? const Color(0xFF059669) : const Color(0xFF3F3F46),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Application: ${submission.applicationStatus ?? "Not Applied"}',
+                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 16),
+
+            // Basic Information Changes
             const Text('Basic Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            const Text('Last Name', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Text('From: ${submission.lastName ?? "Tan"} → To: ${submission.lastName ?? "Chua"}', style: const TextStyle(color: Colors.white, fontSize: 13)),
-            const SizedBox(height: 8),
-            const Text('HCP Type', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 2),
-            Text('From: ${submission.hcpType ?? "HCP-TYPE-02"} → To: ${submission.hcpType ?? "HCP-TYPE-01"}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+            if (basicInfoList.isNotEmpty)
+              ...basicInfoList.map((b) => Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(b['label'] ?? b['field'] ?? 'Field', style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text('From: "${b['old'] ?? ''}" → To: "${b['new'] ?? ''}"', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                  ],
+                ),
+              ))
+            else
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: Text('Doctor: ${submission.firstName ?? ''} ${submission.lastName ?? ''} (${submission.hcpType ?? 'HCP Type'})', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              ),
             const SizedBox(height: 16),
 
+            // Specializations Changes
             const Text('Specializations', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Row(
-              children: const [
-                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                SizedBox(width: 6),
-                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            if (submission.specialties.isNotEmpty)
+            if (specAdded.isNotEmpty) ...[
+              Row(
+                children: const [
+                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                  SizedBox(width: 6),
+                  Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ...specAdded.map((s) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}${s['sub_specialty'] != null ? ', Sub: ${s['sub_specialty']}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              )),
+            ] else if (submission.specialties.isNotEmpty) ...[
+              Row(
+                children: const [
+                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                  SizedBox(width: 6),
+                  Text('Specialties Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
               ...submission.specialties.map((s) => Padding(
                 padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Specialty: ${s.hcpSpecialty ?? "SPEC-00003"}${s.subSpecialty != null ? ", Sub: ${s.subSpecialty}" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ))
-            else
+                child: Text('Specialty: ${s.specialtyName ?? s.hcpSpecialty ?? 'SPEC-00003'}${s.subSpecialty != null ? ', Sub: ${s.subSpecialty}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              )),
+            ] else ...[
               const Padding(
                 padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Specialty: SPEC-00003, Sub: SPEC-00101', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                child: Text('No specialization changes recorded.', style: TextStyle(color: Colors.white54, fontSize: 13)),
               ),
+            ],
+            if (specRemoved.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: const [
+                  Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444), size: 16),
+                  SizedBox(width: 6),
+                  Text('Removed', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ...specRemoved.map((s) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+              )),
+            ],
             const SizedBox(height: 16),
 
+            // Workplaces Changes
             const Text('Workplaces', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Row(
-              children: const [
-                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                SizedBox(width: 6),
-                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            if (submission.workplaces.isNotEmpty)
+            if (wpAdded.isNotEmpty) ...[
+              Row(
+                children: const [
+                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                  SizedBox(width: 6),
+                  Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ...wpAdded.map((w) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              )),
+            ] else if (submission.workplaces.isNotEmpty) ...[
+              Row(
+                children: const [
+                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                  SizedBox(width: 6),
+                  Text('Workplaces Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
               ...submission.workplaces.map((w) => Padding(
                 padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('${w.hcpWorkplace ?? w.workplaceName ?? "INST-00005"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ))
-            else
+                child: Text('${w.workplaceName ?? w.hcpWorkplace ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              )),
+            ] else ...[
               const Padding(
                 padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('INST-00005', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                child: Text('No workplace changes recorded.', style: TextStyle(color: Colors.white54, fontSize: 13)),
               ),
+            ],
+            if (wpRemoved.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: const [
+                  Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444), size: 16),
+                  SizedBox(width: 6),
+                  Text('Removed', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ...wpRemoved.map((w) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+              )),
+            ],
             const SizedBox(height: 16),
 
+            // Contact Information Changes
             const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            Row(
-              children: const [
-                Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                SizedBox(width: 6),
-                Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-              ],
-            ),
-            const SizedBox(height: 4),
-            if (submission.contacts.isNotEmpty)
+            if (contactAdded.isNotEmpty) ...[
+              Row(
+                children: const [
+                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                  SizedBox(width: 6),
+                  Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              ...contactAdded.map((c) => Padding(
+                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                child: Text('Contact No.: ${c['contact_number'] ?? 'N/A'}, Email: ${c['email_address'] ?? 'None'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              )),
+            ] else if (submission.contacts.isNotEmpty) ...[
+              Row(
+                children: const [
+                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                  SizedBox(width: 6),
+                  Text('Contacts Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
               ...submission.contacts.map((c) => Padding(
                 padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Contact No.: ${c.contactNumber ?? "12345"}, Email: ${c.emailAddress ?? "None"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ))
-            else
+                child: Text('Contact No.: ${c.contactNumber ?? 'N/A'}, Email: ${c.emailAddress ?? 'None'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+              )),
+            ] else ...[
               const Padding(
                 padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Contact No.: 12345, Email: None', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                child: Text('No contact information changes recorded.', style: TextStyle(color: Colors.white54, fontSize: 13)),
               ),
+            ],
             const SizedBox(height: 20),
 
             const Text('Changes JSON', style: TextStyle(color: Colors.white70, fontSize: 13)),
@@ -602,13 +795,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Text(
-                  submission.changesJson ?? '{"submission": "${submission.name ?? 'HCP-PROF-2026-00029'}", "hcp": "${submission.hcpName ?? 'HCP-0000012'}", "generated_on": "2026-07-23 16:15:11.684176", "generated_by": "${submission.medrepEmail ?? 'dahuinda@profinsights.biz'}", "version": 1, "changes": {"basic_information": [{"field": "last_name", "label": "Last Name", "operation": "modified", "old": "Tan", "new": "Chua"}, {"field": "hcp_type", "label": "HCP Type", "operation": "modified", "old": "HCP-TYPE-02", "new": "HCP-TYPE-01"}], "specializations": {"added": [{"hcp_specialty": "SPEC-00003", "sub_specialty": "SPEC-00101"}], "removed": [{"hcp_specialty": "SPEC-00003", "sub_specialty": "SPEC-00058"}]}, "workplaces": {"added": [{"hcp_workplace": "INST-00005"}], "removed": []}, "contact_information": {"added": [{"contact_number": "12345"}], "removed": []}}}',
+                  submission.changesJson ?? '{}',
                   style: const TextStyle(color: Color(0xFF38BDF8), fontFamily: 'monospace', fontSize: 11),
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            _buildReadonlyField('Application Status', submission.applicationStatus ?? 'Not Applied'),
           ],
         );
 
@@ -644,37 +836,50 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   Widget _buildStatusBadge(HcpProfileSubmission item) {
-    final rawStatus = item.status ?? item.workflowState ?? item.applicationStatus ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
+    final workflow = item.workflowState ?? item.status ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
+    final appStatus = item.applicationStatus ?? 'Not Applied';
 
     Color bg;
-    Color fg = Colors.white;
-    String label;
-
-    final sLower = rawStatus.toLowerCase().trim();
-    if (sLower.contains('reject') || sLower.contains('cancel') || item.docstatus == 2) {
+    final wLower = workflow.toLowerCase().trim();
+    if (wLower.contains('reject')) {
       bg = const Color(0xFFDC2626);
-      label = 'Rejected';
-    } else if (sLower.contains('pend') || sLower.contains('draft') || item.docstatus == 0) {
-      bg = const Color(0xFF6B7280);
-      label = 'Pending Approval';
-    } else if (sLower.contains('approved') || sLower.contains('applied') || item.docstatus == 1) {
+    } else if (wLower.contains('cancel')) {
+      bg = const Color(0xFF991B1B);
+    } else if (wLower.contains('draft')) {
+      bg = const Color(0xFF64748B);
+    } else if (wLower.contains('pend')) {
+      bg = const Color(0xFFD97706);
+    } else if (wLower.contains('appr')) {
       bg = const Color(0xFF16A34A);
-      label = 'Approved';
     } else {
-      bg = const Color(0xFF6B7280);
-      label = rawStatus.isNotEmpty ? rawStatus : 'Pending Approval';
+      bg = const Color(0xFF4B5563);
     }
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: fg, fontSize: 11, fontWeight: FontWeight.bold),
-      ),
+    Color appColor = (appStatus == 'Applied')
+        ? const Color(0xFF10B981)
+        : (appStatus == 'Applying' ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            workflow,
+            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'App: $appStatus',
+          style: TextStyle(color: appColor, fontSize: 9, fontWeight: FontWeight.w600),
+        ),
+      ],
     );
   }
 
@@ -865,7 +1070,11 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           DropdownMenuItem(value: 'All', child: Text('Status: All')),
                           DropdownMenuItem(value: 'Pending Approval', child: Text('Pending Approval')),
                           DropdownMenuItem(value: 'Approved', child: Text('Approved')),
+                          DropdownMenuItem(value: 'Draft', child: Text('Draft')),
                           DropdownMenuItem(value: 'Rejected', child: Text('Rejected')),
+                          DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
+                          DropdownMenuItem(value: 'Applied', child: Text('Applied (App Status)')),
+                          DropdownMenuItem(value: 'Not Applied', child: Text('Not Applied (App Status)')),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _statusFilter = val);

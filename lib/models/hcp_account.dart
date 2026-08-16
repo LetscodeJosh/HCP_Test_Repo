@@ -4,8 +4,9 @@ class HcpAccount {
   final String? territory;
   final String? salesPerson;
   final String? accountType;
+  final String? userId;
   final bool isActive;
-  final String? hcp;
+  final String? hcp; // Doctor ID Link -> HCP
   final String? hcpName; // Doctor Full Name (e.g. Joshua Pambuena Tan)
   final List<HcpAccountSpecialization> specialties;
   final List<HcpAccountWorkplace> workplaces;
@@ -17,6 +18,7 @@ class HcpAccount {
     this.territory,
     this.salesPerson,
     this.accountType,
+    this.userId,
     this.isActive = true,
     this.hcp,
     this.hcpName,
@@ -32,6 +34,7 @@ class HcpAccount {
       territory: json['territory'] ?? json['territory_mr_code'],
       salesPerson: json['sales_person'] ?? json['territory_manager'],
       accountType: json['account_type'],
+      userId: json['user_id'],
       isActive: json['is_active'] == 1 || json['is_active'] == true,
       hcp: json['hcp'] ?? json['hcp_doctor_unique_id'],
       hcpName: json['hcp_name'] ?? json['doctor_name'] ?? json['hcp_full_name'] ?? json['hcp'],
@@ -51,9 +54,10 @@ class HcpAccount {
     return {
       if (name != null) 'name': name,
       'account_or_program': accountName,
-      'territory': territory ?? 'AD0110',
-      'sales_person': salesPerson ?? 'JORGE MENGORIO (AD0110)',
+      if (territory != null) 'territory': territory,
+      if (salesPerson != null) 'sales_person': salesPerson,
       if (accountType != null) 'account_type': accountType,
+      if (userId != null) 'user_id': userId,
       'is_active': isActive ? 1 : 0,
       if (hcp != null) 'hcp': hcp,
       if (hcpName != null) 'hcp_name': hcpName,
@@ -90,24 +94,31 @@ class HcpAccountSpecialization {
 
 class HcpAccountWorkplace {
   final String workplace;
-  final String? city;
-  final String? province;
+  final String? cityMunicipality;
+  final String? provinceName;
   final String? address;
   final bool isPrimary;
 
+  // Compatibility getters
+  String? get city => cityMunicipality;
+  String? get province => provinceName;
+
   HcpAccountWorkplace({
     required this.workplace,
-    this.city,
-    this.province,
+    this.cityMunicipality,
+    this.provinceName,
+    String? city,
+    String? province,
     this.address,
     this.isPrimary = false,
-  });
+  }) : this.cityMunicipality = cityMunicipality ?? city,
+       this.provinceName = provinceName ?? province;
 
   factory HcpAccountWorkplace.fromJson(Map<String, dynamic> json) {
     return HcpAccountWorkplace(
       workplace: json['workplace'] ?? json['workplace_name'] ?? '',
-      city: json['city'] ?? json['city_title'],
-      province: json['province'] ?? json['province_title'],
+      cityMunicipality: json['city_municipality'] ?? json['city'] ?? json['city_title'],
+      provinceName: json['province_name'] ?? json['province'] ?? json['province_title'],
       address: json['address'],
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true,
     );
@@ -116,8 +127,8 @@ class HcpAccountWorkplace {
   Map<String, dynamic> toJson() {
     return {
       'workplace': workplace,
-      if (city != null) 'city': city,
-      if (province != null) 'province': province,
+      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
+      if (provinceName != null) 'province_name': provinceName,
       if (address != null) 'address': address,
       'is_primary': isPrimary ? 1 : 0,
     };
@@ -125,25 +136,44 @@ class HcpAccountWorkplace {
 }
 
 class HcpAccountContact {
-  final String contactType;
-  final String contactValue;
+  final String? contactNumber;
+  final String? emailAddress;
+
+  // Compatibility getters
+  String get contactValue => contactNumber ?? emailAddress ?? '';
+  String get contactType => (emailAddress != null && emailAddress!.isNotEmpty) ? 'Email' : 'Mobile';
 
   HcpAccountContact({
-    required this.contactType,
-    required this.contactValue,
-  });
+    this.contactNumber,
+    this.emailAddress,
+    String? contactType,
+    String? contactValue,
+  }) : this.contactNumber = contactNumber ?? (contactType == 'Email' ? null : contactValue),
+       this.emailAddress = emailAddress ?? (contactType == 'Email' ? contactValue : null);
 
   factory HcpAccountContact.fromJson(Map<String, dynamic> json) {
+    String? num = json['contact_number'] ?? json['mobile_number'] ?? json['phone_number'];
+    String? email = json['email_address'] ?? json['email'];
+
+    if (num == null && email == null && json['contact_value'] != null) {
+      final val = '${json['contact_value']}';
+      if (val.contains('@')) {
+        email = val;
+      } else {
+        num = val;
+      }
+    }
+
     return HcpAccountContact(
-      contactType: json['contact_type'] ?? json['contact_number'] ?? '',
-      contactValue: json['contact_value'] ?? json['email_address'] ?? '',
+      contactNumber: num,
+      emailAddress: email,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'contact_type': contactType,
-      'contact_value': contactValue,
+      if (contactNumber != null) 'contact_number': contactNumber,
+      if (emailAddress != null) 'email_address': emailAddress,
     };
   }
 }

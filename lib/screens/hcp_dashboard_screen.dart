@@ -924,25 +924,25 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 final specialty = item.specialties.isNotEmpty
                     ? (item.specialties.first.specialtyName ?? item.specialties.first.hcpSpecialty ?? 'Specialty Pending')
                     : 'Specialty Pending';
-                final rawStatus = item.status ?? item.workflowState ?? item.applicationStatus ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
+                final workflow = item.workflowState ?? item.status ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
+                final appStatus = item.applicationStatus ?? 'Not Applied';
 
                 Color statusBg;
-                String statusLabel;
-
-                final sLower = rawStatus.toLowerCase().trim();
-                if (sLower.contains('reject') || sLower.contains('cancel') || item.docstatus == 2) {
+                final wLower = workflow.toLowerCase().trim();
+                if (wLower.contains('reject')) {
                   statusBg = const Color(0xFFDC2626);
-                  statusLabel = 'Rejected';
-                } else if (sLower.contains('pend') || sLower.contains('draft') || item.docstatus == 0) {
-                  statusBg = const Color(0xFF6B7280);
-                  statusLabel = 'Pending Approval';
-                } else if (sLower.contains('approved') || sLower.contains('applied') || item.docstatus == 1) {
+                } else if (wLower.contains('cancel')) {
+                  statusBg = const Color(0xFF991B1B);
+                } else if (wLower.contains('draft')) {
+                  statusBg = const Color(0xFF64748B);
+                } else if (wLower.contains('pend')) {
+                  statusBg = const Color(0xFFD97706);
+                } else if (wLower.contains('appr')) {
                   statusBg = const Color(0xFF16A34A);
-                  statusLabel = 'Approved';
                 } else {
-                  statusBg = const Color(0xFF6B7280);
-                  statusLabel = rawStatus.isNotEmpty ? rawStatus : 'Pending Approval';
+                  statusBg = const Color(0xFF4B5563);
                 }
+                final statusLabel = workflow;
 
                 return Row(
                   children: [

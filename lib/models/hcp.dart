@@ -18,6 +18,7 @@ class Hcp {
   final String? cityMunicipality;
   final String? barangayName;
   final String? institution;
+  final String? profileLastUpdated;
 
   Hcp({
     this.name,
@@ -39,6 +40,7 @@ class Hcp {
     this.cityMunicipality,
     this.barangayName,
     this.institution,
+    this.profileLastUpdated,
   });
 
   factory Hcp.fromJson(Map<String, dynamic> json) {
@@ -68,6 +70,7 @@ class Hcp {
       cityMunicipality: json['city_municipality'],
       barangayName: json['barangay_name'],
       institution: json['institution'],
+      profileLastUpdated: json['profile_last_updated'],
     );
   }
 
@@ -78,6 +81,7 @@ class Hcp {
       if (middleName != null) 'middle_name': middleName,
       'last_name': lastName,
       if (hcpFullName != null) 'hcp_full_name': hcpFullName,
+      if (birthDate != null) 'birth_date': birthDate,
       if (hcpPhoto != null) 'hcp_photo': hcpPhoto,
       'hcp_type': hcpType,
       'hcp_practice': hcpPractice,
@@ -91,6 +95,7 @@ class Hcp {
       if (cityMunicipality != null) 'city_municipality': cityMunicipality,
       if (barangayName != null) 'barangay_name': barangayName,
       if (institution != null) 'institution': institution,
+      if (profileLastUpdated != null) 'profile_last_updated': profileLastUpdated,
     };
   }
 }
@@ -121,26 +126,34 @@ class HcpSpecialty {
 
 class HcpWorkplace {
   final String workplace; // Link -> Institution
+  final String? provinceName;
+  final String? cityMunicipality;
   final String? address; // Street address / details
   final bool isPrimary;
 
   HcpWorkplace({
     required this.workplace,
+    this.provinceName,
+    this.cityMunicipality,
     this.address,
     this.isPrimary = false,
   });
 
   factory HcpWorkplace.fromJson(Map<String, dynamic> json) {
     return HcpWorkplace(
-      workplace: json['workplace'] ?? json['workplace_name'] ?? json['hcp_workplace'] ?? '',
-      address: json['address'],
+      workplace: json['hcp_workplace'] ?? json['workplace'] ?? json['workplace_name'] ?? '',
+      provinceName: json['province_name'] ?? json['province'],
+      cityMunicipality: json['city_municipality'] ?? json['city'],
+      address: json['address'] ?? json['workplace_name'],
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'workplace': workplace,
+      'hcp_workplace': workplace,
+      if (provinceName != null) 'province_name': provinceName,
+      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
       if (address != null) 'address': address,
       'is_primary': isPrimary ? 1 : 0,
     };
@@ -148,25 +161,45 @@ class HcpWorkplace {
 }
 
 class HcpContact {
-  final String contactType; // Mobile, Email, Telephone, etc.
-  final String contactValue;
+  final String? contactNumber;
+  final String? emailAddress;
+
+  // Compatibility getters for legacy references
+  String get contactValue => contactNumber ?? emailAddress ?? '';
+  String get contactType => (emailAddress != null && emailAddress!.isNotEmpty) ? 'Email' : 'Mobile';
 
   HcpContact({
-    required this.contactType,
-    required this.contactValue,
-  });
+    this.contactNumber,
+    this.emailAddress,
+    String? contactType,
+    String? contactValue,
+  }) : this.contactNumber = contactNumber ?? (contactType == 'Email' ? null : contactValue),
+       this.emailAddress = emailAddress ?? (contactType == 'Email' ? contactValue : null);
 
   factory HcpContact.fromJson(Map<String, dynamic> json) {
+    String? num = json['contact_number'] ?? json['mobile_number'] ?? json['phone_number'];
+    String? email = json['email_address'] ?? json['email'];
+    
+    // Legacy fallback if contact_type / contact_value was stored
+    if (num == null && email == null && json['contact_value'] != null) {
+      final val = '${json['contact_value']}';
+      if (val.contains('@')) {
+        email = val;
+      } else {
+        num = val;
+      }
+    }
+
     return HcpContact(
-      contactType: json['contact_type'] ?? json['email_address'] ?? 'Mobile',
-      contactValue: json['contact_value'] ?? json['contact_number'] ?? json['mobile_number'] ?? '',
+      contactNumber: num,
+      emailAddress: email,
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'contact_type': contactType,
-      'contact_value': contactValue,
+      if (contactNumber != null) 'contact_number': contactNumber,
+      if (emailAddress != null) 'email_address': emailAddress,
     };
   }
 }

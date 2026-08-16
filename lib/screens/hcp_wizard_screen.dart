@@ -326,19 +326,186 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       });
     }
 
-    final changesMap = {
-      'first_name': _firstNameController.text.trim(),
-      'middle_name': _middleNameController.text.trim(),
-      'last_name': _lastNameController.text.trim(),
-      'hcp_type': _selectedHcpType,
-      'hcp_practice': _selectedPractice,
-      'specialties_count': _selectedSpecialties.length,
-      'workplaces_count': _selectedWorkplaces.length,
-      'contacts_count': _contacts.length,
-      'application_status': _applicationStatus,
+    // Compute structured ERPNext v15 changes JSON and HTML summary
+    final List<Map<String, dynamic>> basicInfoChanges = [];
+    if (_selectedDoctor != null) {
+      if (_firstNameController.text.trim() != _selectedDoctor!.firstName) {
+        basicInfoChanges.add({
+          'field': 'first_name',
+          'label': 'First Name',
+          'operation': 'modified',
+          'old': _selectedDoctor!.firstName,
+          'new': _firstNameController.text.trim(),
+        });
+      }
+      if (_middleNameController.text.trim() != (_selectedDoctor!.middleName ?? '')) {
+        basicInfoChanges.add({
+          'field': 'middle_name',
+          'label': 'Middle Name',
+          'operation': 'modified',
+          'old': _selectedDoctor!.middleName ?? '',
+          'new': _middleNameController.text.trim(),
+        });
+      }
+      if (_lastNameController.text.trim() != _selectedDoctor!.lastName) {
+        basicInfoChanges.add({
+          'field': 'last_name',
+          'label': 'Last Name',
+          'operation': 'modified',
+          'old': _selectedDoctor!.lastName,
+          'new': _lastNameController.text.trim(),
+        });
+      }
+      if (_selectedHcpType != null && _selectedHcpType != _selectedDoctor!.hcpType) {
+        basicInfoChanges.add({
+          'field': 'hcp_type',
+          'label': 'HCP Type',
+          'operation': 'modified',
+          'old': _selectedDoctor!.hcpType,
+          'new': _selectedHcpType,
+        });
+      }
+      if (_selectedPractice != _selectedDoctor!.hcpPractice) {
+        basicInfoChanges.add({
+          'field': 'hcp_practice',
+          'label': 'Practice',
+          'operation': 'modified',
+          'old': _selectedDoctor!.hcpPractice,
+          'new': _selectedPractice,
+        });
+      }
+    }
+
+    final List<Map<String, dynamic>> specAdded = [];
+    final List<Map<String, dynamic>> specRemoved = [];
+    if (_selectedDoctor != null) {
+      final oldSpecs = _selectedDoctor!.specialties.map((s) => s.hcpSpecialty).toSet();
+      final newSpecs = _selectedSpecialties.where((s) => s.hcpSpecialty != null).map((s) => s.hcpSpecialty!).toSet();
+      for (var s in _selectedSpecialties) {
+        if (s.hcpSpecialty != null && !oldSpecs.contains(s.hcpSpecialty)) {
+          specAdded.add({
+            'hcp_specialty': s.hcpSpecialty,
+            if (s.subSpecialty != null) 'sub_specialty': s.subSpecialty,
+            if (s.specialtyName != null) 'specialty_name': s.specialtyName,
+          });
+        }
+      }
+      for (var s in _selectedDoctor!.specialties) {
+        if (!newSpecs.contains(s.hcpSpecialty)) {
+          specRemoved.add({
+            'hcp_specialty': s.hcpSpecialty,
+            if (s.subSpecialty != null) 'sub_specialty': s.subSpecialty,
+          });
+        }
+      }
+    } else {
+      for (var s in _selectedSpecialties) {
+        if (s.hcpSpecialty != null) {
+          specAdded.add({
+            'hcp_specialty': s.hcpSpecialty,
+            if (s.subSpecialty != null) 'sub_specialty': s.subSpecialty,
+            if (s.specialtyName != null) 'specialty_name': s.specialtyName,
+          });
+        }
+      }
+    }
+
+    final List<Map<String, dynamic>> wpAdded = [];
+    final List<Map<String, dynamic>> wpRemoved = [];
+    if (_selectedDoctor != null) {
+      final oldWps = _selectedDoctor!.workplaces.map((w) => w.workplace).toSet();
+      final newWps = _selectedWorkplaces.where((w) => w.hcpWorkplace != null).map((w) => w.hcpWorkplace!).toSet();
+      for (var w in _selectedWorkplaces) {
+        if (w.hcpWorkplace != null && !oldWps.contains(w.hcpWorkplace)) {
+          wpAdded.add({
+            'hcp_workplace': w.hcpWorkplace,
+            if (w.workplaceName != null) 'workplace_name': w.workplaceName,
+          });
+        }
+      }
+      for (var w in _selectedDoctor!.workplaces) {
+        if (!newWps.contains(w.workplace)) {
+          wpRemoved.add({
+            'hcp_workplace': w.workplace,
+          });
+        }
+      }
+    } else {
+      for (var w in _selectedWorkplaces) {
+        if (w.hcpWorkplace != null) {
+          wpAdded.add({
+            'hcp_workplace': w.hcpWorkplace,
+            if (w.workplaceName != null) 'workplace_name': w.workplaceName,
+          });
+        }
+      }
+    }
+
+    final List<Map<String, dynamic>> contactAdded = [];
+    for (var c in _contacts) {
+      if ((c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)) {
+        contactAdded.add({
+          if (c.contactNumber != null) 'contact_number': c.contactNumber,
+          if (c.emailAddress != null) 'email_address': c.emailAddress,
+        });
+      }
+    }
+
+    final structuredChanges = {
+      'submission': '',
+      'hcp': _selectedDoctor?.name ?? '',
+      'generated_on': DateTime.now().toIso8601String(),
+      'generated_by': apiService.loggedInEmail ?? 'jptan@profinsights.biz',
+      'version': 1,
+      'changes': {
+        'basic_information': basicInfoChanges,
+        'specializations': {
+          'added': specAdded,
+          'removed': specRemoved,
+        },
+        'workplaces': {
+          'added': wpAdded,
+          'removed': wpRemoved,
+        },
+        'contact_information': {
+          'added': contactAdded,
+          'removed': [],
+        },
+      }
     };
-    final changesJsonStr = jsonEncode(changesMap);
-    final changeSummaryHtmlStr = '<ul><li><b>Contact Info Updated</b> (${_contacts.length} entries)</li><li><b>Specialties Linked</b>: ${_selectedSpecialties.length}</li><li><b>Workplaces Linked</b>: ${_selectedWorkplaces.length}</li></ul>';
+    final changesJsonStr = jsonEncode(structuredChanges);
+
+    // Build HTML Summary matching ERPNext v15
+    final sb = StringBuffer('<h3>Summary of Changes</h3><br><hr><br>');
+    if (basicInfoChanges.isNotEmpty) {
+      sb.write('<h4>Basic Information</h4>');
+      for (var b in basicInfoChanges) {
+        sb.write('<b>${b['label']}</b>: From "${b['old']}" → To "${b['new']}"<br>');
+      }
+      sb.write('<br>');
+    }
+    if (specAdded.isNotEmpty) {
+      sb.write('<h4>Specializations</h4><b>✓ Added</b><div style="margin-left:20px; margin-bottom:10px;">');
+      for (var s in specAdded) {
+        sb.write('${s['specialty_name'] ?? s['hcp_specialty']}<br>');
+      }
+      sb.write('</div>');
+    }
+    if (wpAdded.isNotEmpty) {
+      sb.write('<h4>Workplaces</h4><b>✓ Added</b><div style="margin-left:20px; margin-bottom:10px;">');
+      for (var w in wpAdded) {
+        sb.write('${w['workplace_name'] ?? w['hcp_workplace']}<br>');
+      }
+      sb.write('</div>');
+    }
+    if (contactAdded.isNotEmpty) {
+      sb.write('<h4>Contact Information</h4><b>✓ Added</b><div style="margin-left:20px; margin-bottom:10px;">');
+      for (var c in contactAdded) {
+        sb.write('Contact No.: ${c['contact_number'] ?? 'N/A'}, Email: ${c['email_address'] ?? 'None'}<br>');
+      }
+      sb.write('</div>');
+    }
+    final changeSummaryHtmlStr = sb.toString();
 
     final submission = HcpProfileSubmission(
       hcpName: _selectedDoctor?.name ?? '',
@@ -356,15 +523,19 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       workplaces: _selectedWorkplaces,
       contacts: _contacts,
       accountOrProgram: apiService.selectedProgram,
+      territory: 'AD0110',
+      salesPerson: apiService.loggedInFullName ?? 'Jorge Mengorio',
+      userId: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
       surveyTemplate: _activeSurvey?.name,
       surveyTemplateTitle: _activeSurvey?.templateName,
       answers: answersList,
       medrepEmail: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
       submissionDate: _submissionDate.toString().split('.').first,
-      applicationStatus: _applicationStatus,
+      workflowState: 'Pending Approval',
+      applicationStatus: 'Applied',
       changeSummaryHtml: changeSummaryHtmlStr,
       changesJson: changesJsonStr,
-      docstatus: 1,
+      docstatus: 0,
     );
 
     try {
@@ -380,18 +551,32 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           hcpType: _selectedHcpType ?? _selectedDoctor!.hcpType,
           hcpPractice: _selectedPractice,
           specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpSpecialty(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty)).toList(),
-          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpWorkplace(workplace: e.hcpWorkplace!, address: e.workplaceName)).toList(),
-          contacts: _contacts.where((e) => e.contactNumber != null).map((e) => HcpContact(contactType: e.emailAddress ?? 'Mobile', contactValue: e.contactNumber!)).toList(),
+          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpWorkplace(workplace: e.hcpWorkplace!, provinceName: e.provinceName, cityMunicipality: e.cityMunicipality, address: e.workplaceName)).toList(),
+          contacts: _contacts.where((e) => (e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)).map((e) => HcpContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress)).toList(),
+          profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
         );
         await apiService.updateDoctor(_selectedDoctor!.name!, updatedDoctor);
+
+        // Auto-apply & sync HCP Account in ERPNext
+        await apiService.syncHcpAccount(
+          hcpId: _selectedDoctor!.name!,
+          hcpFullName: '${_firstNameController.text.trim()} ${_lastNameController.text.trim()}',
+          program: apiService.selectedProgram,
+          territory: 'AD0110',
+          salesPerson: apiService.loggedInFullName,
+          userId: apiService.loggedInEmail,
+          specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpAccountSpecialization(specialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty)).toList(),
+          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpAccountWorkplace(workplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName)).toList(),
+          contacts: _contacts.where((e) => (e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress)).toList(),
+        );
       }
 
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('HCP Profile Submission saved & submitted successfully!')),
+          const SnackBar(content: Text('HCP Profile Submission saved & applied successfully!')),
         );
-        Navigator.pop(context);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       setState(() => _isLoading = false);

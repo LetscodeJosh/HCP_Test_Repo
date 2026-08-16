@@ -21,6 +21,9 @@ class HcpProfileSubmission {
   final String? barangayName;
   final String? institution;
   final String? accountOrProgram; // Link -> Branch
+  final String? territory; // Link -> Territory
+  final String? salesPerson; // Territory Manager
+  final String? userId; // Link -> User
   final String? surveyTemplate; // Link -> HCP Survey Template
   final String? surveyTemplateTitle;
   final String? medrepEmail; // Link -> User
@@ -28,11 +31,11 @@ class HcpProfileSubmission {
   final String? surveyResponse; // Link -> HCP Survey Response
   final List<SubmissionAnswer> answers; // Table -> HCP Profile Submission Answer
   final String? status; // ERPNext status field
-  final String? workflowState; // ERPNext workflow_state field
+  final String? workflowState; // Draft, Pending Approval, Approved, Rejected, Cancelled
   final String? applicationStatus; // Not Applied, Applying, Applied, Failed
   final String? changeSummaryHtml;
   final String? changesJson;
-  final int docstatus; // 0: Draft, 1: Submitted, 2: Cancelled
+  final int docstatus; // 0: Draft/Pending, 1: Approved/Submitted, 2: Cancelled
 
   HcpProfileSubmission({
     this.name,
@@ -57,6 +60,9 @@ class HcpProfileSubmission {
     this.barangayName,
     this.institution,
     this.accountOrProgram,
+    this.territory,
+    this.salesPerson,
+    this.userId,
     this.surveyTemplate,
     this.surveyTemplateTitle,
     this.medrepEmail,
@@ -72,6 +78,23 @@ class HcpProfileSubmission {
   });
 
   factory HcpProfileSubmission.fromJson(Map<String, dynamic> json) {
+    final rawDocstatus = json['docstatus'] is int ? json['docstatus'] as int : int.tryParse('${json['docstatus']}') ?? 0;
+    
+    // Resolve workflow state accurately according to ERPNext v15
+    String? resolvedWorkflow = json['workflow_state'];
+    if (resolvedWorkflow == null || resolvedWorkflow.isEmpty) {
+      if (rawDocstatus == 1) {
+        resolvedWorkflow = 'Approved';
+      } else if (rawDocstatus == 2) {
+        resolvedWorkflow = 'Cancelled';
+      } else {
+        resolvedWorkflow = json['status'] ?? 'Pending Approval';
+      }
+    }
+
+    // Resolve application status (Not Applied, Applying, Applied, Failed)
+    String resolvedAppStatus = json['application_status'] ?? 'Not Applied';
+
     return HcpProfileSubmission(
       name: json['name'],
       hcpName: json['hcp_name'] ?? '',
@@ -101,20 +124,23 @@ class HcpProfileSubmission {
       barangayName: json['barangay_name'],
       institution: json['institution'],
       accountOrProgram: json['account_or_program'],
+      territory: json['territory'],
+      salesPerson: json['sales_person'],
+      userId: json['user_id'] ?? json['medrep_email'],
       surveyTemplate: json['survey_template'],
       surveyTemplateTitle: json['survey_template_title'],
-      medrepEmail: json['medrep_email'],
+      medrepEmail: json['medrep_email'] ?? json['user_id'],
       submissionDate: json['submission_date'],
       surveyResponse: json['survey_response'],
       answers: (json['answers'] as List?)
               ?.map((e) => SubmissionAnswer.fromJson(e))
               .toList() ?? [],
-      status: json['status'] ?? json['workflow_state'] ?? json['application_status'],
-      workflowState: json['workflow_state'] ?? json['status'] ?? json['application_status'],
-      applicationStatus: json['application_status'] ?? json['status'] ?? json['workflow_state'],
+      status: resolvedWorkflow,
+      workflowState: resolvedWorkflow,
+      applicationStatus: resolvedAppStatus,
       changeSummaryHtml: json['change_summary_html'],
       changesJson: json['changes_json'],
-      docstatus: json['docstatus'] ?? 0,
+      docstatus: rawDocstatus,
     );
   }
 
@@ -142,12 +168,16 @@ class HcpProfileSubmission {
       if (barangayName != null) 'barangay_name': barangayName,
       if (institution != null) 'institution': institution,
       if (accountOrProgram != null) 'account_or_program': accountOrProgram,
+      if (territory != null) 'territory': territory,
+      if (salesPerson != null) 'sales_person': salesPerson,
+      if (userId != null || medrepEmail != null) 'user_id': userId ?? medrepEmail,
+      if (medrepEmail != null) 'medrep_email': medrepEmail,
       if (surveyTemplate != null) 'survey_template': surveyTemplate,
       if (surveyTemplateTitle != null) 'survey_template_title': surveyTemplateTitle,
-      if (medrepEmail != null) 'medrep_email': medrepEmail,
       if (submissionDate != null) 'submission_date': submissionDate,
       if (surveyResponse != null) 'survey_response': surveyResponse,
       'answers': answers.map((e) => e.toJson()).toList(),
+      if (workflowState != null) 'workflow_state': workflowState,
       if (applicationStatus != null) 'application_status': applicationStatus,
       if (changeSummaryHtml != null) 'change_summary_html': changeSummaryHtml,
       if (changesJson != null) 'changes_json': changesJson,
@@ -171,10 +201,10 @@ class SubmissionSpecialty {
 
   factory SubmissionSpecialty.fromJson(Map<String, dynamic> json) {
     return SubmissionSpecialty(
-      hcpSpecialty: json['hcp_specialty'],
-      specialtyName: json['specialty_name'],
-      subSpecialty: json['sub_specialty'],
-      subSpecialtyName: json['sub_specialty_name'],
+      hcpSpecialty: json['hcp_specialty'] ?? json['specialty'] ?? json['specialty_name'],
+      specialtyName: json['specialty_name'] ?? json['specialty'],
+      subSpecialty: json['sub_specialty'] ?? json['sub_specialty_name'],
+      subSpecialtyName: json['sub_specialty_name'] ?? json['sub_specialty'],
     );
   }
 
@@ -189,6 +219,7 @@ class SubmissionSpecialty {
 }
 
 class SubmissionWorkplace {
+  final bool preferred;
   final String? hcpWorkplace; // Link -> Institution
   final String? workplaceName;
   final String? cityMunicipality;
@@ -197,6 +228,7 @@ class SubmissionWorkplace {
   final String? provinceTitle;
 
   SubmissionWorkplace({
+    this.preferred = false,
     this.hcpWorkplace,
     this.workplaceName,
     this.cityMunicipality,
@@ -207,17 +239,19 @@ class SubmissionWorkplace {
 
   factory SubmissionWorkplace.fromJson(Map<String, dynamic> json) {
     return SubmissionWorkplace(
+      preferred: json['preferred'] == 1 || json['preferred'] == true,
       hcpWorkplace: json['hcp_workplace'] ?? json['workplace'],
-      workplaceName: json['workplace_name'] ?? json['address'],
-      cityMunicipality: json['city_municipality'],
-      cityTitle: json['city_title'],
-      provinceName: json['province_name'],
-      provinceTitle: json['province_title'],
+      workplaceName: json['workplace_name'] ?? json['address'] ?? json['workplace'],
+      cityMunicipality: json['city_municipality'] ?? json['city'],
+      cityTitle: json['city_title'] ?? json['city'],
+      provinceName: json['province_name'] ?? json['province'],
+      provinceTitle: json['province_title'] ?? json['province'],
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'preferred': preferred ? 1 : 0,
       if (hcpWorkplace != null) 'hcp_workplace': hcpWorkplace,
       if (workplaceName != null) 'workplace_name': workplaceName,
       if (cityMunicipality != null) 'city_municipality': cityMunicipality,
@@ -239,8 +273,8 @@ class SubmissionContact {
 
   factory SubmissionContact.fromJson(Map<String, dynamic> json) {
     return SubmissionContact(
-      contactNumber: json['contact_number'] ?? json['contact_value'],
-      emailAddress: json['email_address'] ?? json['contact_type'],
+      contactNumber: json['contact_number'] ?? json['contact_value'] ?? json['mobile_number'] ?? json['phone_number'],
+      emailAddress: json['email_address'] ?? json['contact_type'] ?? json['email'],
     );
   }
 
@@ -278,11 +312,8 @@ class SubmissionAnswer {
 
     return {
       'survey_question': validSq,
-      'survey_question_id': validSq,
-      'question': validQt,
       'question_text': validQt,
       'answer': validAns,
-      'answer_text': validAns,
     };
   }
 }
