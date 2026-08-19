@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../models/hcp.dart';
 import '../../services/api_service.dart';
 import '../hcp_dashboard_screen.dart';
 import '../doctor_masterlist_screen.dart';
 import '../submission_history_screen.dart';
-import '../self_service_qr_screen.dart';
 import '../login_screen.dart';
-
 import '../doctor_account_screen.dart';
 
 enum DrawerItem {
@@ -87,143 +84,180 @@ class AppDrawer extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 18),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.person_pin_rounded, color: Color(0xFF38BDF8), size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              apiService.loggedInFullName ?? userEmail.split('@').first.replaceAll('.', ' ').toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 13,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              userEmail,
-                              style: const TextStyle(
-                                color: Color(0xFF94A3B8),
-                                fontSize: 11,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Menu Category Title
-          Padding(
-            padding: const EdgeInsets.only(left: 20, top: 20, bottom: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'DATA VIEWS & PROCESSES',
-                style: TextStyle(
-                  color: const Color(0xFF64748B),
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
+                      child: Row(
+                        children: [
+                          const Icon(Icons.person_pin_rounded, color: Color(0xFF38BDF8), size: 22),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  apiService.loggedInFullName ?? userEmail.split('@').first.replaceAll('.', ' ').toUpperCase(),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  userEmail,
+                                  style: const TextStyle(
+                                    color: Color(0xFF94A3B8),
+                                    fontSize: 11,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                                  decoration: BoxDecoration(
+                                    color: apiService.isAdmin
+                                        ? const Color(0xFFEF4444).withOpacity(0.2)
+                                        : (apiService.isManager
+                                            ? const Color(0xFFF59E0B).withOpacity(0.2)
+                                            : const Color(0xFF0066FF).withOpacity(0.2)),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: apiService.isAdmin
+                                          ? const Color(0xFFEF4444)
+                                          : (apiService.isManager
+                                              ? const Color(0xFFF59E0B)
+                                              : const Color(0xFF38BDF8)),
+                                      width: 0.8,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'ROLE: ${apiService.userPositionTitle.toUpperCase()}',
+                                    style: TextStyle(
+                                      color: apiService.isAdmin
+                                          ? const Color(0xFFFCA5A5)
+                                          : (apiService.isManager
+                                              ? const Color(0xFFFCD34D)
+                                              : const Color(0xFF93C5FD)),
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ),
 
-          // Menu Items List
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              children: [
-                _buildMenuItem(
-                  context,
-                  icon: Icons.analytics_rounded,
-                  title: 'HCP Dashboard',
-                  isSelected: currentItem == DrawerItem.dashboard,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    if (currentItem != DrawerItem.dashboard) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
-                      );
-                    }
-                  },
+              // Menu Category Title
+              Padding(
+                padding: const EdgeInsets.only(left: 20, top: 20, bottom: 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'DATA VIEWS & PROCESSES',
+                    style: TextStyle(
+                      color: const Color(0xFF64748B),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 4),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.people_alt_rounded,
-                  title: 'Doctor Listing',
-                  isSelected: currentItem == DrawerItem.doctorManagement,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    if (currentItem != DrawerItem.doctorManagement) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                      );
-                    }
-                  },
+              ),
+
+              // Menu Items List
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  children: [
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.analytics_rounded,
+                      title: 'HCP Dashboard',
+                      isSelected: currentItem == DrawerItem.dashboard,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (currentItem != DrawerItem.dashboard) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.people_alt_rounded,
+                      title: 'Doctor Listing',
+                      subtitle: apiService.isMedRep ? 'View Only' : null,
+                      isSelected: currentItem == DrawerItem.doctorManagement,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (currentItem != DrawerItem.doctorManagement) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.badge_rounded,
+                      title: 'Doctor Account',
+                      subtitle: apiService.isMedRep ? 'View Only' : null,
+                      isSelected: currentItem == DrawerItem.doctorAccount,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (currentItem != DrawerItem.doctorAccount) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.assignment_turned_in_rounded,
+                      title: 'HCP Profile Submissions',
+                      badge: 'Active',
+                      isSelected: currentItem == DrawerItem.submissionsFact,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (currentItem != DrawerItem.submissionsFact) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const SubmissionHistoryScreen()),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    _buildMenuItem(
+                      context,
+                      icon: Icons.business_rounded,
+                      title: 'Institutions',
+                      subtitle: 'Reference Directory',
+                      isSelected: currentItem == DrawerItem.institutions,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        _showInstitutionsModal(context);
+                      },
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.badge_rounded,
-                  title: 'Doctor Account',
-                  isSelected: currentItem == DrawerItem.doctorAccount,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    if (currentItem != DrawerItem.doctorAccount) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 4),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.assignment_turned_in_rounded,
-                  title: 'HCP Profile Submissions',
-                  isSelected: currentItem == DrawerItem.submissionsFact,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    if (currentItem != DrawerItem.submissionsFact) {
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute(builder: (_) => const SubmissionHistoryScreen()),
-                      );
-                    }
-                  },
-                ),
-                const SizedBox(height: 4),
-                _buildMenuItem(
-                  context,
-                  icon: Icons.business_rounded,
-                  title: 'Institutions',
-                  isSelected: currentItem == DrawerItem.institutions,
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _showInstitutionsModal(context);
-                  },
-                ),
-              ],
-            ),
-          ),
+              ),
 
           // App Version & Credits (Just above Log Out)
           Padding(
@@ -282,6 +316,8 @@ class AppDrawer extends StatelessWidget {
     BuildContext context, {
     required IconData icon,
     required String title,
+    String? subtitle,
+    String? badge,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -299,13 +335,62 @@ class AppDrawer extends StatelessWidget {
           color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8),
           size: 22,
         ),
-        title: Text(
-          title,
-          style: TextStyle(
-            color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-            fontSize: 14,
-          ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
+                      fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (badge != null) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: badge == 'Active'
+                      ? const Color(0xFF10B981).withOpacity(0.2)
+                      : const Color(0xFF64748B).withOpacity(0.25),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: badge == 'Active'
+                        ? const Color(0xFF10B981)
+                        : const Color(0xFF64748B),
+                    width: 0.7,
+                  ),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(
+                    color: badge == 'Active'
+                        ? const Color(0xFF34D399)
+                        : const Color(0xFFCBD5E1),
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         trailing: isSelected ? const Icon(Icons.chevron_right_rounded, color: Color(0xFF38BDF8), size: 18) : null,
         onTap: onTap,

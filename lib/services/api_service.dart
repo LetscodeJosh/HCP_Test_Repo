@@ -13,10 +13,43 @@ import '../models/hcp_account.dart';
 import '../models/corenergy_engage.dart';
 import 'db_helper.dart';
 
+enum UserPosition {
+  admin,
+  manager,
+  medRep,
+}
+
 class ApiService extends ChangeNotifier {
   ApiService() {
     checkOnlineStatus();
     _startAutoSyncTimer();
+  }
+
+  // User Position & Role Permissions
+  UserPosition _userPosition = UserPosition.medRep;
+  UserPosition get userPosition => _userPosition;
+
+  bool get isAdmin => _userPosition == UserPosition.admin;
+  bool get isManager => _userPosition == UserPosition.manager;
+  bool get isMedRep => _userPosition == UserPosition.medRep;
+  bool get canManageAllDoctypes => isAdmin || isManager;
+  bool get canCreateOrEditDoctor => isAdmin || isManager;
+  bool get canCreateOrEditDoctorAccount => isAdmin || isManager;
+
+  String get userPositionTitle {
+    switch (_userPosition) {
+      case UserPosition.admin:
+        return 'Admin';
+      case UserPosition.manager:
+        return 'Manager (GM/DSM)';
+      case UserPosition.medRep:
+        return 'MedRep';
+    }
+  }
+
+  void setUserPosition(UserPosition pos) {
+    _userPosition = pos;
+    notifyListeners();
   }
 
   String selectedProgram = 'COREnergy';
@@ -470,10 +503,19 @@ class ApiService extends ChangeNotifier {
     return headers;
   }
 
+  Map<String, String> get authHeaders => _headers;
+
+  String formatFileUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    if (path.startsWith('http')) return path;
+    return '$baseUrl$path';
+  }
+
   /// Authenticate against ERPNext v15
   Future<bool> login(String username, String password) async {
     if (_isOffline) {
       loggedInEmail = username.trim().isEmpty ? 'offline_user@pims-marketing.com' : username.trim();
+      _detectPositionFromEmail(loggedInEmail ?? '');
       await fetchAvailablePrograms();
       return true;
     }
@@ -502,6 +544,8 @@ class ApiService extends ChangeNotifier {
             loggedInFullName = body['user_fullname'].toString();
           }
 
+          _detectPositionFromEmail(loggedInEmail ?? '');
+
           // Parse cookie header to persist session (e.g. sid=xxxxxx)
           final rawCookie = response.headers['set-cookie'];
           if (rawCookie != null) {
@@ -524,7 +568,10 @@ class ApiService extends ChangeNotifier {
   }
 
   Future<void> fetchLoggedInUserInfo() async {
-    if (_isOffline || _sessionCookie == null) return;
+    if (_isOffline || _sessionCookie == null) {
+      _detectPositionFromEmail(loggedInEmail ?? '');
+      return;
+    }
     try {
       final url = Uri.parse('$baseUrl/api/method/frappe.auth.get_logged_user');
       final response = await http.get(url, headers: _headers);
@@ -532,21 +579,75 @@ class ApiService extends ChangeNotifier {
         final body = jsonDecode(response.body);
         final userEmail = body['message'];
         if (userEmail != null && userEmail is String) {
-          final userDocUrl = Uri.parse('$baseUrl/api/resource/User/${Uri.encodeComponent(userEmail)}?fields=["full_name","first_name","last_name"]');
+          loggedInEmail = userEmail;
+
+          // Fetch full User document (without fields limitation so child table roles are populated)
+          final userDocUrl = Uri.parse('$baseUrl/api/resource/User/${Uri.encodeComponent(userEmail)}');
           final userDocRes = await http.get(userDocUrl, headers: _headers);
+          
+          // Also fetch Has Role records directly as fallback
+          final hasRoleUrl = Uri.parse('$baseUrl/api/resource/Has%20Role?filters=[["parent","=","$userEmail"]]&fields=["role"]&limit=100');
+          final hasRoleRes = await http.get(hasRoleUrl, headers: _headers);
+
+          List<String> roleNames = [];
           if (userDocRes.statusCode == 200) {
             final userDocBody = jsonDecode(userDocRes.body);
             final data = userDocBody['data'];
-            if (data != null && data['full_name'] != null) {
-              loggedInFullName = data['full_name'];
-              notifyListeners();
+            if (data != null) {
+              if (data['full_name'] != null && data['full_name'].toString().isNotEmpty) {
+                loggedInFullName = data['full_name'];
+              }
+              if (data['roles'] is List) {
+                roleNames.addAll((data['roles'] as List).map((r) => r is Map ? (r['role']?.toString().toLowerCase() ?? '') : r.toString().toLowerCase()));
+              }
             }
           }
+
+          if (hasRoleRes.statusCode == 200) {
+            final hasRoleBody = jsonDecode(hasRoleRes.body);
+            final List<dynamic> hrData = hasRoleBody['data'] ?? [];
+            for (var hr in hrData) {
+              final rName = hr is Map ? (hr['role']?.toString().toLowerCase() ?? '') : hr.toString().toLowerCase();
+              if (rName.isNotEmpty && !roleNames.contains(rName)) {
+                roleNames.add(rName);
+              }
+            }
+          }
+
+          final lowerEmail = userEmail.toLowerCase().trim();
+          if (lowerEmail == 'administrator' ||
+              lowerEmail == 'jptan@profinsights.biz' ||
+              lowerEmail.contains('cig-it') ||
+              roleNames.any((r) => r == 'system manager' || r == 'administrator' || r.contains('admin') || r.contains('it staff'))) {
+            _userPosition = UserPosition.admin;
+          } else if (roleNames.any((r) => r.contains('sales manager') || r.contains('manager') || r.contains('dsm') || r.contains('gm') || r.contains('supervisor') || r.contains('regional'))) {
+            _userPosition = UserPosition.manager;
+          } else {
+            _detectPositionFromEmail(userEmail);
+          }
+          notifyListeners();
         }
       }
     } catch (e) {
       print('Error fetching logged in user info: $e');
+      _detectPositionFromEmail(loggedInEmail ?? '');
     }
+  }
+
+  void _detectPositionFromEmail(String email) {
+    final lower = email.toLowerCase().trim();
+    if (lower.contains('admin') ||
+        lower == 'administrator' ||
+        lower == 'jptan@profinsights.biz' ||
+        lower.contains('cig-it') ||
+        (lower.endsWith('@profinsights.biz') && (lower.contains('josh') || lower.contains('tan') || lower.contains('root') || lower.contains('admin')))) {
+      _userPosition = UserPosition.admin;
+    } else if (lower.contains('manager') || lower.contains('gm') || lower.contains('dsm') || lower.contains('director') || lower.contains('lead') || lower.contains('supervisor')) {
+      _userPosition = UserPosition.manager;
+    } else {
+      _userPosition = UserPosition.medRep;
+    }
+    notifyListeners();
   }
 
   /// Log out
@@ -554,6 +655,8 @@ class ApiService extends ChangeNotifier {
     _sessionCookie = null;
     loggedInEmail = null;
     loggedInFullName = null;
+    _userPosition = UserPosition.medRep;
+    notifyListeners();
   }
 
   /// Retrieve list of COREnergy engagements
@@ -1006,10 +1109,124 @@ class ApiService extends ChangeNotifier {
   Future<Hcp> createDoctor(Hcp hcp) async {
     final url = Uri.parse('$baseUrl/api/resource/HCP');
     try {
+      final payload = hcp.toJson();
+
+      final fullNameParts = [
+        if (hcp.firstName.trim().isNotEmpty) hcp.firstName.trim(),
+        if (hcp.middleName != null && hcp.middleName!.trim().isNotEmpty && hcp.middleName!.trim() != '-') hcp.middleName!.trim(),
+        if (hcp.lastName.trim().isNotEmpty) hcp.lastName.trim(),
+      ].join(' ');
+
+      final effectiveName = (hcp.hcpFullName != null && hcp.hcpFullName!.trim().isNotEmpty && !hcp.hcpFullName!.trim().startsWith('HCP-'))
+          ? hcp.hcpFullName!.trim()
+          : (fullNameParts.isNotEmpty ? fullNameParts : '${hcp.firstName.trim()} ${hcp.lastName.trim()}'.trim());
+
+      payload['first_name'] = hcp.firstName.trim();
+      payload['last_name'] = hcp.lastName.trim();
+      payload['hcp_full_name'] = effectiveName;
+      payload['full_name'] = effectiveName;
+      payload['doctor_name'] = effectiveName;
+      payload['hcp_name'] = effectiveName;
+      payload['name_of_doctor'] = effectiveName;
+
+      // Handle doctor photo upload if base64
+      if (payload['hcp_photo'] != null) {
+        final hp = payload['hcp_photo'].toString().trim();
+        if (hp.startsWith('data:') || hp.length > 200) {
+          try {
+            Uint8List? rawBytes;
+            if (hp.contains(',')) {
+              rawBytes = base64Decode(hp.split(',').last.trim());
+            } else {
+              rawBytes = base64Decode(hp.trim());
+            }
+            final uploadedUrl = await uploadFile(
+              bytes: rawBytes,
+              filename: 'hcp_${DateTime.now().millisecondsSinceEpoch}.jpg',
+              doctype: 'HCP',
+            );
+            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+              payload['hcp_photo'] = uploadedUrl;
+              payload['image'] = uploadedUrl;
+              payload['photo'] = uploadedUrl;
+            } else {
+              payload.remove('hcp_photo');
+              payload.remove('image');
+              payload.remove('photo');
+            }
+          } catch (e) {
+            print('Could not upload doctor hcp_photo: $e');
+            payload.remove('hcp_photo');
+            payload.remove('image');
+            payload.remove('photo');
+          }
+        } else {
+          payload['image'] = hp;
+          payload['photo'] = hp;
+        }
+      }
+      
+      // Ensure hcp_specialty Link fields map to valid ERPNext Specialization primary keys
+      if (payload['hcp_specialty'] is List && (payload['hcp_specialty'] as List).isNotEmpty) {
+        final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
+        if (specs.isNotEmpty) {
+          final List<Map<String, dynamic>> cleanSpecs = [];
+          for (var item in (payload['hcp_specialty'] as List)) {
+            if (item is Map<String, dynamic>) {
+              final map = Map<String, dynamic>.from(item);
+              final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? '').toString().trim();
+              if (rawSpec.isNotEmpty) {
+                final match = specs.firstWhere(
+                  (s) => s.name == rawSpec || s.specialty.toLowerCase() == rawSpec.toLowerCase(),
+                  orElse: () => specs.first,
+                );
+                map['hcp_specialty'] = match.name;
+              }
+              final rawSub = (map['sub_specialty'] ?? '').toString().trim();
+              if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
+                final subMatch = specs.firstWhere(
+                  (s) => s.name == rawSub || s.specialty.toLowerCase() == rawSub.toLowerCase(),
+                  orElse: () => specs.first,
+                );
+                map['sub_specialty'] = subMatch.name;
+              } else {
+                map.remove('sub_specialty');
+              }
+              cleanSpecs.add(map);
+            }
+          }
+          payload['hcp_specialty'] = cleanSpecs;
+        }
+      }
+
+      // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
+      if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
+        final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+        if (insts.isNotEmpty) {
+          final List<Map<String, dynamic>> cleanWps = [];
+          for (var item in (payload['hcp_workplace'] as List)) {
+            if (item is Map<String, dynamic>) {
+              final map = Map<String, dynamic>.from(item);
+              final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? '').toString().trim();
+              if (rawWp.isNotEmpty) {
+                final match = insts.firstWhere(
+                  (i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+                  orElse: () => insts.first,
+                );
+                map['hcp_workplace'] = match.name;
+                map['workplace'] = match.name;
+              }
+              cleanWps.add(map);
+            }
+          }
+          payload['hcp_workplace'] = cleanWps;
+        }
+      }
+
       final response = await http.post(
         url,
         headers: _headers,
-        body: jsonEncode(hcp.toJson()),
+        body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -1029,10 +1246,67 @@ class ApiService extends ChangeNotifier {
       '$baseUrl/api/resource/HCP/${Uri.encodeComponent(name)}',
     );
     try {
+      final payload = hcp.toJson();
+      final fullNameParts = [
+        if (hcp.firstName.trim().isNotEmpty) hcp.firstName.trim(),
+        if (hcp.middleName != null && hcp.middleName!.trim().isNotEmpty && hcp.middleName!.trim() != '-') hcp.middleName!.trim(),
+        if (hcp.lastName.trim().isNotEmpty) hcp.lastName.trim(),
+      ].join(' ');
+
+      final effectiveName = (hcp.hcpFullName != null && hcp.hcpFullName!.trim().isNotEmpty && !hcp.hcpFullName!.trim().startsWith('HCP-'))
+          ? hcp.hcpFullName!.trim()
+          : (fullNameParts.isNotEmpty ? fullNameParts : '${hcp.firstName.trim()} ${hcp.lastName.trim()}'.trim());
+
+      payload['first_name'] = hcp.firstName.trim();
+      payload['last_name'] = hcp.lastName.trim();
+      payload['hcp_full_name'] = effectiveName;
+      payload['full_name'] = effectiveName;
+      payload['doctor_name'] = effectiveName;
+      payload['hcp_name'] = effectiveName;
+      payload['name_of_doctor'] = effectiveName;
+
+      // Handle doctor photo upload if base64
+      if (payload['hcp_photo'] != null) {
+        final hp = payload['hcp_photo'].toString().trim();
+        if (hp.startsWith('data:') || hp.length > 200) {
+          try {
+            Uint8List? rawBytes;
+            if (hp.contains(',')) {
+              rawBytes = base64Decode(hp.split(',').last.trim());
+            } else {
+              rawBytes = base64Decode(hp.trim());
+            }
+            final uploadedUrl = await uploadFile(
+              bytes: rawBytes,
+              filename: 'hcp_${DateTime.now().millisecondsSinceEpoch}.jpg',
+              doctype: 'HCP',
+              docname: name,
+            );
+            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+              payload['hcp_photo'] = uploadedUrl;
+              payload['image'] = uploadedUrl;
+              payload['photo'] = uploadedUrl;
+            } else {
+              payload.remove('hcp_photo');
+              payload.remove('image');
+              payload.remove('photo');
+            }
+          } catch (e) {
+            print('Could not upload doctor hcp_photo: $e');
+            payload.remove('hcp_photo');
+            payload.remove('image');
+            payload.remove('photo');
+          }
+        } else {
+          payload['image'] = hp;
+          payload['photo'] = hp;
+        }
+      }
+
       final response = await http.put(
         url,
         headers: _headers,
-        body: jsonEncode(hcp.toJson()),
+        body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -1124,18 +1398,294 @@ class ApiService extends ChangeNotifier {
     }
   }
 
+  /// Upload a file or image to ERPNext (/api/method/upload_file)
+  Future<String?> uploadFile({
+    required Uint8List bytes,
+    required String filename,
+    String? doctype,
+    String? docname,
+    String? fieldname,
+    bool isPrivate = false,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/method/upload_file');
+    try {
+      // 1. Try standard Frappe multipart form-data upload
+      final request = http.MultipartRequest('POST', url);
+      _headers.forEach((key, val) {
+        if (key.toLowerCase() != 'content-type') {
+          request.headers[key] = val;
+        }
+      });
+
+      request.fields['is_private'] = isPrivate ? '1' : '0';
+      if (doctype != null && doctype.isNotEmpty) request.fields['doctype'] = doctype;
+      if (docname != null && docname.isNotEmpty) request.fields['docname'] = docname;
+      if (fieldname != null && fieldname.isNotEmpty) request.fields['attached_to_field'] = fieldname;
+
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        bytes,
+        filename: filename,
+      ));
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        if (body is Map && body['message'] is Map) {
+          final fileUrl = body['message']['file_url'] ?? body['message']['file_name'];
+          if (fileUrl != null) return '$fileUrl';
+        }
+      }
+
+      // 2. Fallback: Try JSON base64 filedata upload
+      final jsonPayload = {
+        'filename': filename,
+        'filedata': base64Encode(bytes),
+        'is_private': isPrivate ? 1 : 0,
+        if (doctype != null) 'doctype': doctype,
+        if (docname != null) 'docname': docname,
+        if (fieldname != null) 'attached_to_field': fieldname,
+      };
+
+      final jsonResp = await http.post(
+        url,
+        headers: _headers,
+        body: jsonEncode(jsonPayload),
+      );
+
+      if (jsonResp.statusCode == 200) {
+        final body = jsonDecode(jsonResp.body);
+        if (body is Map && body['message'] is Map) {
+          final fileUrl = body['message']['file_url'] ?? body['message']['file_name'];
+          if (fileUrl != null) return '$fileUrl';
+        }
+      }
+    } catch (e) {
+      print('uploadFile error: $e');
+    }
+    return null;
+  }
+
   /// Create a new HCP Profile Submission record
   Future<HcpProfileSubmission> createSubmission(HcpProfileSubmission submission) async {
     final url = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission');
     try {
+      final payload = submission.toJson();
+
+      // Frappe workflow requires insertion in Draft state first.
+      // Transitions (Draft → Pending Approval → Approved) are applied AFTER creation.
+      final targetWorkflow = submission.workflowState ?? 'Pending Approval';
+      payload.remove('workflow_state');
+      payload.remove('status');
+      payload['docstatus'] = 0;
+
+      // Ensure consent_photo does not exceed column size (upload to ERPNext /files/ if base64)
+      if (payload['consent_photo'] != null) {
+        final cp = payload['consent_photo'].toString().trim();
+        if (cp.startsWith('data:') || cp.length > 200) {
+          try {
+            Uint8List? rawBytes;
+            if (cp.contains(',')) {
+              rawBytes = base64Decode(cp.split(',').last.trim());
+            } else {
+              rawBytes = base64Decode(cp.trim());
+            }
+            final uploadedUrl = await uploadFile(
+              bytes: rawBytes,
+              filename: 'consent_${DateTime.now().millisecondsSinceEpoch}.jpg',
+              doctype: 'HCP Profile Submission',
+            );
+            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+              payload['consent_photo'] = uploadedUrl;
+            } else {
+              payload.remove('consent_photo');
+            }
+          } catch (e) {
+            print('Could not upload consent_photo base64: $e');
+            payload.remove('consent_photo');
+          }
+        }
+      }
+
+      // Ensure hcp_photo does not exceed column size (upload to ERPNext /files/ if base64)
+      if (payload['hcp_photo'] != null) {
+        final hp = payload['hcp_photo'].toString().trim();
+        if (hp.startsWith('data:') || hp.length > 200) {
+          try {
+            Uint8List? rawBytes;
+            if (hp.contains(',')) {
+              rawBytes = base64Decode(hp.split(',').last.trim());
+            } else {
+              rawBytes = base64Decode(hp.trim());
+            }
+            final uploadedUrl = await uploadFile(
+              bytes: rawBytes,
+              filename: 'hcp_${DateTime.now().millisecondsSinceEpoch}.jpg',
+              doctype: 'HCP Profile Submission',
+            );
+            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+              payload['hcp_photo'] = uploadedUrl;
+            } else {
+              payload.remove('hcp_photo');
+            }
+          } catch (e) {
+            print('Could not upload hcp_photo base64: $e');
+            payload.remove('hcp_photo');
+          }
+        }
+      }
+
+      // Ensure table_specialties Link fields map to valid ERPNext Specialization primary keys
+      if (payload['table_specialties'] is List && (payload['table_specialties'] as List).isNotEmpty) {
+        final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
+        if (specs.isNotEmpty) {
+          final List<Map<String, dynamic>> cleanSpecs = [];
+          for (var item in (payload['table_specialties'] as List)) {
+            if (item is Map<String, dynamic>) {
+              final map = Map<String, dynamic>.from(item);
+              final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? map['specialty_name'] ?? '').toString().trim();
+              if (rawSpec.isNotEmpty) {
+                final match = specs.firstWhere(
+                  (s) => s.name == rawSpec || s.specialty.toLowerCase() == rawSpec.toLowerCase(),
+                  orElse: () => specs.first,
+                );
+                map['hcp_specialty'] = match.name;
+                map['specialty'] = match.name;
+                map['specialty_name'] = match.name;
+              }
+              final rawSub = (map['sub_specialty'] ?? map['sub_specialty_name'] ?? '').toString().trim();
+              if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
+                final subMatch = specs.firstWhere(
+                  (s) => s.name == rawSub || s.specialty.toLowerCase() == rawSub.toLowerCase(),
+                  orElse: () => specs.first,
+                );
+                map['sub_specialty'] = subMatch.name;
+                map['sub_specialty_name'] = subMatch.name;
+              } else {
+                map.remove('sub_specialty');
+                map.remove('sub_specialty_name');
+              }
+              cleanSpecs.add(map);
+            }
+          }
+          payload['table_specialties'] = cleanSpecs;
+        }
+      }
+
+      // Ensure table_workplaces Link fields map to valid ERPNext Institution primary keys
+      if (payload['table_workplaces'] is List && (payload['table_workplaces'] as List).isNotEmpty) {
+        final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+        if (insts.isNotEmpty) {
+          final List<Map<String, dynamic>> cleanWps = [];
+          for (var item in (payload['table_workplaces'] as List)) {
+            if (item is Map<String, dynamic>) {
+              final map = Map<String, dynamic>.from(item);
+              final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['workplace_name'] ?? '').toString().trim();
+              if (rawWp.isNotEmpty) {
+                final match = insts.firstWhere(
+                  (i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+                  orElse: () => insts.first,
+                );
+                map['hcp_workplace'] = match.name;
+                map['workplace'] = match.name;
+                map['workplace_name'] = match.name;
+              }
+              cleanWps.add(map);
+            }
+          }
+          payload['table_workplaces'] = cleanWps;
+        }
+      }
+
       final response = await http.post(
         url,
         headers: _headers,
-        body: jsonEncode(submission.toJson()),
+        body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return HcpProfileSubmission.fromJson(body['data']);
+        final createdData = body['data'];
+        final createdName = createdData != null ? '${createdData['name']}' : null;
+
+        // After creation (Draft), apply Frappe workflow transitions step-by-step
+        if (createdName != null && createdName.isNotEmpty) {
+          final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+          final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
+
+          // Step 1: Draft → Pending Approval
+          bool reachedPending = false;
+          try {
+            final wfResp = await http.post(
+              wfUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+                'action': 'Send for Approval',
+              }),
+            );
+            if (wfResp.statusCode == 200) reachedPending = true;
+          } catch (_) {}
+
+          // Fallback: direct PUT to set Pending Approval if workflow action name differs
+          if (!reachedPending) {
+            try {
+              final putResp = await http.put(
+                updateUrl,
+                headers: _headers,
+                body: jsonEncode({
+                  'workflow_state': 'Pending Approval',
+                  'status': 'Pending Approval',
+                }),
+              );
+              if (putResp.statusCode == 200) reachedPending = true;
+            } catch (_) {}
+          }
+
+          // Step 2 (existing doctor auto-approved): Pending Approval → Approved
+          if (targetWorkflow == 'Approved' && reachedPending) {
+            bool reachedApproved = false;
+            try {
+              final wfResp = await http.post(
+                wfUrl,
+                headers: _headers,
+                body: jsonEncode({
+                  'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+                  'action': 'Approve',
+                }),
+              );
+              if (wfResp.statusCode == 200) reachedApproved = true;
+            } catch (_) {}
+
+            // Fallback: direct PUT to set Approved
+            if (!reachedApproved) {
+              try {
+                await http.put(
+                  updateUrl,
+                  headers: _headers,
+                  body: jsonEncode({
+                    'workflow_state': 'Approved',
+                    'status': 'Approved',
+                    'application_status': 'Applied',
+                    'docstatus': 1,
+                  }),
+                );
+              } catch (_) {}
+            }
+          }
+
+          // Re-fetch the final state from ERPNext to return accurate data
+          try {
+            final freshResp = await http.get(updateUrl, headers: _headers);
+            if (freshResp.statusCode == 200) {
+              final freshBody = jsonDecode(freshResp.body);
+              return HcpProfileSubmission.fromJson(freshBody['data']);
+            }
+          } catch (_) {}
+        }
+
+        return HcpProfileSubmission.fromJson(createdData);
       } else {
         throw Exception('Failed to create submission: ${response.body}');
       }
@@ -1172,18 +1722,33 @@ class ApiService extends ChangeNotifier {
         }
       }
 
+      final effectiveSalesPerson = (salesPerson != null && salesPerson.trim().isNotEmpty)
+          ? salesPerson.trim()
+          : getTerritoryManagerForTerritory(territory);
+
+      final validFrom = HcpAccount.calculateMonthValidFrom();
+      final validTo = HcpAccount.calculateMonthValidTo();
+      final validityPeriod = HcpAccount.calculateMonthLabel();
+
       final accountData = HcpAccount(
         name: existingAccountName,
         accountName: program,
         territory: territory,
-        salesPerson: salesPerson ?? loggedInFullName ?? 'Jorge Mengorio',
+        salesPerson: effectiveSalesPerson,
         userId: userId ?? loggedInEmail ?? 'jptan@profinsights.biz',
         hcp: hcpId,
         hcpName: hcpFullName,
         specialties: specialties,
         workplaces: workplaces,
         contacts: contacts,
+        validFrom: validFrom,
+        validTo: validTo,
+        startDate: validFrom,
+        endDate: validTo,
+        validityPeriod: validityPeriod,
         isActive: true,
+        isArchived: false,
+        status: 'Active',
       );
 
       if (existingAccountName != null) {
@@ -1195,6 +1760,212 @@ class ApiService extends ChangeNotifier {
       }
     } catch (e) {
       print('Sync HCP Account error (non-fatal): $e');
+    }
+  }
+
+  /// Approve a pending HCP Profile Submission (Admin / Manager)
+  /// - If the doctor does not exist in the HCP global masterlist, creates the Doctor in HCP doctype.
+  /// - Syncs / creates the doctor's HCP Account for the specific program and representative.
+  /// - Updates submission in ERPNext: workflow_state = 'Approved', docstatus = 1, application_status = 'Applied'.
+  Future<void> approveSubmission(HcpProfileSubmission submission) async {
+    String effectiveHcpId = submission.hcpName;
+
+    // 1. If Doctor is new / not in masterlist, create new Doctor in HCP doctype
+    if (effectiveHcpId.isEmpty) {
+      try {
+        final newDoctor = Hcp(
+          firstName: submission.firstName ?? '',
+          middleName: submission.middleName ?? '',
+          lastName: submission.lastName ?? '',
+          birthDate: submission.birthDate ?? '',
+          hcpType: (submission.hcpType != null && submission.hcpType!.isNotEmpty) ? submission.hcpType! : 'Resident',
+          hcpPractice: (submission.hcpPractice != null && submission.hcpPractice!.isNotEmpty) ? submission.hcpPractice! : 'Both',
+          specialties: submission.specialties
+              .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+              .map((s) => HcpSpecialty(hcpSpecialty: s.hcpSpecialty!, subSpecialty: s.subSpecialty, isPrimary: s.preferred))
+              .toList(),
+          workplaces: submission.workplaces
+              .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+              .map((w) => HcpWorkplace(
+                    workplace: w.hcpWorkplace!,
+                    provinceName: w.provinceName,
+                    cityMunicipality: w.cityMunicipality,
+                    address: w.workplaceName,
+                    isPrimary: w.preferred,
+                  ))
+              .toList(),
+          contacts: submission.contacts
+              .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
+              .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
+              .toList(),
+          profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
+        );
+        final createdDoc = await createDoctor(newDoctor);
+        effectiveHcpId = createdDoc.name ?? '';
+      } catch (e) {
+        print('Error creating doctor during submission approval: $e');
+      }
+    } else {
+      // Existing doctor: ensure doctor master record is updated
+      try {
+        final existing = await fetchDoctorDetail(effectiveHcpId);
+        final updatedDoctor = Hcp(
+          name: existing.name,
+          firstName: (submission.firstName != null && submission.firstName!.isNotEmpty) ? submission.firstName! : existing.firstName,
+          middleName: (submission.middleName != null && submission.middleName!.isNotEmpty) ? submission.middleName : existing.middleName,
+          lastName: (submission.lastName != null && submission.lastName!.isNotEmpty) ? submission.lastName! : existing.lastName,
+          birthDate: (submission.birthDate != null && submission.birthDate!.isNotEmpty) ? submission.birthDate : existing.birthDate,
+          hcpType: submission.hcpType ?? existing.hcpType,
+          hcpPractice: submission.hcpPractice ?? existing.hcpPractice,
+          specialties: submission.specialties.isNotEmpty
+              ? submission.specialties.where((s) => s.hcpSpecialty != null).map((s) => HcpSpecialty(hcpSpecialty: s.hcpSpecialty!, subSpecialty: s.subSpecialty, isPrimary: s.preferred)).toList()
+              : existing.specialties,
+          workplaces: submission.workplaces.isNotEmpty
+              ? submission.workplaces.where((w) => w.hcpWorkplace != null).map((w) => HcpWorkplace(workplace: w.hcpWorkplace!, provinceName: w.provinceName, cityMunicipality: w.cityMunicipality, address: w.workplaceName, isPrimary: w.preferred)).toList()
+              : existing.workplaces,
+          contacts: submission.contacts.isNotEmpty
+              ? submission.contacts.where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)).map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred)).toList()
+              : existing.contacts,
+          profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
+        );
+        await updateDoctor(effectiveHcpId, updatedDoctor);
+      } catch (e) {
+        print('Error updating doctor during submission approval: $e');
+      }
+    }
+
+    // 2. Sync / Create HCP Account for the specific program and medrep
+    final docParts = [
+      if (submission.firstName != null && submission.firstName!.isNotEmpty) submission.firstName!,
+      if (submission.middleName != null && submission.middleName!.isNotEmpty && submission.middleName != '-') submission.middleName!,
+      if (submission.lastName != null && submission.lastName!.isNotEmpty) submission.lastName!,
+    ];
+    final docFullName = (submission.hcpFullName != null && submission.hcpFullName!.isNotEmpty)
+        ? submission.hcpFullName!
+        : (docParts.isNotEmpty ? docParts.join(' ') : '${submission.firstName ?? ''} ${submission.lastName ?? ''}'.trim());
+
+    await syncHcpAccount(
+      hcpId: effectiveHcpId.isNotEmpty ? effectiveHcpId : 'NEW-HCP',
+      hcpFullName: docFullName.isNotEmpty ? docFullName : 'Doctor',
+      program: (submission.accountOrProgram != null && submission.accountOrProgram!.isNotEmpty) ? submission.accountOrProgram! : selectedProgram,
+      territory: submission.territory ?? 'AD0110',
+      salesPerson: (submission.salesPerson != null && submission.salesPerson!.trim().isNotEmpty)
+          ? submission.salesPerson!.trim()
+          : getTerritoryManagerForTerritory(submission.territory ?? 'AD0110'),
+      userId: submission.userId ?? submission.medrepEmail ?? loggedInEmail,
+      specialties: submission.specialties
+          .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+          .map((s) => HcpAccountSpecialization(
+                hcpSpecialty: s.hcpSpecialty!,
+                subSpecialty: s.subSpecialty,
+                isPrimary: s.preferred,
+                preferred: s.preferred,
+              ))
+          .toList(),
+      workplaces: submission.workplaces
+          .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+          .map((w) => HcpAccountWorkplace(
+                hcpWorkplace: w.hcpWorkplace!,
+                cityMunicipality: w.cityMunicipality,
+                provinceName: w.provinceName,
+                address: w.workplaceName,
+                isPrimary: w.preferred,
+                preferred: w.preferred,
+              ))
+          .toList(),
+      contacts: submission.contacts
+          .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
+          .map((c) => HcpAccountContact(
+                contactNumber: c.contactNumber,
+                emailAddress: c.emailAddress,
+                isPrimary: c.preferred,
+                preferred: c.preferred,
+              ))
+          .toList(),
+    );
+
+    // 3. Update Submission docstatus and workflow state in ERPNext
+    if (submission.name != null && submission.name!.isNotEmpty) {
+      bool workflowApplied = false;
+      try {
+        final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+        final wfResp = await http.post(
+          wfUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'HCP Profile Submission',
+              'name': submission.name,
+              if (effectiveHcpId.isNotEmpty) 'hcp_name': effectiveHcpId,
+              'workflow_state': submission.workflowState ?? 'Draft',
+            },
+            'action': 'Approve',
+          }),
+        );
+        if (wfResp.statusCode == 200) {
+          workflowApplied = true;
+        }
+      } catch (_) {}
+
+      if (!workflowApplied) {
+        try {
+          final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submission.name!)}');
+          await http.put(
+            updateUrl,
+            headers: _headers,
+            body: jsonEncode({
+              if (effectiveHcpId.isNotEmpty) 'hcp_name': effectiveHcpId,
+              'workflow_state': 'Approved',
+              'docstatus': 1,
+              'application_status': 'Applied',
+              'status': 'Approved',
+            }),
+          );
+        } catch (e) {
+          print('Error updating submission status: $e');
+        }
+      }
+    }
+  }
+
+  /// Reject a pending HCP Profile Submission (Admin / Manager)
+  Future<void> rejectSubmission(String submissionName, {String remarks = ''}) async {
+    bool workflowApplied = false;
+    try {
+      final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+      final wfResp = await http.post(
+        wfUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'doc': {
+            'doctype': 'HCP Profile Submission',
+            'name': submissionName,
+          },
+          'action': 'Reject',
+        }),
+      );
+      if (wfResp.statusCode == 200) {
+        workflowApplied = true;
+      }
+    } catch (_) {}
+
+    if (!workflowApplied) {
+      final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submissionName)}');
+      try {
+        await http.put(
+          updateUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'workflow_state': 'Rejected',
+            'docstatus': 2,
+            'status': 'Rejected',
+            if (remarks.isNotEmpty) 'rejection_remarks': remarks,
+          }),
+        );
+      } catch (e) {
+        print('Error rejecting submission: $e');
+        rethrow;
+      }
     }
   }
 
@@ -1305,6 +2076,95 @@ class ApiService extends ChangeNotifier {
       print('Fetch HCP types error: $e');
       rethrow;
     }
+  }
+
+  List<TerritoryInfo> _territoryInfos = [];
+  List<TerritoryInfo> get territoryInfos => _territoryInfos;
+
+  /// Retrieve list of rich Territory Info with Territory Managers from ERPNext
+  Future<List<TerritoryInfo>> fetchTerritoryInfos() async {
+    final url = Uri.parse(
+      '$baseUrl/api/resource/Territory?fields=["name","territory_name","territory_manager","sales_person","manager"]&limit=500',
+    );
+    try {
+      final response = await http.get(url, headers: _headers);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final List<dynamic> dataList = body['data'] ?? [];
+        final List<TerritoryInfo> list = [];
+        for (var item in dataList) {
+          final tInfo = TerritoryInfo.fromJson(item);
+          if (tInfo.name.isNotEmpty && !list.any((t) => t.name == tInfo.name)) {
+            list.add(tInfo);
+          }
+        }
+        if (list.isNotEmpty) {
+          _territoryInfos = list;
+          return list;
+        }
+      }
+    } catch (e) {
+      print('Fetch territory infos error: $e');
+    }
+
+    final fallback = [
+      TerritoryInfo(name: 'AD0110', territoryName: 'AD0110 - Manila North', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'AD0120', territoryName: 'AD0120 - Manila South', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'AD0130', territoryName: 'AD0130 - North Luzon', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'AD0140', territoryName: 'AD0140 - South Luzon', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'AD0150', territoryName: 'AD0150 - VisMin', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'CORE01', territoryName: 'CORE01 - Central Operations', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'CORE02', territoryName: 'CORE02 - Regional Operations', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'NCR-01', territoryName: 'NCR-01 - District 1', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'NCR-02', territoryName: 'NCR-02 - District 2', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'All Territories', territoryName: 'All Territories', territoryManager: 'Jorge Mengorio'),
+    ];
+    _territoryInfos = fallback;
+    return fallback;
+  }
+
+  /// Get the assigned territory manager for a given territory code
+  String getTerritoryManagerForTerritory(String territoryCode) {
+    if (_territoryInfos.isEmpty) {
+      fetchTerritoryInfos(); // fire-and-forget population
+    }
+    final match = _territoryInfos.firstWhere(
+      (t) => t.name.toLowerCase() == territoryCode.toLowerCase() || t.territoryName.toLowerCase() == territoryCode.toLowerCase(),
+      orElse: () => TerritoryInfo(name: territoryCode, territoryName: territoryCode, territoryManager: 'Jorge Mengorio'),
+    );
+    return match.territoryManager.isNotEmpty ? match.territoryManager : 'Jorge Mengorio';
+  }
+
+  /// Retrieve list of Territories from ERPNext
+  Future<List<String>> fetchTerritories() async {
+    final infos = await fetchTerritoryInfos();
+    return infos.map((t) => t.name).toList();
+  }
+
+  /// Retrieve list of Programs / Branches from ERPNext
+  Future<List<String>> fetchPrograms() async {
+    try {
+      final branchUrl = Uri.parse('$baseUrl/api/resource/Branch?fields=["name","branch"]&limit=500');
+      final resp = await http.get(branchUrl, headers: _headers);
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        final List<dynamic> dataList = body['data'] ?? [];
+        final List<String> list = [];
+        for (var item in dataList) {
+          final name = (item['name'] ?? item['branch'] ?? '').toString();
+          if (name.isNotEmpty && !list.contains(name)) {
+            list.add(name);
+          }
+        }
+        if (list.isNotEmpty) {
+          availablePrograms = list;
+          return list;
+        }
+      }
+    } catch (e) {
+      print('Fetch programs error: $e');
+    }
+    return availablePrograms;
   }
 }
 

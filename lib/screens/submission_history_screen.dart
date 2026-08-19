@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/submission.dart';
-import '../models/hcp.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
 import 'hcp_wizard_screen.dart';
@@ -28,6 +27,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   final TextEditingController _typeFilterCtrl = TextEditingController();
   String _practiceFilter = 'All';
   String _statusFilter = 'All';
+  bool _onlyMySubmissions = true;
 
   @override
   void initState() {
@@ -49,8 +49,24 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
   }
 
-  List<HcpProfileSubmission> _getFilteredAndSortedSubmissions() {
+  List<HcpProfileSubmission> _getFilteredAndSortedSubmissions(ApiService apiService) {
     List<HcpProfileSubmission> list = List.from(_submissions);
+
+    if (apiService.isMedRep && _onlyMySubmissions) {
+      final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
+      final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
+      final mySubs = list.where((item) {
+        final sEmail = (item.medrepEmail ?? item.userId ?? '').toLowerCase().trim();
+        final sSales = (item.salesPerson ?? '').toLowerCase().trim();
+        if (sEmail.isNotEmpty && email.isNotEmpty && (sEmail == email || email.contains(sEmail) || sEmail.contains(email))) return true;
+        if (sSales.isNotEmpty && fullName.isNotEmpty && (sSales.contains(fullName) || fullName.contains(sSales))) return true;
+        return false;
+      }).toList();
+
+      if (mySubs.isNotEmpty) {
+        list = mySubs;
+      }
+    }
 
     if (_idFilterCtrl.text.trim().isNotEmpty) {
       final q = _idFilterCtrl.text.trim().toLowerCase();
@@ -248,6 +264,130 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     padding: const EdgeInsets.all(20),
                     child: _buildDetailTabContent(activeDetailTab, currentSub),
                   ),
+                ),
+
+                // Manager / Admin Approval Action Footer Bar
+                Builder(
+                  builder: (footerCtx) {
+                    final apiService = Provider.of<ApiService>(context, listen: false);
+                    final isPending = (currentSub.workflowState?.toLowerCase().contains('pend') ?? false) || currentSub.docstatus == 0;
+                    if (!(apiService.isAdmin || apiService.isManager) || !isPending) {
+                      return const SizedBox();
+                    }
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF18181B),
+                        border: Border(top: BorderSide(color: Color(0xFF27272A))),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFEF4444),
+                                side: const BorderSide(color: Color(0xFFEF4444)),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.close, size: 18),
+                              label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
+                              onPressed: () async {
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (dCtx) => AlertDialog(
+                                    backgroundColor: const Color(0xFF1C1C1E),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                    title: const Text('Reject Submission?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    content: const Text('Are you sure you want to reject this HCP Profile submission?', style: TextStyle(color: Colors.white70)),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.pop(dCtx, false),
+                                        child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+                                      ),
+                                      ElevatedButton(
+                                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                                        onPressed: () => Navigator.pop(dCtx, true),
+                                        child: const Text('Reject', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true && currentSub.name != null) {
+                                  try {
+                                    await apiService.rejectSubmission(currentSub.name!);
+                                    if (mounted) {
+                                      Navigator.pop(ctx);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          backgroundColor: Color(0xFFDC2626),
+                                          content: Text('HCP Profile Submission rejected.'),
+                                        ),
+                                      );
+                                      _loadSubmissions();
+                                    }
+                                  } catch (e) {
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Failed to reject: $e')),
+                                      );
+                                    }
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF16A34A),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                              label: const Text(
+                                'Approve & Sync Masterlist',
+                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                              ),
+                              onPressed: () async {
+                                try {
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (loadingCtx) => const Center(
+                                      child: CircularProgressIndicator(color: Color(0xFF16A34A)),
+                                    ),
+                                  );
+                                  await apiService.approveSubmission(currentSub);
+                                  if (mounted) {
+                                    Navigator.pop(context); // Close loading indicator
+                                    Navigator.pop(ctx); // Close detail modal
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        backgroundColor: Color(0xFF16A34A),
+                                        content: Text('Submission Approved! Doctor registered in Masterlist and synced to HCP Account.'),
+                                      ),
+                                    );
+                                    _loadSubmissions();
+                                  }
+                                } catch (e) {
+                                  if (mounted) {
+                                    Navigator.pop(context); // Close loading indicator
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to approve: $e')),
+                                    );
+                                  }
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -597,6 +737,18 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         final wpRemoved = changesMap != null && changesMap['workplaces'] is Map && changesMap['workplaces']['removed'] is List ? (changesMap['workplaces']['removed'] as List) : [];
         final contactAdded = changesMap != null && changesMap['contact_information'] is Map && changesMap['contact_information']['added'] is List ? (changesMap['contact_information']['added'] as List) : [];
         final contactRemoved = changesMap != null && changesMap['contact_information'] is Map && changesMap['contact_information']['removed'] is List ? (changesMap['contact_information']['removed'] as List) : [];
+        final bool isExistingDoc = submission.hcpName.isNotEmpty;
+        final bool hasRecordedChanges = basicInfoList.isNotEmpty ||
+            specAdded.isNotEmpty ||
+            specRemoved.isNotEmpty ||
+            wpAdded.isNotEmpty ||
+            wpRemoved.isNotEmpty ||
+            contactAdded.isNotEmpty ||
+            contactRemoved.isNotEmpty;
+
+        final doctorDisplay = (submission.hcpFullName != null && submission.hcpFullName!.isNotEmpty)
+            ? submission.hcpFullName!
+            : '${submission.firstName ?? ''} ${submission.lastName ?? ''}'.trim();
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -620,10 +772,42 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             ),
             const SizedBox(height: 16),
 
+            if (isExistingDoc && !hasRecordedChanges) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.check_circle_outline, color: Color(0xFF10B981), size: 24),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('No Changes Recorded', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Profile for $doctorDisplay was verified with zero field alterations against the master record.',
+                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // Basic Information Changes
-            const Text('Basic Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            if (basicInfoList.isNotEmpty)
+            if (basicInfoList.isNotEmpty) ...[
+              const Text('Basic Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               ...basicInfoList.map((b) => Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
                 child: Column(
@@ -634,168 +818,180 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     Text('From: "${b['old'] ?? ''}" → To: "${b['new'] ?? ''}"', style: const TextStyle(color: Colors.white, fontSize: 13)),
                   ],
                 ),
-              ))
-            else
+              )),
+              const SizedBox(height: 16),
+            ] else if (!isExistingDoc) ...[
+              const Text('New Doctor Registration', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text('Doctor: ${submission.firstName ?? ''} ${submission.lastName ?? ''} (${submission.hcpType ?? 'HCP Type'})', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                child: Text('Doctor: $doctorDisplay (${submission.hcpType ?? 'HCP Type'})', style: const TextStyle(color: Colors.white70, fontSize: 13)),
               ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
 
             // Specializations Changes
-            const Text('Specializations', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            if (specAdded.isNotEmpty) ...[
-              Row(
-                children: const [
-                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                  SizedBox(width: 6),
-                  Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...specAdded.map((s) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}${s['sub_specialty'] != null ? ', Sub: ${s['sub_specialty']}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              )),
-            ] else if (submission.specialties.isNotEmpty) ...[
-              Row(
-                children: const [
-                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                  SizedBox(width: 6),
-                  Text('Specialties Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...submission.specialties.map((s) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Specialty: ${s.specialtyName ?? s.hcpSpecialty ?? 'SPEC-00003'}${s.subSpecialty != null ? ', Sub: ${s.subSpecialty}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              )),
-            ] else ...[
-              const Padding(
-                padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('No specialization changes recorded.', style: TextStyle(color: Colors.white54, fontSize: 13)),
-              ),
-            ],
-            if (specRemoved.isNotEmpty) ...[
+            if (specAdded.isNotEmpty || specRemoved.isNotEmpty || (!isExistingDoc && submission.specialties.isNotEmpty)) ...[
+              const Text('Specializations', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Row(
-                children: const [
-                  Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444), size: 16),
-                  SizedBox(width: 6),
-                  Text('Removed', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...specRemoved.map((s) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
-              )),
+              if (specAdded.isNotEmpty) ...[
+                Row(
+                  children: const [
+                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                    SizedBox(width: 6),
+                    Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...specAdded.map((s) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}${s['sub_specialty'] != null ? ', Sub: ${s['sub_specialty']}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                )),
+              ] else if (!isExistingDoc && submission.specialties.isNotEmpty) ...[
+                Row(
+                  children: const [
+                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                    SizedBox(width: 6),
+                    Text('Specialties Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...submission.specialties.map((s) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('Specialty: ${s.specialtyName ?? s.hcpSpecialty ?? 'SPEC-00003'}${s.subSpecialty != null ? ', Sub: ${s.subSpecialty}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                )),
+              ],
+              if (specRemoved.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444), size: 16),
+                    SizedBox(width: 6),
+                    Text('Removed', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...specRemoved.map((s) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+                )),
+              ],
+              const SizedBox(height: 16),
             ],
-            const SizedBox(height: 16),
 
             // Workplaces Changes
-            const Text('Workplaces', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            if (wpAdded.isNotEmpty) ...[
-              Row(
-                children: const [
-                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                  SizedBox(width: 6),
-                  Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...wpAdded.map((w) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              )),
-            ] else if (submission.workplaces.isNotEmpty) ...[
-              Row(
-                children: const [
-                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                  SizedBox(width: 6),
-                  Text('Workplaces Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...submission.workplaces.map((w) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('${w.workplaceName ?? w.hcpWorkplace ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              )),
-            ] else ...[
-              const Padding(
-                padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('No workplace changes recorded.', style: TextStyle(color: Colors.white54, fontSize: 13)),
-              ),
-            ],
-            if (wpRemoved.isNotEmpty) ...[
+            if (wpAdded.isNotEmpty || wpRemoved.isNotEmpty || (!isExistingDoc && submission.workplaces.isNotEmpty)) ...[
+              const Text('Workplaces', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Row(
-                children: const [
-                  Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444), size: 16),
-                  SizedBox(width: 6),
-                  Text('Removed', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...wpRemoved.map((w) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
-              )),
+              if (wpAdded.isNotEmpty) ...[
+                Row(
+                  children: const [
+                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                    SizedBox(width: 6),
+                    Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...wpAdded.map((w) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                )),
+              ] else if (!isExistingDoc && submission.workplaces.isNotEmpty) ...[
+                Row(
+                  children: const [
+                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                    SizedBox(width: 6),
+                    Text('Workplaces Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...submission.workplaces.map((w) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('${w.workplaceName ?? w.hcpWorkplace ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                )),
+              ],
+              if (wpRemoved.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444), size: 16),
+                    SizedBox(width: 6),
+                    Text('Removed', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...wpRemoved.map((w) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+                )),
+              ],
+              const SizedBox(height: 16),
             ],
-            const SizedBox(height: 16),
 
             // Contact Information Changes
-            const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            if (contactAdded.isNotEmpty) ...[
-              Row(
-                children: const [
-                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                  SizedBox(width: 6),
-                  Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...contactAdded.map((c) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Contact No.: ${c['contact_number'] ?? 'N/A'}, Email: ${c['email_address'] ?? 'None'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              )),
-            ] else if (submission.contacts.isNotEmpty) ...[
-              Row(
-                children: const [
-                  Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                  SizedBox(width: 6),
-                  Text('Contacts Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                ],
-              ),
-              const SizedBox(height: 4),
-              ...submission.contacts.map((c) => Padding(
-                padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('Contact No.: ${c.contactNumber ?? 'N/A'}, Email: ${c.emailAddress ?? 'None'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              )),
-            ] else ...[
-              const Padding(
-                padding: EdgeInsets.only(left: 22.0, bottom: 4.0),
-                child: Text('No contact information changes recorded.', style: TextStyle(color: Colors.white54, fontSize: 13)),
-              ),
+            if (contactAdded.isNotEmpty || contactRemoved.isNotEmpty || (!isExistingDoc && submission.contacts.isNotEmpty)) ...[
+              const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              if (contactAdded.isNotEmpty) ...[
+                Row(
+                  children: const [
+                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                    SizedBox(width: 6),
+                    Text('Added', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...contactAdded.map((c) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('Contact No.: ${c['contact_number'] ?? "N/A"}, Email: ${c['email_address'] ?? "None"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                )),
+              ] else if (!isExistingDoc && submission.contacts.isNotEmpty) ...[
+                Row(
+                  children: const [
+                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
+                    SizedBox(width: 6),
+                    Text('Contacts Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...submission.contacts.map((c) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('Contact No.: ${c.contactNumber ?? "N/A"}, Email: ${c.emailAddress ?? "None"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                )),
+              ],
+              if (contactRemoved.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: const [
+                    Icon(Icons.remove_circle_outline, color: Color(0xFFEF4444), size: 16),
+                    SizedBox(width: 6),
+                    Text('Removed', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold, fontSize: 13)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                ...contactRemoved.map((c) => Padding(
+                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                  child: Text('Contact No.: ${c['contact_number'] ?? "N/A"}, Email: ${c['email_address'] ?? "None"}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+                )),
+              ],
+              const SizedBox(height: 16),
             ],
-            const SizedBox(height: 20),
 
-            const Text('Changes JSON', style: TextStyle(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 8),
+            const Text('Changes JSON', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFF27272A),
-                borderRadius: BorderRadius.circular(10),
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFF334155)),
               ),
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Text(
-                  submission.changesJson ?? '{}',
+                  const JsonEncoder.withIndent('  ').convert(parsedChanges ?? {}),
                   style: const TextStyle(color: Color(0xFF38BDF8), fontFamily: 'monospace', fontSize: 11),
                 ),
               ),
@@ -883,7 +1079,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     );
   }
 
-  Widget _buildFilterAndSortBar() {
+  Widget _buildFilterAndSortBar(ApiService apiService) {
     return Container(
       color: const Color(0xFF0B192C),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -907,6 +1103,42 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   });
                 },
               ),
+              if (apiService.isMedRep) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _onlyMySubmissions = !_onlyMySubmissions;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _onlyMySubmissions ? const Color(0xFF0066FF).withOpacity(0.2) : const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _onlyMySubmissions ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _onlyMySubmissions ? Icons.person_rounded : Icons.groups_rounded,
+                          size: 14,
+                          color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _onlyMySubmissions ? 'My Submissions' : 'All Scope',
+                          style: TextStyle(
+                            color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const Spacer(),
               IconButton(
                 style: IconButton.styleFrom(
@@ -1093,7 +1325,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final filteredList = _getFilteredAndSortedSubmissions();
+    final apiService = Provider.of<ApiService>(context);
+    final filteredList = _getFilteredAndSortedSubmissions(apiService);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -1111,16 +1344,51 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ),
         ),
         actions: [
+          // Role Badge
+          Container(
+            alignment: Alignment.center,
+            margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: apiService.isAdmin
+                  ? const Color(0xFFEF4444).withOpacity(0.25)
+                  : (apiService.isManager
+                      ? const Color(0xFFF59E0B).withOpacity(0.25)
+                      : const Color(0xFF0066FF).withOpacity(0.25)),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: apiService.isAdmin
+                    ? const Color(0xFFEF4444)
+                    : (apiService.isManager
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF38BDF8)),
+                width: 0.8,
+              ),
+            ),
+            child: Text(
+              apiService.userPositionTitle,
+              style: TextStyle(
+                color: apiService.isAdmin
+                    ? const Color(0xFFFCA5A5)
+                    : (apiService.isManager
+                        ? const Color(0xFFFCD34D)
+                        : const Color(0xFF93C5FD)),
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white),
             onPressed: _loadSubmissions,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       drawer: const AppDrawer(currentItem: DrawerItem.submissionsFact),
       body: Column(
         children: [
-          _buildFilterAndSortBar(),
+          _buildFilterAndSortBar(apiService),
 
           // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
           Container(

@@ -9,8 +9,6 @@ import 'components/app_drawer.dart';
 import 'doctor_masterlist_screen.dart';
 import 'doctor_account_screen.dart';
 import 'hcp_wizard_screen.dart';
-import 'submission_history_screen.dart';
-import 'self_service_qr_screen.dart';
 
 class HcpDashboardScreen extends StatefulWidget {
   const HcpDashboardScreen({Key? key}) : super(key: key);
@@ -270,9 +268,25 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final approvedSubmissions = _submissions.where((s) => s.docstatus == 1 || s.applicationStatus == 'Applied').length;
-    final syncRatePercent = _submissions.isNotEmpty
-        ? ((approvedSubmissions / _submissions.length) * 100).toStringAsFixed(0)
+    final apiService = Provider.of<ApiService>(context);
+
+    final mySubmissions = _submissions.where((s) {
+      final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
+      final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
+      final sEmail = (s.medrepEmail ?? s.userId ?? '').toLowerCase().trim();
+      final sSales = (s.salesPerson ?? '').toLowerCase().trim();
+      if (sEmail.isNotEmpty && email.isNotEmpty && (sEmail == email || email.contains(sEmail) || sEmail.contains(email))) return true;
+      if (sSales.isNotEmpty && fullName.isNotEmpty && (sSales.contains(fullName) || fullName.contains(sSales))) return true;
+      return false;
+    }).toList();
+
+    final effectiveSubmissions = (apiService.isMedRep && mySubmissions.isNotEmpty)
+        ? mySubmissions
+        : _submissions;
+
+    final approvedSubmissions = effectiveSubmissions.where((s) => s.docstatus == 1 || s.applicationStatus == 'Applied').length;
+    final syncRatePercent = effectiveSubmissions.isNotEmpty
+        ? ((approvedSubmissions / effectiveSubmissions.length) * 100).toStringAsFixed(0)
         : '100';
 
     return Scaffold(
@@ -289,6 +303,40 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
           ),
         ),
         actions: [
+          // Position Role Badge
+          Container(
+            alignment: Alignment.center,
+            margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: apiService.isAdmin
+                  ? const Color(0xFFEF4444).withOpacity(0.25)
+                  : (apiService.isManager
+                      ? const Color(0xFFF59E0B).withOpacity(0.25)
+                      : const Color(0xFF0066FF).withOpacity(0.25)),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: apiService.isAdmin
+                    ? const Color(0xFFEF4444)
+                    : (apiService.isManager
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF38BDF8)),
+                width: 0.8,
+              ),
+            ),
+            child: Text(
+              apiService.userPositionTitle,
+              style: TextStyle(
+                color: apiService.isAdmin
+                    ? const Color(0xFFFCA5A5)
+                    : (apiService.isManager
+                        ? const Color(0xFFFCD34D)
+                        : const Color(0xFF93C5FD)),
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white),
             tooltip: 'Refresh Dashboard',
@@ -312,12 +360,12 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Top Metric Summary Cards Row
-                    _buildMetricsRow(syncRatePercent),
+                    _buildMetricsRow(syncRatePercent, apiService, effectiveSubmissions),
 
                     const SizedBox(height: 20),
 
                     // Quick Action Hub
-                    _buildQuickActionHub(),
+                    _buildQuickActionHub(apiService),
 
                     const SizedBox(height: 20),
 
@@ -339,7 +387,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                                 ),
                               ),
                               const SizedBox(width: 16),
-                              Expanded(flex: 2, child: _buildRecentConsentLogsCard()),
+                              Expanded(flex: 2, child: _buildRecentConsentLogsCard(apiService, effectiveSubmissions)),
                             ],
                           );
                         } else {
@@ -349,7 +397,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                               const SizedBox(height: 16),
                               _buildDoctorsBySubSpecialtyCard(),
                               const SizedBox(height: 16),
-                              _buildRecentConsentLogsCard(),
+                              _buildRecentConsentLogsCard(apiService, effectiveSubmissions),
                             ],
                           );
                         }
@@ -371,12 +419,16 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
 
 
 
-  Widget _buildMetricsRow(String syncRatePercent) {
+  Widget _buildMetricsRow(String syncRatePercent, ApiService apiService, List<HcpProfileSubmission> effectiveSubmissions) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = constraints.maxWidth > 700
             ? (constraints.maxWidth - 36) / 4
             : (constraints.maxWidth - 12) / 2;
+
+        final submissionTitle = apiService.isMedRep ? 'MY SUBMISSIONS' : 'ACTIVE SUBMISSIONS';
+        final submissionSubtitle = apiService.isMedRep ? 'Personal Output' : 'SFE Field Force Synced';
+
         return Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -385,7 +437,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               width: cardWidth,
               title: 'TOTAL HCP DIRECTORY',
               value: '${_doctors.length}',
-              subtitle: 'Enterprise Snowflake Standard',
+              subtitle: apiService.isMedRep ? 'Directory Reference (View)' : 'Enterprise Snowflake Standard',
               icon: Icons.people_alt_rounded,
               iconColor: const Color(0xFF0066FF),
               accentColor: const Color(0xFF2563EB),
@@ -411,9 +463,9 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             ),
             _buildMetricCard(
               width: cardWidth,
-              title: 'ACTIVE SUBMISSIONS',
-              value: '${_submissions.length}',
-              subtitle: 'SFE Field Force Synced',
+              title: submissionTitle,
+              value: '${effectiveSubmissions.length}',
+              subtitle: submissionSubtitle,
               icon: Icons.assignment_turned_in_rounded,
               iconColor: const Color(0xFFF59E0B),
               accentColor: const Color(0xFFF59E0B),
@@ -516,7 +568,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     );
   }
 
-  Widget _buildQuickActionHub() {
+  Widget _buildQuickActionHub(ApiService apiService) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -539,64 +591,61 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
-              if (constraints.maxWidth < 500) {
+              final isNarrow = constraints.maxWidth < 600;
+              final buttons = [
+                _buildActionButton(
+                  icon: Icons.assignment_turned_in_rounded,
+                  label: 'HCP Profiling',
+                  subtitle: 'New Submission',
+                  color: const Color(0xFF10B981),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const HcpWizardScreen()),
+                    );
+                  },
+                ),
+                _buildActionButton(
+                  icon: Icons.groups_rounded,
+                  label: 'Doctor Listing',
+                  subtitle: apiService.isMedRep ? 'HCP (View Only)' : 'Manage & View HCPs',
+                  color: const Color(0xFF0066FF),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                    );
+                  },
+                ),
+                _buildActionButton(
+                  icon: Icons.account_box_rounded,
+                  label: 'Doctor Account',
+                  subtitle: apiService.isMedRep ? 'Accounts (View Only)' : 'Manage & View Accounts',
+                  color: const Color(0xFF8B5CF6),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
+                    );
+                  },
+                ),
+              ];
+
+              if (isNarrow) {
                 return Column(
                   children: [
-                    _buildActionButton(
-                      icon: Icons.groups_rounded,
-                      label: 'Doctor Listing',
-                      subtitle: 'HCP Masterlist',
-                      color: const Color(0xFF0066FF),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                        );
-                      },
-                    ),
+                    buttons[0],
                     const SizedBox(height: 10),
-                    _buildActionButton(
-                      icon: Icons.account_box_rounded,
-                      label: 'Doctor Account',
-                      subtitle: 'Program Coverage',
-                      color: const Color(0xFF0066FF),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
-                        );
-                      },
-                    ),
+                    buttons[1],
+                    const SizedBox(height: 10),
+                    buttons[2],
                   ],
                 );
               }
               return Row(
                 children: [
-                  Expanded(
-                    child: _buildActionButton(
-                      icon: Icons.groups_rounded,
-                      label: 'Doctor Listing',
-                      subtitle: 'HCP Masterlist',
-                      color: const Color(0xFF0066FF),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                        );
-                      },
-                    ),
-                  ),
+                  Expanded(child: buttons[0]),
                   const SizedBox(width: 10),
-                  Expanded(
-                    child: _buildActionButton(
-                      icon: Icons.account_box_rounded,
-                      label: 'Doctor Account',
-                      subtitle: 'Program Coverage',
-                      color: const Color(0xFF0066FF),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
-                        );
-                      },
-                    ),
-                  ),
+                  Expanded(child: buttons[1]),
+                  const SizedBox(width: 10),
+                  Expanded(child: buttons[2]),
                 ],
               );
             },
@@ -877,8 +926,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     );
   }
 
-  Widget _buildRecentConsentLogsCard() {
-    final recentSubs = _submissions.take(5).toList();
+  Widget _buildRecentConsentLogsCard(ApiService apiService, List<HcpProfileSubmission> effectiveSubmissions) {
+    final recentSubs = effectiveSubmissions.take(5).toList();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -891,15 +940,17 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            children: const [
-              Icon(Icons.history_rounded, color: Color(0xFF0B192C), size: 20),
-              SizedBox(width: 8),
-              Text(
-                'Recent Field Consent Logs',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF0F172A),
+            children: [
+              const Icon(Icons.history_rounded, color: Color(0xFF0B192C), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  apiService.isMedRep ? 'My Recent Consent Logs' : 'Recent Field Consent Logs',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ],
@@ -925,7 +976,6 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                     ? (item.specialties.first.specialtyName ?? item.specialties.first.hcpSpecialty ?? 'Specialty Pending')
                     : 'Specialty Pending';
                 final workflow = item.workflowState ?? item.status ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
-                final appStatus = item.applicationStatus ?? 'Not Applied';
 
                 Color statusBg;
                 final wLower = workflow.toLowerCase().trim();

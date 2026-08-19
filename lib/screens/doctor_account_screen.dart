@@ -5,6 +5,7 @@ import '../models/hcp.dart';
 import '../models/lookup_models.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
+import 'hcp_wizard_screen.dart';
 
 class DoctorAccountScreen extends StatefulWidget {
   const DoctorAccountScreen({Key? key}) : super(key: key);
@@ -27,6 +28,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
   String? _selectedTypeFilter;
   String? _selectedPracticeFilter;
   bool _onlyIsActive = false;
+  String _selectedCycleFilter = 'Current Month'; // 'Current Month', 'Archived / Past', 'All'
   String _sortBy = 'Name of Doctor';
   bool _isAscending = true;
 
@@ -101,7 +103,12 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
         final matchesPractice = _selectedPracticeFilter == null || _selectedPracticeFilter == 'All' || doc.hcpPractice == _selectedPracticeFilter;
         final matchesIsActive = !_onlyIsActive || doc.isActive;
 
-        return matchesId && matchesName && matchesType && matchesPractice && matchesIsActive;
+        final isCurrentMonth = acc.isCurrentMonthActive();
+        final matchesCycle = _selectedCycleFilter == 'All' ||
+            (_selectedCycleFilter == 'Current Month' && isCurrentMonth) ||
+            (_selectedCycleFilter == 'Archived / Past' && !isCurrentMonth);
+
+        return matchesId && matchesName && matchesType && matchesPractice && matchesIsActive && matchesCycle;
       }).toList();
 
       _filteredAccounts.sort((a, b) {
@@ -142,6 +149,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
 
     final doctorFullName = _getDoctorFullName(fullAccount);
     final hcpUniqueId = fullAccount.hcp ?? 'HCP-0000012';
+    final matchedDoctor = _getMatchedDoctor(fullAccount);
 
     showModalBottomSheet(
       context: context,
@@ -190,9 +198,17 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                     Row(
                       children: [
                         CircleAvatar(
-                          radius: 22,
+                          radius: 24,
                           backgroundColor: const Color(0xFF0066FF).withOpacity(0.2),
-                          child: const Icon(Icons.account_box_rounded, color: Color(0xFF38BDF8), size: 24),
+                          backgroundImage: (matchedDoctor.hcpPhoto != null && matchedDoctor.hcpPhoto!.isNotEmpty)
+                              ? NetworkImage(
+                                  apiService.formatFileUrl(matchedDoctor.hcpPhoto),
+                                  headers: apiService.authHeaders,
+                                )
+                              : null,
+                          child: (matchedDoctor.hcpPhoto == null || matchedDoctor.hcpPhoto!.isEmpty)
+                              ? const Icon(Icons.account_box_rounded, color: Color(0xFF38BDF8), size: 24)
+                              : null,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -225,7 +241,42 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                     const SizedBox(height: 10),
                     _buildReadonlyField('Territory/MR Code *', fullAccount.territory ?? 'AD0110', subtitle: 'Specify the territory or med rep code', isMandatory: true),
                     const SizedBox(height: 10),
-                    _buildReadonlyField('Territory Manager *', fullAccount.salesPerson ?? 'JORGE MENGORIO (AD0110)', isMandatory: true),
+                    _buildReadonlyField('Territory Manager *', (fullAccount.salesPerson != null && fullAccount.salesPerson!.isNotEmpty) ? fullAccount.salesPerson! : 'Jorge Mengorio', isMandatory: true),
+                    const SizedBox(height: 20),
+                    const Divider(color: Color(0xFF334155)),
+                    const SizedBox(height: 12),
+
+                    // MONTHLY VALIDITY & ARCHIVE STATUS
+                    const Text('MONTHLY VALIDITY & ARCHIVE STATUS', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                    const SizedBox(height: 10),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth >= 500;
+                        if (isWide) {
+                          return Row(
+                            children: [
+                              Expanded(child: _buildReadonlyField('Valid From (Start Date)', fullAccount.validFrom ?? HcpAccount.calculateMonthValidFrom())),
+                              const SizedBox(width: 12),
+                              Expanded(child: _buildReadonlyField('Valid To (End Date)', fullAccount.validTo ?? HcpAccount.calculateMonthValidTo())),
+                            ],
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildReadonlyField('Valid From (Start Date)', fullAccount.validFrom ?? HcpAccount.calculateMonthValidFrom()),
+                            const SizedBox(height: 10),
+                            _buildReadonlyField('Valid To (End Date)', fullAccount.validTo ?? HcpAccount.calculateMonthValidTo()),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    _buildReadonlyField(
+                      'Monthly Cycle Status',
+                      fullAccount.isCurrentMonthActive() ? 'Active (Current Month List)' : 'Archived / Expired',
+                      subtitle: 'Active list is maintained dynamically for the current month cycle (1st to last day)',
+                    ),
                     const SizedBox(height: 20),
                     const Divider(color: Color(0xFF334155)),
                     const SizedBox(height: 12),
@@ -261,111 +312,376 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                     const SizedBox(height: 12),
 
                     // SPECIALIZATION (Read-only)
-                    const Text('SPECIALIZATION', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF334155)),
-                      ),
-                      child: Column(
-                        children: [
+                    Row(
+                      children: [
+                        const Text('SPECIALIZATION', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        if (apiService.isMedRep) ...[
+                          const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            color: const Color(0xFF0F172A),
-                            child: Row(
-                              children: const [
-                                Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                                Expanded(child: Text('Sub-Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                              ],
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0066FF).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
                             ),
+                            child: const Text('MedRep Preferred', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
-                          if (fullAccount.specialties.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Expanded(child: Text('Family Medicine', style: TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                  Expanded(child: Text('Sports Medicine', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                ],
-                              ),
-                            )
-                          else
-                            ...fullAccount.specialties.map((s) => Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Expanded(child: Text(s.specialty, style: const TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                  Expanded(child: Text(s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                ],
-                              ),
-                            )),
                         ],
-                      ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (context) {
+                        final prefSpecs = fullAccount.specialties.where((s) => s.preferred || s.isPrimary).toList();
+                        final displaySpecs = (apiService.isMedRep && prefSpecs.isNotEmpty) ? prefSpecs : fullAccount.specialties;
+
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                color: const Color(0xFF0F172A),
+                                child: Row(
+                                  children: const [
+                                    Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    Expanded(child: Text('Sub-Specialty', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ),
+                              if (displaySpecs.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text('General Practice', style: TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('-', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                    ],
+                                  ),
+                                )
+                              else
+                                ...displaySpecs.map((s) {
+                                  final isPref = s.preferred || s.isPrimary;
+                                  return Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              if (isPref) ...[
+                                                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
+                                                const SizedBox(width: 4),
+                                              ],
+                                              Expanded(
+                                                child: Text(
+                                                  s.specialty,
+                                                  style: TextStyle(
+                                                    color: isPref ? const Color(0xFFFCD34D) : Colors.white,
+                                                    fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                                                    fontSize: 13,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (isPref && !apiService.isMedRep) ...[
+                                                const SizedBox(width: 4),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF59E0B).withOpacity(0.2),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                                  ),
+                                                  child: const Text('Preferred', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 9, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(child: Text(s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 20),
                     const Divider(color: Color(0xFF334155)),
                     const SizedBox(height: 12),
 
                     // WORKPLACE (Read-only)
-                    const Text('WORKPLACE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
-                    const SizedBox(height: 8),
-                    Container(
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E293B),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF334155)),
-                      ),
-                      child: Column(
-                        children: [
+                    Row(
+                      children: [
+                        const Text('WORKPLACE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        if (apiService.isMedRep) ...[
+                          const SizedBox(width: 8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            color: const Color(0xFF0F172A),
-                            child: Row(
-                              children: const [
-                                Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                                Expanded(child: Text('City / Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                              ],
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0066FF).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
                             ),
+                            child: const Text('MedRep Preferred', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold)),
                           ),
-                          if (fullAccount.workplaces.isEmpty)
-                            const Padding(
-                              padding: EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Expanded(child: Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                  Expanded(child: Text('Ermita, Metro Manila', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                ],
-                              ),
-                            )
-                          else
-                            ...fullAccount.workplaces.map((w) => Padding(
-                              padding: const EdgeInsets.all(12.0),
-                              child: Row(
-                                children: [
-                                  Expanded(child: Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                  Expanded(child: Text('${w.city ?? ""}${w.province != null ? ", " + w.province! : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                ],
-                              ),
-                            )),
                         ],
-                      ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (context) {
+                        final prefWorkplaces = fullAccount.workplaces.where((w) => w.preferred || w.isPrimary).toList();
+                        final displayWorkplaces = (apiService.isMedRep && prefWorkplaces.isNotEmpty) ? prefWorkplaces : fullAccount.workplaces;
+
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                color: const Color(0xFF0F172A),
+                                child: Row(
+                                  children: const [
+                                    Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    Expanded(child: Text('City / Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ),
+                              if (displayWorkplaces.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text('Manila Doctors Hospital', style: TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('Ermita, Metro Manila', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                    ],
+                                  ),
+                                )
+                              else
+                                ...displayWorkplaces.map((w) {
+                                  final isPref = w.preferred || w.isPrimary;
+                                  return Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              if (isPref) ...[
+                                                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
+                                                const SizedBox(width: 4),
+                                              ],
+                                              Expanded(
+                                                child: Text(
+                                                  w.workplace,
+                                                  style: TextStyle(
+                                                    color: isPref ? const Color(0xFFFCD34D) : Colors.white,
+                                                    fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                                                    fontSize: 13,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (isPref && !apiService.isMedRep) ...[
+                                                const SizedBox(width: 4),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF59E0B).withOpacity(0.2),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                                  ),
+                                                  child: const Text('Preferred', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 9, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(child: Text('${w.city ?? ""}${w.province != null ? ", " + w.province! : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(color: Color(0xFF334155)),
+                    const SizedBox(height: 12),
+
+                    // CONTACT INFORMATION (MOBILE & EMAIL)
+                    Row(
+                      children: [
+                        const Text('CONTACT INFORMATION', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        if (apiService.isMedRep) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0066FF).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Text('MedRep Preferred', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 10, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Builder(
+                      builder: (context) {
+                        final List<HcpAccountContact> rawContacts = fullAccount.contacts.isNotEmpty
+                            ? fullAccount.contacts
+                            : matchedDoctor.contacts
+                                .map((c) => HcpAccountContact(
+                                      contactNumber: c.contactNumber,
+                                      emailAddress: c.emailAddress,
+                                      isPrimary: c.isPrimary,
+                                      preferred: c.isPrimary,
+                                    ))
+                                .toList();
+                        final prefContacts = rawContacts.where((c) => c.preferred || c.isPrimary).toList();
+                        final displayContacts = (apiService.isMedRep && prefContacts.isNotEmpty) ? prefContacts : rawContacts;
+
+                        return Container(
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF334155)),
+                          ),
+                          child: Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                color: const Color(0xFF0F172A),
+                                child: Row(
+                                  children: const [
+                                    Expanded(child: Text('Contact Type', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    Expanded(child: Text('Contact Value', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ),
+                              if (displayContacts.isEmpty)
+                                const Padding(
+                                  padding: EdgeInsets.all(12.0),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: Text('Mobile', style: TextStyle(color: Colors.white, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('-', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                    ],
+                                  ),
+                                )
+                              else
+                                ...displayContacts.map((c) {
+                                  final isPref = c.preferred || c.isPrimary;
+                                  return Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              if (isPref) ...[
+                                                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
+                                                const SizedBox(width: 4),
+                                              ],
+                                              Expanded(
+                                                child: Text(
+                                                  c.contactType,
+                                                  style: TextStyle(
+                                                    color: isPref ? const Color(0xFFFCD34D) : Colors.white,
+                                                    fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                                                    fontSize: 13,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (isPref && !apiService.isMedRep) ...[
+                                                const SizedBox(width: 4),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFF59E0B).withOpacity(0.2),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                    border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                                  ),
+                                                  child: const Text('Preferred', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 9, fontWeight: FontWeight.bold)),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        Expanded(child: Text(c.contactValue, style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                      ],
+                                    ),
+                                  );
+                                }),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 24),
 
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF1E293B),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          side: const BorderSide(color: Color(0xFF334155)),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.white70,
+                              side: const BorderSide(color: Color(0xFF334155)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () => Navigator.pop(ctx),
+                            child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
                         ),
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Close Details', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0066FF),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            ),
+                            icon: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 20),
+                            label: const Text('Update HCP Profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                            onPressed: () async {
+                              Navigator.pop(ctx);
+                              final apiService = Provider.of<ApiService>(context, listen: false);
+                              Hcp docToProfile = matchedDoctor;
+                              if (fullAccount.hcp != null && fullAccount.hcp!.isNotEmpty) {
+                                try {
+                                  docToProfile = await apiService.fetchDoctorDetail(fullAccount.hcp!);
+                                } catch (_) {}
+                              }
+                              if (!mounted) return;
+                              final result = await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => HcpWizardScreen(doctor: docToProfile),
+                                ),
+                              );
+                              if (result == true) {
+                                _loadAccounts();
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -407,14 +723,128 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     );
   }
 
-  // --- ERPNext Filter Bar (Matching Image 1 & Image 2) ---
+  Widget _buildCycleFilterChip(String label, String value, IconData icon) {
+    final isSelected = _selectedCycleFilter == value;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedCycleFilter = value;
+          _applyFilters();
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF0066FF) : const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF38BDF8) : const Color(0xFF334155),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: isSelected ? Colors.white : const Color(0xFF94A3B8)),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? Colors.white : const Color(0xFFCBD5E1),
+                fontSize: 11.5,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // --- ERPNext Filter Bar (Darkish Blue #0B192C Theme) ---
   Widget _buildFilterAndSortBar() {
+    final currentMonthLabel = HcpAccount.calculateMonthLabel();
+    final validFromStr = HcpAccount.calculateMonthValidFrom();
+    final validToStr = HcpAccount.calculateMonthValidTo();
+
     return Container(
       color: const Color(0xFF0B192C),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Dynamic Monthly Validity Cycle Banner for HCP Account
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFF334155)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0066FF).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.date_range_rounded, color: Color(0xFF38BDF8), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Monthly Validity Cycle: $currentMonthLabel',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4), width: 0.8),
+                            ),
+                            child: const Text('ACTIVE CYCLE', style: TextStyle(color: Color(0xFF34D399), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Valid: $validFromStr to $validToStr • Dynamic month cycle (1st to last day)',
+                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Monthly Cycle Segment Filter Chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildCycleFilterChip('Current Month ($currentMonthLabel)', 'Current Month', Icons.calendar_month_rounded),
+                const SizedBox(width: 8),
+                _buildCycleFilterChip('Archived / Past Months', 'Archived / Past', Icons.archive_outlined),
+                const SizedBox(width: 8),
+                _buildCycleFilterChip('All Accounts', 'All', Icons.people_alt_outlined),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
           Row(
             children: [
               // Filter Toggle Button
@@ -634,8 +1064,8 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                       },
                       items: const [
                         DropdownMenuItem<String>(value: null, child: Text('All Practices')),
-                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
                         DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
                         DropdownMenuItem(value: 'Both', child: Text('Both')),
                       ],
                     ),
@@ -651,6 +1081,8 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final apiService = Provider.of<ApiService>(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
@@ -667,10 +1099,45 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
           ),
         ),
         actions: [
+          // Role Badge
+          Container(
+            alignment: Alignment.center,
+            margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: apiService.isAdmin
+                  ? const Color(0xFFEF4444).withOpacity(0.25)
+                  : (apiService.isManager
+                      ? const Color(0xFFF59E0B).withOpacity(0.25)
+                      : const Color(0xFF0066FF).withOpacity(0.25)),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: apiService.isAdmin
+                    ? const Color(0xFFEF4444)
+                    : (apiService.isManager
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF38BDF8)),
+                width: 0.8,
+              ),
+            ),
+            child: Text(
+              apiService.userPositionTitle,
+              style: TextStyle(
+                color: apiService.isAdmin
+                    ? const Color(0xFFFCA5A5)
+                    : (apiService.isManager
+                        ? const Color(0xFFFCD34D)
+                        : const Color(0xFF93C5FD)),
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh_rounded, color: Colors.white),
             onPressed: _loadAccounts,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       drawer: const AppDrawer(currentItem: DrawerItem.doctorAccount),
@@ -679,6 +1146,25 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
           : Column(
               children: [
                 _buildFilterAndSortBar(),
+
+                if (apiService.isMedRep)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    color: const Color(0xFF1E293B),
+                    child: Row(
+                      children: const [
+                        Icon(Icons.lock_outline_rounded, color: Color(0xFF38BDF8), size: 14),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'View-Only Mode (MedRep): Doctor account and territory assignments are read-only.',
+                            style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
                 // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
                 Container(
@@ -757,6 +1243,27 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                               final doctorFullName = _getDoctorFullName(item);
                               final typeLabel = _hcpTypes.firstWhere((t) => t.name == doc.hcpType, orElse: () => HcpType(name: doc.hcpType, typeName: doc.hcpType)).typeName;
 
+                              final prefAccWorkplaces = item.workplaces.where((w) => w.preferred || w.isPrimary).toList();
+                              String prefInstDisplay = '';
+                              if (prefAccWorkplaces.isNotEmpty) {
+                                prefInstDisplay = prefAccWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
+                              } else if (item.workplaces.isNotEmpty) {
+                                prefInstDisplay = item.workplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
+                              } else {
+                                final prefDocWorkplaces = doc.workplaces.where((w) => w.isPrimary).toList();
+                                if (prefDocWorkplaces.isNotEmpty) {
+                                  prefInstDisplay = prefDocWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
+                                } else if (doc.workplaces.isNotEmpty) {
+                                  prefInstDisplay = (doc.workplaces.first.address != null && doc.workplaces.first.address!.isNotEmpty)
+                                      ? doc.workplaces.first.address!
+                                      : doc.workplaces.first.workplace;
+                                } else if (doc.institution != null && doc.institution!.isNotEmpty) {
+                                  prefInstDisplay = doc.institution!;
+                                } else {
+                                  prefInstDisplay = '-';
+                                }
+                              }
+
                               return Container(
                                 decoration: const BoxDecoration(
                                   color: Colors.white,
@@ -768,13 +1275,43 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                     child: Row(
                                       children: [
-                                        // Name of Doctor
+                                        // Name of Doctor & Monthly Validity Badge
                                         Expanded(
                                           flex: 4,
-                                          child: Text(
-                                            doctorFullName,
-                                            style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
-                                            overflow: TextOverflow.ellipsis,
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                doctorFullName,
+                                                style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.1) : const Color(0xFF64748B).withOpacity(0.1),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                      border: Border.all(
+                                                        color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFCBD5E1),
+                                                        width: 0.6,
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      item.isCurrentMonthActive() ? (item.validityPeriod ?? HcpAccount.calculateMonthLabel()) : 'Archived',
+                                                      style: TextStyle(
+                                                        color: item.isCurrentMonthActive() ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                                        fontSize: 9.5,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
                                           ),
                                         ),
                                         // Is Active Check Icon
@@ -793,7 +1330,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                         Expanded(
                                           flex: 3,
                                           child: Text(
-                                            (doc.institution != null && doc.institution!.isNotEmpty) ? doc.institution! : 'Manila Doctors Hospital',
+                                            prefInstDisplay,
                                             style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
                                             overflow: TextOverflow.ellipsis,
                                           ),

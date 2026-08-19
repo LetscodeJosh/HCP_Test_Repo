@@ -44,12 +44,45 @@ class Hcp {
   });
 
   factory Hcp.fromJson(Map<String, dynamic> json) {
+    final fn = (json['first_name'] ?? '').toString().trim();
+    final mn = json['middle_name'];
+    final ln = (json['last_name'] ?? '').toString().trim();
+
+    final parts = [
+      if (fn.isNotEmpty) fn,
+      if (mn != null && mn.toString().trim().isNotEmpty && mn.toString().trim() != '-') mn.toString().trim(),
+      if (ln.isNotEmpty) ln,
+    ];
+    final computedFromParts = parts.join(' ');
+
+    final rawName = json['name_of_doctor'] ?? json['doctor_name'] ?? json['hcp_full_name'] ?? json['full_name'] ?? json['hcp_name'];
+    String finalFullName = '';
+    if (rawName != null && rawName.toString().trim().isNotEmpty && !rawName.toString().trim().startsWith('HCP-')) {
+      finalFullName = rawName.toString().trim();
+    } else if (computedFromParts.isNotEmpty) {
+      finalFullName = computedFromParts;
+    } else {
+      finalFullName = (json['name'] ?? '').toString();
+    }
+
+    String effectiveFn = fn;
+    String effectiveLn = ln;
+    if (effectiveFn.isEmpty && effectiveLn.isEmpty && finalFullName.isNotEmpty && !finalFullName.startsWith('HCP-')) {
+      final split = finalFullName.split(' ');
+      if (split.length == 1) {
+        effectiveFn = split.first;
+      } else {
+        effectiveFn = split.first;
+        effectiveLn = split.sublist(1).join(' ');
+      }
+    }
+
     return Hcp(
       name: json['name'],
-      hcpFullName: json['hcp_full_name'] ?? json['full_name'],
-      firstName: json['first_name'] ?? '',
-      middleName: json['middle_name'],
-      lastName: json['last_name'] ?? '',
+      hcpFullName: finalFullName,
+      firstName: effectiveFn,
+      middleName: mn,
+      lastName: effectiveLn,
       birthDate: json['birth_date'],
       hcpPhoto: json['hcp_photo'],
       hcpType: json['hcp_type'] ?? '',
@@ -75,12 +108,26 @@ class Hcp {
   }
 
   Map<String, dynamic> toJson() {
+    final computedParts = [
+      if (firstName.trim().isNotEmpty) firstName.trim(),
+      if (middleName != null && middleName!.trim().isNotEmpty && middleName!.trim() != '-') middleName!.trim(),
+      if (lastName.trim().isNotEmpty) lastName.trim(),
+    ].join(' ');
+
+    final computedFullName = (hcpFullName != null && hcpFullName!.trim().isNotEmpty && !hcpFullName!.trim().startsWith('HCP-'))
+        ? hcpFullName!.trim()
+        : (computedParts.isNotEmpty ? computedParts : '${firstName.trim()} ${lastName.trim()}'.trim());
+
     return {
       if (name != null) 'name': name,
-      'first_name': firstName,
-      if (middleName != null) 'middle_name': middleName,
-      'last_name': lastName,
-      if (hcpFullName != null) 'hcp_full_name': hcpFullName,
+      'first_name': firstName.trim(),
+      if (middleName != null && middleName!.trim().isNotEmpty) 'middle_name': middleName!.trim(),
+      'last_name': lastName.trim(),
+      'hcp_full_name': computedFullName,
+      'full_name': computedFullName,
+      'doctor_name': computedFullName,
+      'hcp_name': computedFullName,
+      'name_of_doctor': computedFullName,
       if (birthDate != null) 'birth_date': birthDate,
       if (hcpPhoto != null) 'hcp_photo': hcpPhoto,
       'hcp_type': hcpType,
@@ -103,16 +150,19 @@ class Hcp {
 class HcpSpecialty {
   final String hcpSpecialty; // Link -> Specialization
   final String? subSpecialty; // Link -> Specialization
+  final bool isPrimary;
 
   HcpSpecialty({
     required this.hcpSpecialty,
     this.subSpecialty,
+    this.isPrimary = false,
   });
 
   factory HcpSpecialty.fromJson(Map<String, dynamic> json) {
     return HcpSpecialty(
       hcpSpecialty: json['hcp_specialty'] ?? json['specialty'] ?? json['specialty_name'] ?? '',
       subSpecialty: json['sub_specialty'] ?? json['sub_specialty_name'],
+      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true,
     );
   }
 
@@ -120,6 +170,8 @@ class HcpSpecialty {
     return {
       'hcp_specialty': hcpSpecialty,
       if (subSpecialty != null) 'sub_specialty': subSpecialty,
+      'is_primary': isPrimary ? 1 : 0,
+      'preferred': isPrimary ? 1 : 0,
     };
   }
 }
@@ -145,7 +197,7 @@ class HcpWorkplace {
       provinceName: json['province_name'] ?? json['province'],
       cityMunicipality: json['city_municipality'] ?? json['city'],
       address: json['address'] ?? json['workplace_name'],
-      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true,
+      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true,
     );
   }
 
@@ -156,6 +208,7 @@ class HcpWorkplace {
       if (cityMunicipality != null) 'city_municipality': cityMunicipality,
       if (address != null) 'address': address,
       'is_primary': isPrimary ? 1 : 0,
+      'preferred': isPrimary ? 1 : 0,
     };
   }
 }
@@ -163,16 +216,18 @@ class HcpWorkplace {
 class HcpContact {
   final String? contactNumber;
   final String? emailAddress;
+  final bool isPrimary;
 
   // Compatibility getters for legacy references
   String get contactValue => contactNumber ?? emailAddress ?? '';
   String get contactType => (emailAddress != null && emailAddress!.isNotEmpty) ? 'Email' : 'Mobile';
 
   HcpContact({
-    this.contactNumber,
-    this.emailAddress,
+    String? contactNumber,
+    String? emailAddress,
     String? contactType,
     String? contactValue,
+    this.isPrimary = false,
   }) : this.contactNumber = contactNumber ?? (contactType == 'Email' ? null : contactValue),
        this.emailAddress = emailAddress ?? (contactType == 'Email' ? contactValue : null);
 
@@ -190,9 +245,12 @@ class HcpContact {
       }
     }
 
+    final pref = json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true;
+
     return HcpContact(
       contactNumber: num,
       emailAddress: email,
+      isPrimary: pref,
     );
   }
 
@@ -200,6 +258,8 @@ class HcpContact {
     return {
       if (contactNumber != null) 'contact_number': contactNumber,
       if (emailAddress != null) 'email_address': emailAddress,
+      'is_primary': isPrimary ? 1 : 0,
+      'preferred': isPrimary ? 1 : 0,
     };
   }
 }

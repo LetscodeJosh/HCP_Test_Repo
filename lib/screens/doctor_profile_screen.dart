@@ -70,11 +70,19 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final doctor = _fullDoctor ?? widget.doctor;
+    final nameParts = [
+      if (doctor.firstName.trim().isNotEmpty) doctor.firstName.trim(),
+      if (doctor.middleName != null && doctor.middleName!.trim().isNotEmpty && doctor.middleName!.trim() != '-') doctor.middleName!.trim(),
+      if (doctor.lastName.trim().isNotEmpty) doctor.lastName.trim(),
+    ].join(' ');
+    final displayDocName = (doctor.hcpFullName != null && doctor.hcpFullName!.trim().isNotEmpty && !doctor.hcpFullName!.startsWith('HCP-'))
+        ? doctor.hcpFullName!.trim()
+        : (nameParts.isNotEmpty ? nameParts : (doctor.name ?? 'Doctor'));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
       appBar: AppBar(
-        title: Text('Dr. ${doctor.firstName} ${doctor.lastName}'),
+        title: Text(displayDocName.startsWith('Dr.') ? displayDocName : 'Dr. $displayDocName'),
         backgroundColor: const Color(0xFF0056B3),
         foregroundColor: Colors.white,
         elevation: 0,
@@ -149,6 +157,16 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   }
 
   Widget _buildHeaderCard(Hcp doctor) {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final nameParts = [
+      if (doctor.firstName.trim().isNotEmpty) doctor.firstName.trim(),
+      if (doctor.middleName != null && doctor.middleName!.trim().isNotEmpty && doctor.middleName!.trim() != '-') doctor.middleName!.trim(),
+      if (doctor.lastName.trim().isNotEmpty) doctor.lastName.trim(),
+    ].join(' ');
+    final displayDocName = (doctor.hcpFullName != null && doctor.hcpFullName!.trim().isNotEmpty && !doctor.hcpFullName!.startsWith('HCP-'))
+        ? doctor.hcpFullName!.trim()
+        : (nameParts.isNotEmpty ? nameParts : (doctor.name ?? 'Doctor'));
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
@@ -179,7 +197,17 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.white.withOpacity(0.3)),
               ),
-              child: const Icon(Icons.person, color: Colors.white, size: 36),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(20),
+                child: (doctor.hcpPhoto != null && doctor.hcpPhoto!.isNotEmpty)
+                    ? Image.network(
+                        apiService.formatFileUrl(doctor.hcpPhoto),
+                        headers: apiService.authHeaders,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Colors.white, size: 36),
+                      )
+                    : const Icon(Icons.person, color: Colors.white, size: 36),
+              ),
             ),
             const SizedBox(width: 16),
             // Doctor Info
@@ -188,7 +216,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Dr. ${doctor.firstName} ${doctor.lastName}',
+                    displayDocName.startsWith('Dr.') ? displayDocName : 'Dr. $displayDocName',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -296,170 +324,264 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   }
 
   Widget _buildSpecialtiesTable(Hcp doctor) {
-    if (doctor.specialties.isEmpty) {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final isMedRep = apiService.isMedRep;
+    final preferredList = doctor.specialties.where((s) => s.isPrimary).toList();
+    final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.specialties;
+
+    if (displayList.isEmpty) {
       return const Text(
         'No specialties declared.',
         style: TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
       );
     }
     return Column(
-      children: doctor.specialties.map((s) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Icon(Icons.circle, size: 8, color: Color(0xFF5856D6)),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      s.hcpSpecialty,
-                      style: const TextStyle(
-                        color: Color(0xFF1C1C1E),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty)
-                      Text(
-                        'Sub-specialty: ${s.subSpecialty}',
-                        style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
-                      ),
-                  ],
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (isMedRep && preferredList.isNotEmpty && preferredList.length < doctor.specialties.length)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Row(
+              children: [
+                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'Showing ${preferredList.length} preferred specialization(s) for your account',
+                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        );
-      }).toList(),
+        ...displayList.map((s) {
+          final isPref = s.isPrimary;
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(isPref ? Icons.star_rounded : Icons.circle, size: isPref ? 16 : 8, color: isPref ? const Color(0xFFF59E0B) : const Color(0xFF5856D6)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              s.hcpSpecialty,
+                              style: TextStyle(
+                                color: const Color(0xFF1C1C1E),
+                                fontSize: 14,
+                                fontWeight: isPref ? FontWeight.bold : FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (isPref && !isMedRep)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF59E0B).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.bold)),
+                            ),
+                        ],
+                      ),
+                      if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty)
+                        Text(
+                          'Sub-specialty: ${s.subSpecialty}',
+                          style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 
   Widget _buildWorkplacesTable(Hcp doctor) {
-    if (doctor.workplaces.isEmpty) {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final isMedRep = apiService.isMedRep;
+    final preferredList = doctor.workplaces.where((w) => w.isPrimary).toList();
+    final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.workplaces;
+
+    if (displayList.isEmpty) {
       return const Text(
         'No workplaces linked.',
         style: TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
       );
     }
     return Column(
-      children: doctor.workplaces.map((w) {
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF4F6F9),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE5E5EA)),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (isMedRep && preferredList.isNotEmpty && preferredList.length < doctor.workplaces.length)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Row(
+              children: [
+                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'Showing ${preferredList.length} preferred hospital(s)/clinic(s) for your account',
+                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
+                ),
+              ],
+            ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                Icons.local_hospital,
-                color: w.isPrimary ? const Color(0xFF34C759) : const Color(0xFF8E8E93),
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      w.workplace,
-                      style: const TextStyle(
-                        color: Color(0xFF1C1C1E),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (w.address != null && w.address!.isNotEmpty)
+        ...displayList.map((w) {
+          final isPref = w.isPrimary;
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: isPref ? const Color(0xFFF0FDF4) : const Color(0xFFF4F6F9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: isPref ? const Color(0xFF86EFAC) : const Color(0xFFE5E5EA)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.local_hospital,
+                  color: isPref ? const Color(0xFF16A34A) : const Color(0xFF8E8E93),
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        w.address!,
-                        style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
+                        w.workplace,
+                        style: TextStyle(
+                          color: const Color(0xFF1C1C1E),
+                          fontSize: 14,
+                          fontWeight: isPref ? FontWeight.bold : FontWeight.w600,
+                        ),
                       ),
-                  ],
-                ),
-              ),
-              if (w.isPrimary)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF34C759).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
+                      if (w.address != null && w.address!.isNotEmpty)
+                        Text(
+                          w.address!,
+                          style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
+                        ),
+                    ],
                   ),
-                  child: const Text(
-                    'Primary',
-                    style: TextStyle(
-                      color: Color(0xFF34C759),
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
+                ),
+                if (isPref)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF34C759).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'Preferred',
+                      style: TextStyle(
+                        color: Color(0xFF16A34A),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
-                ),
-            ],
-          ),
-        );
-      }).toList(),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 
   Widget _buildContactsTable(Hcp doctor) {
-    if (doctor.contacts.isEmpty) {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final isMedRep = apiService.isMedRep;
+    final preferredList = doctor.contacts.where((c) => c.isPrimary).toList();
+    final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.contacts;
+
+    if (displayList.isEmpty) {
       return const Text(
         'No contact information listed.',
         style: TextStyle(color: Color(0xFF8E8E93), fontSize: 14),
       );
     }
     return Column(
-      children: doctor.contacts.map((c) {
-        IconData contactIcon;
-        switch (c.contactType.toLowerCase()) {
-          case 'mobile':
-          case 'cell':
-            contactIcon = Icons.phone_android;
-            break;
-          case 'email':
-            contactIcon = Icons.email;
-            break;
-          case 'telephone':
-          case 'phone':
-            contactIcon = Icons.phone;
-            break;
-          default:
-            contactIcon = Icons.contact_page;
-        }
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: [
-              Icon(contactIcon, color: const Color(0xFFFF9500), size: 18),
-              const SizedBox(width: 10),
-              Text(
-                '${c.contactType}: ',
-                style: const TextStyle(
-                  color: Color(0xFF636366),
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (isMedRep && preferredList.isNotEmpty && preferredList.length < doctor.contacts.length)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0),
+            child: Row(
+              children: [
+                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                const SizedBox(width: 4),
+                Text(
+                  'Showing ${preferredList.length} preferred contact(s) for your account',
+                  style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
                 ),
-              ),
-              Expanded(
-                child: Text(
-                  c.contactValue,
+              ],
+            ),
+          ),
+        ...displayList.map((c) {
+          final isPref = c.isPrimary;
+          IconData contactIcon;
+          switch (c.contactType.toLowerCase()) {
+            case 'mobile':
+            case 'cell':
+              contactIcon = Icons.phone_android;
+              break;
+            case 'email':
+              contactIcon = Icons.email;
+              break;
+            case 'telephone':
+            case 'phone':
+              contactIcon = Icons.phone;
+              break;
+            default:
+              contactIcon = Icons.contact_page;
+          }
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Icon(contactIcon, color: isPref ? const Color(0xFFD97706) : const Color(0xFFFF9500), size: 18),
+                const SizedBox(width: 10),
+                Text(
+                  '${c.contactType}: ',
                   style: const TextStyle(
-                    color: Color(0xFF1C1C1E),
+                    color: Color(0xFF636366),
                     fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              ),
-            ],
-          ),
-        );
-      }).toList(),
+                Expanded(
+                  child: Text(
+                    c.contactValue,
+                    style: TextStyle(
+                      color: const Color(0xFF1C1C1E),
+                      fontSize: 14,
+                      fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                ),
+                if (isPref)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text('Preferred', style: TextStyle(color: Color(0xFFD97706), fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ],
     );
   }
 

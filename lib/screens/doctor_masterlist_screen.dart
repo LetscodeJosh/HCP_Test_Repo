@@ -1,5 +1,7 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../models/hcp.dart';
 import '../models/lookup_models.dart';
 import '../models/hcp_account.dart';
@@ -362,6 +364,15 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     const SizedBox(height: 12),
                     LayoutBuilder(
                       builder: (context, constraints) {
+                        final apiService = Provider.of<ApiService>(context, listen: false);
+                        final isMedRep = apiService.isMedRep;
+
+                        final prefWorkplaces = fullDoctor.workplaces.where((w) => w.isPrimary).toList();
+                        final displayWorkplaces = (isMedRep && prefWorkplaces.isNotEmpty) ? prefWorkplaces : fullDoctor.workplaces;
+
+                        final prefContacts = fullDoctor.contacts.where((c) => c.isPrimary).toList();
+                        final displayContacts = (isMedRep && prefContacts.isNotEmpty) ? prefContacts : fullDoctor.contacts;
+
                         final workplacesWidget = Container(
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E293B),
@@ -374,35 +385,68 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 color: const Color(0xFF0F172A),
                                 child: Row(
-                                  children: const [
-                                    Expanded(flex: 2, child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                                    Expanded(child: Text('City', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                                    SizedBox(width: 4),
-                                    Expanded(child: Text('Province', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  children: [
+                                    const Expanded(flex: 2, child: Text('Workplace', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    const Expanded(child: Text('City / Address', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    if (isMedRep)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0066FF).withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text('Preferred', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold)),
+                                      ),
                                   ],
                                 ),
                               ),
-                              if (fullDoctor.workplaces.isNotEmpty)
-                                ...fullDoctor.workplaces.map((w) => Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      child: Row(
-                                        children: [
-                                          Expanded(flex: 2, child: Text(w.workplace, style: const TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
-                                          Expanded(child: Text(w.address ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                              if (displayWorkplaces.isNotEmpty)
+                                ...displayWorkplaces.map((w) {
+                                  final isPref = w.isPrimary;
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    child: Row(
+                                      children: [
+                                        if (isPref) ...[
+                                          const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
                                           const SizedBox(width: 4),
-                                          const Expanded(child: Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
                                         ],
-                                      ),
-                                    ))
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            w.workplace,
+                                            style: TextStyle(
+                                              color: isPref ? const Color(0xFFFCD34D) : Colors.white,
+                                              fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                                              fontSize: 11,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Expanded(child: Text(w.address ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                        if (isPref && !isMedRep) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF59E0B).withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                            ),
+                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 8.5, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                })
                               else
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                   child: Row(
-                                    children: const [
-                                      Expanded(flex: 2, child: Text('Metro Cavite Health ...', style: TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
-                                      Expanded(child: Text('', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
-                                      SizedBox(width: 4),
-                                      Expanded(child: Text('Cavite', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                    children: [
+                                      Expanded(flex: 2, child: Text('No workplace assigned', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('-', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
                                     ],
                                   ),
                                 ),
@@ -422,29 +466,67 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 color: const Color(0xFF0F172A),
                                 child: Row(
-                                  children: const [
-                                    Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                                    Expanded(child: Text('Email Address', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                  children: [
+                                    const Expanded(child: Text('Contact Value', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    const Expanded(child: Text('Type', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
+                                    if (isMedRep)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF0066FF).withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text('Preferred', style: TextStyle(color: Color(0xFF38BDF8), fontSize: 9, fontWeight: FontWeight.bold)),
+                                      ),
                                   ],
                                 ),
                               ),
-                              if (fullDoctor.contacts.isNotEmpty)
-                                ...fullDoctor.contacts.map((c) => Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                      child: Row(
-                                        children: [
-                                          Expanded(child: Text(c.contactValue, style: const TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
-                                          Expanded(child: Text(c.contactType, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                              if (displayContacts.isNotEmpty)
+                                ...displayContacts.map((c) {
+                                  final isPref = c.isPrimary;
+                                  return Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                    child: Row(
+                                      children: [
+                                        if (isPref) ...[
+                                          const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
+                                          const SizedBox(width: 4),
                                         ],
-                                      ),
-                                    ))
+                                        Expanded(
+                                          child: Text(
+                                            c.contactValue,
+                                            style: TextStyle(
+                                              color: isPref ? const Color(0xFFFCD34D) : Colors.white,
+                                              fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                                              fontSize: 11,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Expanded(child: Text(c.contactType, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                        if (isPref && !isMedRep) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFF59E0B).withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                            ),
+                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 8.5, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                })
                               else
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                   child: Row(
-                                    children: const [
-                                      Expanded(child: Text('1234567890', style: TextStyle(color: Colors.white, fontSize: 11), overflow: TextOverflow.ellipsis)),
-                                      Expanded(child: Text('email@email.com', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                    children: [
+                                      Expanded(child: Text('-', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                      Expanded(child: Text('-', style: TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
                                     ],
                                   ),
                                 ),
@@ -533,144 +615,249 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     String selectedPractice = 'Both';
     String? selectedSpecialty = _specializations.isNotEmpty ? _specializations.first.name : null;
     String? selectedWorkplace = _institutions.isNotEmpty ? _institutions.first.name : null;
+    Uint8List? docPhotoBytes;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Register New Doctor (HCP)', style: TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(
-          child: Form(
-            key: formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextFormField(
-                  style: const TextStyle(color: Color(0xFF1C1C1E)),
-                  decoration: const InputDecoration(
-                    labelText: 'First Name *',
-                    labelStyle: TextStyle(color: Color(0xFF636366)),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Register New Doctor (HCP)', style: TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Photo Box
+                  Center(
+                    child: InkWell(
+                      onTap: () async {
+                        showModalBottomSheet(
+                          context: context,
+                          backgroundColor: Colors.white,
+                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                          builder: (bCtx) => SafeArea(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Padding(
+                                  padding: EdgeInsets.all(16.0),
+                                  child: Text('Doctor Profile Photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFF0056B3)),
+                                  title: const Text('Take Photo with Camera'),
+                                  onTap: () async {
+                                    Navigator.pop(bCtx);
+                                    final picker = ImagePicker();
+                                    final img = await picker.pickImage(source: ImageSource.camera, maxWidth: 800, maxHeight: 800, imageQuality: 85);
+                                    if (img != null) {
+                                      final bytes = await img.readAsBytes();
+                                      setDialogState(() => docPhotoBytes = bytes);
+                                    }
+                                  },
+                                ),
+                                ListTile(
+                                  leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF0056B3)),
+                                  title: const Text('Upload from Gallery'),
+                                  onTap: () async {
+                                    Navigator.pop(bCtx);
+                                    final picker = ImagePicker();
+                                    final img = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, maxHeight: 800, imageQuality: 85);
+                                    if (img != null) {
+                                      final bytes = await img.readAsBytes();
+                                      setDialogState(() => docPhotoBytes = bytes);
+                                    }
+                                  },
+                                ),
+                                if (docPhotoBytes != null)
+                                  ListTile(
+                                    leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),
+                                    title: const Text('Remove Photo', style: TextStyle(color: Color(0xFFDC2626))),
+                                    onTap: () {
+                                      Navigator.pop(bCtx);
+                                      setDialogState(() => docPhotoBytes = null);
+                                    },
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        width: 76,
+                        height: 76,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: docPhotoBytes != null ? const Color(0xFF0056B3) : const Color(0xFFCBD5E1), width: docPhotoBytes != null ? 2 : 1),
+                        ),
+                        child: docPhotoBytes != null
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(10),
+                                child: Image.memory(docPhotoBytes!, width: 76, height: 76, fit: BoxFit.cover),
+                              )
+                            : Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: const [
+                                  Icon(Icons.add_a_photo_rounded, color: Color(0xFF0056B3), size: 22),
+                                  SizedBox(height: 4),
+                                  Text('Add Photo', style: TextStyle(color: Color(0xFF0056B3), fontSize: 10, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                      ),
+                    ),
                   ),
-                  validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                  onSaved: (val) => firstName = val!,
-                ),
-                TextFormField(
-                  style: const TextStyle(color: Color(0xFF1C1C1E)),
-                  decoration: const InputDecoration(
-                    labelText: 'Middle Name *',
-                    labelStyle: TextStyle(color: Color(0xFF636366)),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    style: const TextStyle(color: Color(0xFF1C1C1E)),
+                    decoration: const InputDecoration(
+                      labelText: 'First Name *',
+                      labelStyle: TextStyle(color: Color(0xFF636366)),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                    ),
+                    validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                    onSaved: (val) => firstName = val!,
                   ),
-                  onSaved: (val) => middleName = val ?? '',
-                ),
-                TextFormField(
-                  style: const TextStyle(color: Color(0xFF1C1C1E)),
-                  decoration: const InputDecoration(
-                    labelText: 'Last Name *',
-                    labelStyle: TextStyle(color: Color(0xFF636366)),
-                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                  TextFormField(
+                    style: const TextStyle(color: Color(0xFF1C1C1E)),
+                    decoration: const InputDecoration(
+                      labelText: 'Middle Name *',
+                      labelStyle: TextStyle(color: Color(0xFF636366)),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                    ),
+                    onSaved: (val) => middleName = val ?? '',
                   ),
-                  validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                  onSaved: (val) => lastName = val!,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  decoration: const InputDecoration(labelText: 'Type *'),
-                  items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
-                  onChanged: (val) => selectedType = val,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedPractice,
-                  decoration: const InputDecoration(labelText: 'Practice *'),
-                  items: const [
-                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
-                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
-                    DropdownMenuItem(value: 'Both', child: Text('Both')),
-                  ],
-                  onChanged: (val) => selectedPractice = val!,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedSpecialty,
-                  decoration: const InputDecoration(labelText: 'Specialty'),
-                  items: _specializations.map((s) => DropdownMenuItem(value: s.name, child: Text(s.specialty))).toList(),
-                  onChanged: (val) => selectedSpecialty = val,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: selectedWorkplace,
-                  decoration: const InputDecoration(labelText: 'Workplace'),
-                  items: _institutions.map((i) => DropdownMenuItem(value: i.name, child: Text(i.institutionName))).toList(),
-                  onChanged: (val) => selectedWorkplace = val,
-                ),
-              ],
+                  TextFormField(
+                    style: const TextStyle(color: Color(0xFF1C1C1E)),
+                    decoration: const InputDecoration(
+                      labelText: 'Last Name *',
+                      labelStyle: TextStyle(color: Color(0xFF636366)),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFD1D1D6))),
+                      focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF0056B3), width: 2)),
+                    ),
+                    validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                    onSaved: (val) => lastName = val!,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedType,
+                    decoration: const InputDecoration(labelText: 'Type *'),
+                    items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
+                    onChanged: (val) => selectedType = val,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedPractice,
+                    decoration: const InputDecoration(labelText: 'Practice *'),
+                    items: const [
+                      DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                      DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                      DropdownMenuItem(value: 'Both', child: Text('Both')),
+                    ],
+                    onChanged: (val) => selectedPractice = val!,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedSpecialty,
+                    decoration: const InputDecoration(labelText: 'Specialty'),
+                    items: _specializations.map((s) => DropdownMenuItem(value: s.name, child: Text(s.specialty))).toList(),
+                    onChanged: (val) => selectedSpecialty = val,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: selectedWorkplace,
+                    decoration: const InputDecoration(labelText: 'Workplace'),
+                    items: _institutions.map((i) => DropdownMenuItem(value: i.name, child: Text(i.institutionName))).toList(),
+                    onChanged: (val) => selectedWorkplace = val,
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF636366))),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0056B3)),
-            onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                formKey.currentState!.save();
-                Navigator.pop(ctx);
-                final apiService = Provider.of<ApiService>(context, listen: false);
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFF636366))),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0056B3)),
+              onPressed: () async {
+                if (formKey.currentState!.validate()) {
+                  formKey.currentState!.save();
+                  Navigator.pop(ctx);
+                  final apiService = Provider.of<ApiService>(context, listen: false);
 
-                try {
-                  setState(() => _isLoading = true);
-                  final reqMiddleName = middleName.trim().isNotEmpty ? middleName.trim() : '-';
-                  final reqSpec = selectedSpecialty ?? (_specializations.isNotEmpty ? _specializations.first.name : '');
-                  final reqWork = selectedWorkplace ?? (_institutions.isNotEmpty ? _institutions.first.name : '');
+                  try {
+                    setState(() => _isLoading = true);
+                    final reqMiddleName = middleName.trim().isNotEmpty ? middleName.trim() : '-';
+                    final reqSpec = selectedSpecialty ?? (_specializations.isNotEmpty ? _specializations.first.name : '');
+                    final reqWork = selectedWorkplace ?? (_institutions.isNotEmpty ? _institutions.first.name : '');
+                    final computedFullName = [
+                      firstName.trim(),
+                      if (reqMiddleName.isNotEmpty && reqMiddleName != '-') reqMiddleName,
+                      lastName.trim(),
+                    ].join(' ');
 
-                  final newDoctor = Hcp(
-                    firstName: firstName,
-                    middleName: reqMiddleName,
-                    lastName: lastName,
-                    hcpType: selectedType!,
-                    hcpPractice: selectedPractice,
-                    specialties: reqSpec.isNotEmpty ? [HcpSpecialty(hcpSpecialty: reqSpec)] : [],
-                    workplaces: reqWork.isNotEmpty ? [HcpWorkplace(workplace: reqWork)] : [],
-                  );
-                  final savedDoctor = await apiService.createDoctor(newDoctor);
+                    String? uploadedPhotoUrl;
+                    if (docPhotoBytes != null) {
+                      try {
+                        uploadedPhotoUrl = await apiService.uploadFile(
+                          bytes: docPhotoBytes!,
+                          filename: 'hcp_${DateTime.now().millisecondsSinceEpoch}.jpg',
+                          doctype: 'HCP',
+                        );
+                      } catch (e) {
+                        debugPrint('Photo upload error: $e');
+                      }
+                    }
 
-                  final newHcpAccount = HcpAccount(
-                    accountName: apiService.selectedProgram,
-                    territory: 'All Territories',
-                    salesPerson: 'JORGE MENGORIO (AD0110)',
-                    hcp: savedDoctor.name,
-                  );
-                  await apiService.hcpAccounts.create(newHcpAccount);
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Doctor registered and linked to active program successfully!')),
+                    final newDoctor = Hcp(
+                      firstName: firstName.trim(),
+                      middleName: reqMiddleName,
+                      lastName: lastName.trim(),
+                      hcpFullName: computedFullName,
+                      hcpPhoto: uploadedPhotoUrl,
+                      hcpType: selectedType!,
+                      hcpPractice: selectedPractice,
+                      specialties: reqSpec.isNotEmpty ? [HcpSpecialty(hcpSpecialty: reqSpec)] : [],
+                      workplaces: reqWork.isNotEmpty ? [HcpWorkplace(workplace: reqWork)] : [],
                     );
-                  }
-                  _loadData();
-                } catch (e) {
-                  setState(() => _isLoading = false);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Failed to save: $e')),
+                    final savedDoctor = await apiService.createDoctor(newDoctor);
+
+                    final newHcpAccount = HcpAccount(
+                      accountName: apiService.selectedProgram,
+                      territory: 'All Territories',
+                      salesPerson: 'JORGE MENGORIO (AD0110)',
+                      hcp: savedDoctor.name,
                     );
+                    await apiService.hcpAccounts.create(newHcpAccount);
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Doctor registered and linked to active program successfully!')),
+                      );
+                    }
+                    _loadData();
+                  } catch (e) {
+                    setState(() => _isLoading = false);
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to save: $e')),
+                      );
+                    }
                   }
                 }
-              }
-            },
-            child: const Text('Register', style: TextStyle(color: Colors.white)),
-          ),
-        ],
+              },
+              child: const Text('Register', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -902,8 +1089,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                       },
                       items: const [
                         DropdownMenuItem<String>(value: null, child: Text('All Practices')),
-                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
                         DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
                         DropdownMenuItem(value: 'Both', child: Text('Both')),
                       ],
                     ),
@@ -919,6 +1106,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final apiService = Provider.of<ApiService>(context);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9), // Soft Light Background for Darkish Blue & White combination
       appBar: AppBar(
@@ -934,10 +1123,45 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
           ),
         ),
         actions: [
+          // Role Badge
+          Container(
+            alignment: Alignment.center,
+            margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: apiService.isAdmin
+                  ? const Color(0xFFEF4444).withOpacity(0.25)
+                  : (apiService.isManager
+                      ? const Color(0xFFF59E0B).withOpacity(0.25)
+                      : const Color(0xFF0066FF).withOpacity(0.25)),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: apiService.isAdmin
+                    ? const Color(0xFFEF4444)
+                    : (apiService.isManager
+                        ? const Color(0xFFF59E0B)
+                        : const Color(0xFF38BDF8)),
+                width: 0.8,
+              ),
+            ),
+            child: Text(
+              apiService.userPositionTitle,
+              style: TextStyle(
+                color: apiService.isAdmin
+                    ? const Color(0xFFFCA5A5)
+                    : (apiService.isManager
+                        ? const Color(0xFFFCD34D)
+                        : const Color(0xFF93C5FD)),
+                fontSize: 10.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh, color: Colors.white),
             onPressed: _loadData,
           ),
+          const SizedBox(width: 4),
         ],
       ),
       drawer: const AppDrawer(currentItem: DrawerItem.doctorManagement),
@@ -952,6 +1176,25 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
             : Column(
                 children: [
                   _buildFilterAndSortBar(),
+
+                  if (apiService.isMedRep)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      color: const Color(0xFF1E293B),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.lock_outline_rounded, color: Color(0xFF38BDF8), size: 14),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'View-Only Mode (MedRep): To add or update HCP records, submit an HCP Profile Submission.',
+                              style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
                   Container(
@@ -1023,8 +1266,24 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                             separatorBuilder: (_, __) => const SizedBox(height: 2),
                             itemBuilder: (ctx, index) {
                               final doctor = _filteredDoctors[index];
-                              final fullName = '${doctor.firstName} ${doctor.middleName != null && doctor.middleName != '-' && doctor.middleName!.isNotEmpty ? doctor.middleName! + ' ' : ''}${doctor.lastName}';
+                              final computedParts = [
+                                if (doctor.firstName.trim().isNotEmpty) doctor.firstName.trim(),
+                                if (doctor.middleName != null && doctor.middleName!.trim().isNotEmpty && doctor.middleName!.trim() != '-') doctor.middleName!.trim(),
+                                if (doctor.lastName.trim().isNotEmpty) doctor.lastName.trim(),
+                              ].join(' ');
+                              final fullName = (doctor.hcpFullName != null && doctor.hcpFullName!.trim().isNotEmpty && !doctor.hcpFullName!.startsWith('HCP-'))
+                                  ? doctor.hcpFullName!.trim()
+                                  : (computedParts.isNotEmpty ? computedParts : (doctor.name ?? 'Unknown Doctor'));
                               final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
+
+                              final prefDocWorkplaces = doctor.workplaces.where((w) => w.isPrimary).toList();
+                              final String instDisplay = prefDocWorkplaces.isNotEmpty
+                                  ? prefDocWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).join(', ')
+                                  : (doctor.workplaces.isNotEmpty
+                                      ? ((doctor.workplaces.first.address != null && doctor.workplaces.first.address!.isNotEmpty)
+                                          ? doctor.workplaces.first.address!
+                                          : doctor.workplaces.first.workplace)
+                                      : ((doctor.institution != null && doctor.institution!.isNotEmpty) ? doctor.institution! : '-'));
 
                               return Container(
                                 decoration: const BoxDecoration(
@@ -1062,7 +1321,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                         Expanded(
                                           flex: 3,
                                           child: Text(
-                                            (doctor.institution != null && doctor.institution!.isNotEmpty) ? doctor.institution! : '-',
+                                            instDisplay,
                                             style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -1126,12 +1385,14 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                 ],
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0B192C),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Add HCP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: _showAddDoctorDialog,
-      ),
+      floatingActionButton: apiService.canCreateOrEditDoctor
+          ? FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF0B192C),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('Add HCP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              onPressed: _showAddDoctorDialog,
+            )
+          : null,
     );
   }
 }

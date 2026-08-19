@@ -4,8 +4,6 @@ import 'package:provider/provider.dart';
 import '../app_config.dart';
 import '../services/api_service.dart';
 import '../services/biometric_service.dart';
-import 'doctor_masterlist_screen.dart';
-import 'submission_history_screen.dart';
 import 'hcp_dashboard_screen.dart';
 import 'list_screen.dart';
 import 'credits_screen.dart';
@@ -67,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       if (success) {
-        await BiometricService.saveCredentials(username, password);
+        await BiometricService.saveCredentials(username, password, position: apiService.userPosition.name);
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy
@@ -112,6 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       if (success) {
+        await BiometricService.saveCredentials(username, password, position: apiService.userPosition.name);
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy

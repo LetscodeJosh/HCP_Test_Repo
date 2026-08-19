@@ -282,4 +282,39 @@ class HcpSurveyAnswer {
   }
 }
 
+class TerritoryInfo {
+  final String name; // e.g. "AD0110"
+  final String territoryName; // e.g. "AD0110 - Manila North"
+  final String territoryManager; // e.g. "Jorge Mengorio"
+  final String? program;
+
+  TerritoryInfo({
+    required this.name,
+    required this.territoryName,
+    required this.territoryManager,
+    this.program,
+  });
+
+  factory TerritoryInfo.fromJson(Map<String, dynamic> json) {
+    final tName = (json['territory_name'] ?? json['name'] ?? '').toString().trim();
+    final manager = (json['territory_manager'] ?? json['sales_person'] ?? json['manager'] ?? json['custom_territory_manager'] ?? '').toString().trim();
+    return TerritoryInfo(
+      name: json['name'] ?? '',
+      territoryName: tName.isNotEmpty ? tName : (json['name'] ?? ''),
+      territoryManager: manager.isNotEmpty ? manager : 'Jorge Mengorio',
+      program: json['program'] ?? json['account_or_program'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'territory_name': territoryName,
+      'territory_manager': territoryManager,
+      if (program != null) 'program': program,
+    };
+  }
+}
+
+
 
