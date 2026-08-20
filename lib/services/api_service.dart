@@ -1434,12 +1434,36 @@ class ApiService extends ChangeNotifier {
           : (fullNameParts.isNotEmpty ? fullNameParts : '${hcp.firstName.trim()} ${hcp.lastName.trim()}'.trim());
 
       payload['first_name'] = hcp.firstName.trim();
+      payload['middle_name'] = (hcp.middleName != null && hcp.middleName!.trim().isNotEmpty && hcp.middleName!.trim() != '-')
+          ? hcp.middleName!.trim()
+          : '-';
       payload['last_name'] = hcp.lastName.trim();
       payload['hcp_full_name'] = effectiveName;
       payload['full_name'] = effectiveName;
       payload['doctor_name'] = effectiveName;
       payload['hcp_name'] = effectiveName;
       payload['name_of_doctor'] = effectiveName;
+      payload['is_active'] = hcp.isActive ? 1 : 0;
+
+      // Map hcp_type Link field to valid ERPNext key
+      final rawType = (payload['hcp_type'] ?? hcp.hcpType ?? '').toString().trim();
+      if (rawType.toLowerCase().contains('consultant') || rawType == 'HCP-TYPE-01') {
+        payload['hcp_type'] = 'HCP-TYPE-01';
+      } else if (rawType.toLowerCase().contains('resident') || rawType == 'HCP-TYPE-02') {
+        payload['hcp_type'] = 'HCP-TYPE-02';
+      } else if (rawType.toLowerCase().contains('fellow') || rawType == 'HCP-TYPE-03') {
+        payload['hcp_type'] = 'HCP-TYPE-03';
+      } else {
+        payload['hcp_type'] = rawType.isNotEmpty ? rawType : 'HCP-TYPE-01';
+      }
+
+      // Map hcp_practice field
+      final rawPractice = (payload['hcp_practice'] ?? hcp.hcpPractice ?? '').toString().trim();
+      if (rawPractice == 'Dispensing' || rawPractice == 'Prescribing' || rawPractice == 'Both') {
+        payload['hcp_practice'] = rawPractice;
+      } else {
+        payload['hcp_practice'] = 'Prescribing';
+      }
 
       // Handle doctor photo upload if base64
       if (payload['hcp_photo'] != null) {
@@ -1510,6 +1534,11 @@ class ApiService extends ChangeNotifier {
           payload['hcp_specialty'] = cleanSpecs;
         }
       }
+      if (payload['hcp_specialty'] == null || (payload['hcp_specialty'] as List).isEmpty) {
+        payload['hcp_specialty'] = [
+          {'hcp_specialty': 'SPEC-00001'}
+        ];
+      }
 
       // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
       if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
@@ -1534,6 +1563,11 @@ class ApiService extends ChangeNotifier {
           payload['hcp_workplace'] = cleanWps;
         }
       }
+      if (payload['hcp_workplace'] == null || (payload['hcp_workplace'] as List).isEmpty) {
+        payload['hcp_workplace'] = [
+          {'hcp_workplace': 'INST-00001'}
+        ];
+      }
 
       final response = await http.post(
         url,
@@ -1544,6 +1578,25 @@ class ApiService extends ChangeNotifier {
         final body = jsonDecode(response.body);
         return Hcp.fromJson(body['data']);
       } else {
+        // Fallback: Try frappe.client.insert RPC method
+        final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
+        final rpcResp = await http.post(
+          rpcUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'HCP',
+              ...payload,
+            }
+          }),
+        );
+        if (rpcResp.statusCode == 200) {
+          final rpcBody = jsonDecode(rpcResp.body);
+          final docData = rpcBody['message'] ?? rpcBody['data'];
+          if (docData != null && docData is Map<String, dynamic>) {
+            return Hcp.fromJson(docData);
+          }
+        }
         throw Exception('Failed to create doctor: ${response.body}');
       }
     } catch (e) {

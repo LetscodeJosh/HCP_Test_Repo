@@ -830,17 +830,17 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     try {
       String effectiveHcpId = isExistingDoctor ? _selectedDoctor!.name! : '';
 
-      // If New Doctor AND logged in as Admin / Manager, can directly register into HCP master
-      if (!isExistingDoctor && !apiService.isMedRep) {
+      // If New Doctor, register directly into HCP master universe DocType
+      if (!isExistingDoctor) {
         try {
           final newDoctor = Hcp(
             hcpFullName: fullDoctorName,
             firstName: fn,
-            middleName: mn,
+            middleName: mn.isNotEmpty ? mn : '-',
             lastName: ln,
             birthDate: _birthDateController.text.trim(),
             hcpPhoto: uploadedDoctorPhotoUrl,
-            hcpType: _selectedHcpType ?? 'Resident',
+            hcpType: _selectedHcpType ?? 'HCP-TYPE-01',
             hcpPractice: _selectedPractice,
             specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpSpecialty(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred)).toList(),
             workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpWorkplace(workplace: e.hcpWorkplace!, provinceName: e.provinceName, cityMunicipality: e.cityMunicipality, address: e.workplaceName, isPrimary: e.preferred)).toList(),
@@ -849,6 +849,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           );
           final createdDoc = await apiService.createDoctor(newDoctor);
           effectiveHcpId = createdDoc.name ?? '';
+          if (!_allDoctors.any((d) => d.name == createdDoc.name)) {
+            _allDoctors.insert(0, createdDoc);
+          }
         } catch (e) {
           print('Error registering new doctor into master universe: $e');
         }
