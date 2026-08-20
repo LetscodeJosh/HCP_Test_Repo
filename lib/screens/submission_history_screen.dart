@@ -27,7 +27,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   final TextEditingController _typeFilterCtrl = TextEditingController();
   String _practiceFilter = 'All';
   String _statusFilter = 'All';
-  bool _onlyMySubmissions = true;
+  bool _onlyMySubmissions = false;
 
   @override
   void initState() {
@@ -58,24 +58,24 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       list = list.where((item) {
         final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
         if (subProg.isEmpty) return true;
-        return subProg.contains(prog) || prog.contains(subProg);
+        return subProg.contains(prog) ||
+            prog.contains(subProg) ||
+            (prog.contains('abbott') && subProg.contains('abbott')) ||
+            (prog.contains('adc') && subProg.contains('abbott')) ||
+            (prog.contains('corenergy') && subProg.contains('corenergy'));
       }).toList();
     }
 
-    if (apiService.isMedRep && _onlyMySubmissions) {
+    if (_onlyMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
-      final mySubs = list.where((item) {
+      list = list.where((item) {
         final sEmail = (item.medrepEmail ?? item.userId ?? '').toLowerCase().trim();
         final sSales = (item.salesPerson ?? '').toLowerCase().trim();
         if (sEmail.isNotEmpty && email.isNotEmpty && (sEmail == email || email.contains(sEmail) || sEmail.contains(email))) return true;
         if (sSales.isNotEmpty && fullName.isNotEmpty && (sSales.contains(fullName) || fullName.contains(sSales))) return true;
         return false;
       }).toList();
-
-      if (mySubs.isNotEmpty) {
-        list = mySubs;
-      }
     }
 
     if (_idFilterCtrl.text.trim().isNotEmpty) {
