@@ -453,7 +453,7 @@ class AppDrawer extends StatelessWidget {
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
                         ),
                         Text(
-                          'Manage Touch ID / Face ID device owner',
+                          'Manage Touch ID / Face ID for this device',
                           style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
                         ),
                       ],
@@ -472,10 +472,10 @@ class AppDrawer extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Current Enrolled Device Owner:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                    const Text('Biometric Status:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
                     const SizedBox(height: 4),
                     Text(
-                      currentOwner ?? 'No device owner registered',
+                      currentOwner != null ? 'Biometrics Enrolled & Active' : 'No biometrics enrolled',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
@@ -485,8 +485,8 @@ class AppDrawer extends StatelessWidget {
                     const SizedBox(height: 8),
                     Text(
                       currentOwner != null
-                          ? 'This device is locked to the account above. Other users must log in manually using username and password.'
-                          : 'You can register your Admin account to enable Touch ID / Face ID.',
+                          ? 'This device is bound to the Admin device owner. Other users must log in manually.'
+                          : 'Log in with your Admin account to enable Touch ID / Face ID.',
                       style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.3),
                     ),
                   ],
@@ -502,12 +502,12 @@ class AppDrawer extends StatelessWidget {
                       if (context.mounted) {
                         Navigator.of(ctx).pop();
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Device biometrics unlinked successfully.')),
+                          const SnackBar(content: Text('Device biometrics reset successfully.')),
                         );
                       }
                     },
                     icon: const Icon(Icons.link_off_rounded, color: Color(0xFFDC2626)),
-                    label: const Text('Unlink / Reset Device Biometrics', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                    label: const Text('Reset Device Biometrics', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       side: const BorderSide(color: Color(0xFFDC2626), width: 1.5),

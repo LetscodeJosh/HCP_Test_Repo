@@ -25,7 +25,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isBiometricAvailable = false;
   bool _hasSavedCredentials = false;
   String _enrolledOwner = '';
-  String _enrolledOwnerName = '';
 
   @override
   void initState() {
@@ -54,8 +53,6 @@ class _LoginScreenState extends State<LoginScreen> {
         _isBiometricAvailable = available;
         _hasSavedCredentials = credentials != null;
         _enrolledOwner = credentials?['username']?.trim() ?? '';
-        _enrolledOwnerName = credentials?['full_name']?.trim() ?? '';
-        // Note: Do not auto-populate password or enforce username so fields remain clean on fresh/logout state
       });
     }
   }
@@ -131,10 +128,9 @@ class _LoginScreenState extends State<LoginScreen> {
             Text('Reset Device Biometrics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           ],
         ),
-        content: Text(
-          'Currently, this iPad is registered to:\n\n$_enrolledOwner\n\n'
-          'Do you want to unlink this account? After unlinking, only an Admin account can register as the device owner.',
-          style: const TextStyle(fontSize: 13, height: 1.4),
+        content: const Text(
+          'Do you want to unlink and reset biometric credentials on this device?',
+          style: TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
           TextButton(
@@ -147,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen> {
               backgroundColor: const Color(0xFFDC2626),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Unlink & Reset', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('Reset', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -159,7 +155,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Device biometrics unlinked. Log in with your Admin account to bind Touch ID / Face ID.'),
+            content: Text('Device biometrics reset successfully.'),
             backgroundColor: Color(0xFF0056B3),
           ),
         );
@@ -171,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final credentials = await BiometricService.getSavedCredentials();
     if (credentials == null) {
       setState(() {
-        _errorMessage = 'No registered biometric owner found on this device. Please log in manually.';
+        _errorMessage = 'No biometric credentials enrolled. Please log in manually.';
       });
       return;
     }
@@ -183,14 +179,12 @@ class _LoginScreenState extends State<LoginScreen> {
     // If a different username is typed into the box, reject biometric execution immediately
     if (typedUsername.isNotEmpty && typedUsername.toLowerCase() != ownerEmail.toLowerCase()) {
       setState(() {
-        _errorMessage = 'Security Alert: Biometric login is bound to device owner ($ownerEmail). You cannot use biometrics for $typedUsername. Please enter password manually.';
+        _errorMessage = 'Biometric login is not available for this account. Please enter password manually.';
       });
       return;
     }
 
-    final authenticated = await BiometricService.authenticate(
-      customReason: 'Authenticate as $ownerEmail to log in to PIMS HCP',
-    );
+    final authenticated = await BiometricService.authenticate();
     if (!authenticated) return;
 
     setState(() {
@@ -510,21 +504,20 @@ class _LoginScreenState extends State<LoginScreen> {
                               final bool isOwnerMatching = typed.isEmpty || typed.toLowerCase() == _enrolledOwner.toLowerCase();
 
                               if (isOwnerMatching) {
-                                final displayName = _enrolledOwnerName.isNotEmpty ? _enrolledOwnerName : _enrolledOwner;
                                 return OutlinedButton.icon(
                                   onPressed: _isLoading ? null : _handleBiometricLogin,
-                                  icon: const Icon(Icons.fingerprint, color: Color(0xFF0056B3)),
-                                  label: Text(
-                                    typed.isEmpty ? 'Touch ID Login (Owner: $displayName)' : 'Biometric Login as $displayName',
-                                    style: const TextStyle(
+                                  icon: const Icon(Icons.fingerprint_rounded, color: Color(0xFF0056B3)),
+                                  label: const Text(
+                                    'Biometric Login',
+                                    style: TextStyle(
                                       color: Color(0xFF0056B3),
-                                      fontSize: 13.5,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.3,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
                                   style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                                    padding: const EdgeInsets.symmetric(vertical: 14),
                                     side: const BorderSide(color: Color(0xFF0056B3), width: 1.5),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(12),
@@ -532,30 +525,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 );
                               } else {
-                                return Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFFEF3C7),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFFF59E0B), width: 1),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(Icons.lock_person_rounded, color: Color(0xFFD97706), size: 18),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: Text(
-                                          'Biometrics locked to iPad Owner ($_enrolledOwner). Enter password manually to log in as $typed.',
-                                          style: const TextStyle(
-                                            color: Color(0xFF92400E),
-                                            fontSize: 11.5,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
+                                return const SizedBox.shrink();
                               }
                             },
                           ),
@@ -565,7 +535,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               onPressed: _isLoading ? null : _handleResetBiometrics,
                               icon: const Icon(Icons.link_off_rounded, size: 14, color: Color(0xFF64748B)),
                               label: const Text(
-                                'Unlink / Reset Device Biometrics',
+                                'Reset Device Biometrics',
                                 style: TextStyle(
                                   color: Color(0xFF64748B),
                                   fontSize: 12,

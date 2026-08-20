@@ -34,17 +34,14 @@ class BiometricService {
     }
   }
 
-  /// Trigger biometric prompt strictly bound to registered owner
+  /// Trigger biometric prompt
   static Future<bool> authenticate({String? customReason}) async {
     try {
       final bool isAvailable = await isBiometricAvailable();
       if (!isAvailable) return false;
 
-      final credentials = await getSavedCredentials();
-      final owner = credentials?['username'] ?? 'registered device owner';
-
       return await _auth.authenticate(
-        localizedReason: customReason ?? 'Authenticate as $owner to log in to PIMS HCP',
+        localizedReason: customReason ?? 'Authenticate to log in to PIMS HCP',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: false,
