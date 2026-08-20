@@ -1080,11 +1080,9 @@ class ApiService extends ChangeNotifier {
       return [];
     }
 
-    // Tier 1: Query HCP doctype with explicit public fields (permlevel 0 safe)
-    final url = Uri.parse(
-      '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit=2000',
-    );
+    // Tier 1: Query HCP doctype with fields=["*"] (for Admin / unrestricted roles)
     try {
+      final url = Uri.parse('$baseUrl/api/resource/HCP?fields=["*"]&limit=2000');
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -1099,7 +1097,26 @@ class ApiService extends ChangeNotifier {
       print('Tier 1 fetch doctors error: $e');
     }
 
-    // Tier 2: Whitelisted client method (works when REST direct doctype query is restricted)
+    // Tier 2: Query HCP doctype with explicit public fields (permlevel 0 safe for MedRep)
+    try {
+      final urlPublic = Uri.parse(
+        '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit=2000',
+      );
+      final response = await http.get(urlPublic, headers: _headers);
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        final List<dynamic> dataList = body['data'] ?? [];
+        if (dataList.isNotEmpty) {
+          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+          return list;
+        }
+      }
+    } catch (e) {
+      print('Tier 2 fetch doctors error: $e');
+    }
+
+    // Tier 3: Whitelisted client method (works when REST direct doctype query is restricted)
     try {
       final clientUrl = Uri.parse(
         '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_page_length=2000',
@@ -1115,7 +1132,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Tier 2 fetch doctors error: $e');
+      print('Tier 3 fetch doctors error: $e');
     }
 
     // Tier 3: HCP Account Doctor Extraction (MedReps & Managers always have access to HCP Accounts)
@@ -1443,7 +1460,7 @@ class ApiService extends ChangeNotifier {
     }
 
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Account?fields=["name","account_or_program","territory","sales_person","user_id","hcp","hcp_name","valid_from","valid_to","validity_period","is_active","is_archived","status","creation","modified"]&limit=2000',
+      '$baseUrl/api/resource/HCP%20Account?fields=["*"]&limit=2000',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1460,7 +1477,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Account&fields=["name","account_or_program","territory","sales_person","user_id","hcp","hcp_name","valid_from","valid_to","validity_period","is_active","is_archived","status"]&limit_page_length=2000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Account&fields=["*"]&limit_page_length=2000',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -1532,7 +1549,7 @@ class ApiService extends ChangeNotifier {
     }
 
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=["name","hcp_name","doctor_full_name","program","territory","sales_person","user_id","medrep_email","medrep_name","application_status","workflow_state","changes_summary","changes_json","creation","modified","docstatus"]&limit=1000',
+      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=["*"]&limit=500',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1541,6 +1558,8 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['data'] ?? [];
         await _writeToCache('submissions_cache.json', jsonEncode(dataList));
         return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+      } else {
+        print('Fetch submissions error: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Fetch submissions direct error: $e');
@@ -1549,7 +1568,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=["name","hcp_name","doctor_full_name","program","territory","sales_person","user_id","medrep_email","medrep_name","application_status","workflow_state","changes_summary","changes_json","creation","modified","docstatus"]&limit_page_length=1000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=["*"]&limit_page_length=500',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
