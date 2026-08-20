@@ -1,0 +1,17 @@
+[
+  {
+    "name": "HCP-TYPE-01",
+    "hcp_type": "Consultant",
+    "description": "About this type"
+  },
+  {
+    "name": "HCP-TYPE-02",
+    "hcp_type": "Resident",
+    "description": "About this type"
+  },
+  {
+    "name": "HCP-TYPE-03",
+    "hcp_type": "Fellow",
+    "description": "About this type"
+  }
+]

@@ -1,0 +1,702 @@
+[
+  {
+    "name": "SPEC-00001",
+    "specialty": "Pathology",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "",
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00002",
+    "specialty": "Palliative Medicine",
+    "specialty_group": "Supportive Care",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00003",
+    "specialty": "Family Medicine",
+    "specialty_group": "Primary Care",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00004",
+    "specialty": "Internal Medicine",
+    "specialty_group": "Medicine",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00005",
+    "specialty": "Anesthesiology",
+    "specialty_group": "Acute Care",
+    "parent_specialization": "",
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00006",
+    "specialty": "Radiology",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "",
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00007",
+    "specialty": "Dermatology",
+    "specialty_group": "Medicine",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00008",
+    "specialty": "Rehabilitation Medicine",
+    "specialty_group": "Rehabilitation",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00009",
+    "specialty": "Obstetrics and Gynecology",
+    "specialty_group": "Women's Health",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00010",
+    "specialty": "Ophthalmology",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00011",
+    "specialty": "Preventive Medicine",
+    "specialty_group": "Public & Preventive Health",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00012",
+    "specialty": "General Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "",
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00013",
+    "specialty": "Pediatrics",
+    "specialty_group": "Medicine",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00014",
+    "specialty": "Otolaryngology ENT",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00015",
+    "specialty": "Neurology",
+    "specialty_group": "Neurosciences",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00016",
+    "specialty": "Psychiatry",
+    "specialty_group": "Mental Health",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00017",
+    "specialty": "Medical Genetics",
+    "specialty_group": "Medicine",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00018",
+    "specialty": "Urology",
+    "specialty_group": "Surgery",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00019",
+    "specialty": "Emergency Medicine",
+    "specialty_group": "Acute Care",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00020",
+    "specialty": "Physical Medicine and Rehabilitation",
+    "specialty_group": "Rehabilitation",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00021",
+    "specialty": "Nuclear Medicine",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "",
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00022",
+    "specialty": "Cardiology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00023",
+    "specialty": "Plastic Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": null,
+    "is_group": 1
+  },
+  {
+    "name": "SPEC-00024",
+    "specialty": "Endocrinology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00025",
+    "specialty": "Infectious Disease",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00026",
+    "specialty": "Pulmonology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00027",
+    "specialty": "Gastroenterology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00028",
+    "specialty": "Nephrology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00029",
+    "specialty": "Rheumatology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00030",
+    "specialty": "Hematology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00031",
+    "specialty": "Medical Oncology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00032",
+    "specialty": "Critical Care Medicine",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00033",
+    "specialty": "Allergy and Immunology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00034",
+    "specialty": "Geriatrics",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00004",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00035",
+    "specialty": "Pediatric Cardiology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00036",
+    "specialty": "Pediatric Endocrinology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00037",
+    "specialty": "Pediatric Pulmonology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00038",
+    "specialty": "Pediatric Infectious Disease",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00039",
+    "specialty": "Pediatric Nephrology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00040",
+    "specialty": "Pediatric Gastroenterology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00041",
+    "specialty": "Neonatology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00042",
+    "specialty": "Developmental Pediatrics",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00043",
+    "specialty": "Pediatric Hematology-Oncology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00013",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00045",
+    "specialty": "Maternal-Fetal Medicine",
+    "specialty_group": "Women's Health",
+    "parent_specialization": "SPEC-00009",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00046",
+    "specialty": "Gynecologic Oncology",
+    "specialty_group": "Women's Health",
+    "parent_specialization": "SPEC-00009",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00047",
+    "specialty": "Reproductive Endocrinology and Infertility",
+    "specialty_group": "Women's Health",
+    "parent_specialization": "SPEC-00009",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00048",
+    "specialty": "Female Pelvic Medicine and Reconstructive Surgery",
+    "specialty_group": "Women's Health",
+    "parent_specialization": "SPEC-00009",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00049",
+    "specialty": "Cardiothoracic Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00050",
+    "specialty": "Neurosurgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00051",
+    "specialty": "Orthopedic Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00052",
+    "specialty": "Plastic and Reconstructive Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00053",
+    "specialty": "Vascular Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00054",
+    "specialty": "Pediatric Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00055",
+    "specialty": "Colorectal Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00056",
+    "specialty": "Surgical Oncology",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00057",
+    "specialty": "Trauma and Critical Care Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00012",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00058",
+    "specialty": "Sports Medicine",
+    "specialty_group": "Primary Care",
+    "parent_specialization": "SPEC-00003",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00059",
+    "specialty": "Lifestyle Medicine",
+    "specialty_group": "Primary Care",
+    "parent_specialization": "SPEC-00003",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00060",
+    "specialty": "Geriatric Medicine",
+    "specialty_group": "Primary Care",
+    "parent_specialization": "SPEC-00003",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00061",
+    "specialty": "Critical Care",
+    "specialty_group": "Acute Care",
+    "parent_specialization": "SPEC-00019",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00062",
+    "specialty": "Toxicology",
+    "specialty_group": "Acute Care",
+    "parent_specialization": "SPEC-00019",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00063",
+    "specialty": "Emergency Ultrasound",
+    "specialty_group": "Acute Care",
+    "parent_specialization": "SPEC-00019",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00064",
+    "specialty": "Pain Medicine",
+    "specialty_group": "Acute Care",
+    "parent_specialization": "SPEC-00005",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00065",
+    "specialty": "Critical Care Medicine",
+    "specialty_group": "Acute Care",
+    "parent_specialization": "SPEC-00005",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00066",
+    "specialty": "Pediatric Anesthesiology",
+    "specialty_group": "Acute Care",
+    "parent_specialization": "SPEC-00005",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00067",
+    "specialty": "Dermatopathology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00007",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00068",
+    "specialty": "Cosmetic Dermatology",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00007",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00069",
+    "specialty": "Stroke Medicine",
+    "specialty_group": "Neurosciences",
+    "parent_specialization": "SPEC-00015",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00070",
+    "specialty": "Epilepsy",
+    "specialty_group": "Neurosciences",
+    "parent_specialization": "SPEC-00015",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00071",
+    "specialty": "Movement Disorders",
+    "specialty_group": "Neurosciences",
+    "parent_specialization": "SPEC-00015",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00072",
+    "specialty": "Neurocritical Care",
+    "specialty_group": "Neurosciences",
+    "parent_specialization": "SPEC-00015",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00073",
+    "specialty": "Child and Adolescent Psychiatry",
+    "specialty_group": "Mental Health",
+    "parent_specialization": "SPEC-00016",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00074",
+    "specialty": "Addiction Psychiatry",
+    "specialty_group": "Mental Health",
+    "parent_specialization": "SPEC-00016",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00075",
+    "specialty": "Geriatric Psychiatry",
+    "specialty_group": "Mental Health",
+    "parent_specialization": "SPEC-00016",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00076",
+    "specialty": "Interventional Radiology",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "SPEC-00006",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00077",
+    "specialty": "Neuroradiology",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "SPEC-00006",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00078",
+    "specialty": "Hematopathology",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "SPEC-00001",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00079",
+    "specialty": "Forensic Pathology",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "SPEC-00001",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00080",
+    "specialty": "Retina",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": "SPEC-00010",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00081",
+    "specialty": "Cornea",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": "SPEC-00010",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00082",
+    "specialty": "Pediatric Ophthalmology",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": "SPEC-00010",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00083",
+    "specialty": "Head and Neck Surgery",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": "SPEC-00014",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00084",
+    "specialty": "Rhinology",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": "SPEC-00014",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00085",
+    "specialty": "Otology",
+    "specialty_group": "Sensory Organs",
+    "parent_specialization": "SPEC-00014",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00086",
+    "specialty": "Pain Rehabilitation",
+    "specialty_group": "Rehabilitation",
+    "parent_specialization": "SPEC-00008",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00087",
+    "specialty": "Stroke Rehabilitation",
+    "specialty_group": "Rehabilitation",
+    "parent_specialization": "SPEC-00008",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00088",
+    "specialty": "Occupational Medicine",
+    "specialty_group": "Public & Preventive Health",
+    "parent_specialization": "SPEC-00011",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00089",
+    "specialty": "Public Health",
+    "specialty_group": "Public & Preventive Health",
+    "parent_specialization": "SPEC-00011",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00090",
+    "specialty": "Clinical Genetics",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00017",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00091",
+    "specialty": "Hospice Care",
+    "specialty_group": "Supportive Care",
+    "parent_specialization": "SPEC-00002",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00092",
+    "specialty": "PET Imaging",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "SPEC-00021",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00093",
+    "specialty": "Theranostics",
+    "specialty_group": "Diagnostics",
+    "parent_specialization": "SPEC-00021",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00094",
+    "specialty": "Sports Rehabilitation",
+    "specialty_group": "Rehabilitation",
+    "parent_specialization": "SPEC-00020",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00095",
+    "specialty": "Pain Management",
+    "specialty_group": "Rehabilitation",
+    "parent_specialization": "SPEC-00020",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00096",
+    "specialty": "Pediatric Urology",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00018",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00097",
+    "specialty": "Urologic Oncology",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00018",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00098",
+    "specialty": "Cosmetic Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00023",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00099",
+    "specialty": "Hand Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00023",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00100",
+    "specialty": "Burn Surgery",
+    "specialty_group": "Surgery",
+    "parent_specialization": "SPEC-00023",
+    "is_group": 0
+  },
+  {
+    "name": "SPEC-00101",
+    "specialty": "General Practice",
+    "specialty_group": "Medicine",
+    "parent_specialization": "SPEC-00003",
+    "is_group": 0
+  }
+]

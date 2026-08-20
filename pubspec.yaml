@@ -40,3 +40,5 @@ flutter:
   assets:
     - assets/medical_bg.jpg
     - assets/institutions.json
+    - assets/specializations.json
+    - assets/hcp_types.json

@@ -2390,23 +2390,77 @@ class ApiService extends ChangeNotifier {
     }
   }
 
-  /// Retrieve list of Specializations
+  /// Retrieve list of Specializations with multi-tier cache & local fallback
   Future<List<Specialization>> fetchSpecializations() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('specializations_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          if (dataList.isNotEmpty) {
+            return dataList.map((json) => Specialization.fromJson(json)).toList();
+          }
+        } catch (_) {}
+      }
+      try {
+        final String localData = await rootBundle.loadString('assets/specializations.json');
+        final List<dynamic> dataList = jsonDecode(localData);
+        return dataList.map((json) => Specialization.fromJson(json)).toList();
+      } catch (err) {
+        print('Failed to load local fallback specializations: $err');
+        return [];
+      }
+    }
+
     final url = Uri.parse(
-      '$baseUrl/api/resource/Specialization?fields=["name","specialty","specialty_group","parent_specialization","is_group"]&limit=500',
+      '$baseUrl/api/resource/Specialization?fields=["name","specialty","specialty_group","parent_specialization","is_group"]&limit_page_length=1000',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
-        return dataList.map((json) => Specialization.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load specializations: ${response.statusCode}');
+        if (dataList.isNotEmpty) {
+          await _writeToCache('specializations_cache.json', jsonEncode(dataList));
+          return dataList.map((json) => Specialization.fromJson(json)).toList();
+        }
+      }
+      
+      // Fallback attempt: frappe.client.get_list method
+      final rpcUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get_list?doctype=Specialization&fields=["name","specialty","specialty_group","parent_specialization","is_group"]&limit_page_length=1000',
+      );
+      final rpcResp = await http.get(rpcUrl, headers: _headers);
+      if (rpcResp.statusCode == 200) {
+        final body = jsonDecode(rpcResp.body);
+        final List<dynamic> dataList = (body['message'] is List) ? body['message'] : (body['data'] ?? []);
+        if (dataList.isNotEmpty) {
+          await _writeToCache('specializations_cache.json', jsonEncode(dataList));
+          return dataList.map((json) => Specialization.fromJson(json)).toList();
+        }
       }
     } catch (e) {
-      print('Fetch specializations error: $e');
-      rethrow;
+      print('Fetch specializations online error: $e');
+    }
+
+    // Fallback to cache or bundled asset
+    try {
+      final cache = await _readFromCache('specializations_cache.json');
+      if (cache != null) {
+        final List<dynamic> dataList = jsonDecode(cache);
+        if (dataList.isNotEmpty) {
+          return dataList.map((json) => Specialization.fromJson(json)).toList();
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final String localData = await rootBundle.loadString('assets/specializations.json');
+      final List<dynamic> dataList = jsonDecode(localData);
+      return dataList.map((json) => Specialization.fromJson(json)).toList();
+    } catch (err) {
+      print('Failed to load local fallback specializations: $err');
+      return [];
     }
   }
 
@@ -2479,23 +2533,85 @@ class ApiService extends ChangeNotifier {
     }
   }
 
-  /// Retrieve list of HCP Types (used as Link values for hcp_type field)
+  /// Retrieve list of HCP Types (used as Link values for hcp_type field) with cache & local fallback
   Future<List<HcpType>> fetchHcpTypes() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('hcp_types_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          if (dataList.isNotEmpty) {
+            return dataList.map((json) => HcpType.fromJson(json)).toList();
+          }
+        } catch (_) {}
+      }
+      try {
+        final String localData = await rootBundle.loadString('assets/hcp_types.json');
+        final List<dynamic> dataList = jsonDecode(localData);
+        return dataList.map((json) => HcpType.fromJson(json)).toList();
+      } catch (err) {
+        print('Failed to load local fallback HCP types: $err');
+        return [
+          HcpType(name: 'HCP-TYPE-01', typeName: 'Consultant', description: 'About this type'),
+          HcpType(name: 'HCP-TYPE-02', typeName: 'Resident', description: 'About this type'),
+          HcpType(name: 'HCP-TYPE-03', typeName: 'Fellow', description: 'About this type'),
+        ];
+      }
+    }
+
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Type?fields=["name","hcp_type","description"]&limit=50',
+      '$baseUrl/api/resource/HCP%20Type?fields=["name","hcp_type","description"]&limit_page_length=100',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
-        return dataList.map((json) => HcpType.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load HCP types: ${response.statusCode}');
+        if (dataList.isNotEmpty) {
+          await _writeToCache('hcp_types_cache.json', jsonEncode(dataList));
+          return dataList.map((json) => HcpType.fromJson(json)).toList();
+        }
+      }
+
+      // Fallback attempt: frappe.client.get_list method
+      final rpcUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Type&fields=["name","hcp_type","description"]&limit_page_length=100',
+      );
+      final rpcResp = await http.get(rpcUrl, headers: _headers);
+      if (rpcResp.statusCode == 200) {
+        final body = jsonDecode(rpcResp.body);
+        final List<dynamic> dataList = (body['message'] is List) ? body['message'] : (body['data'] ?? []);
+        if (dataList.isNotEmpty) {
+          await _writeToCache('hcp_types_cache.json', jsonEncode(dataList));
+          return dataList.map((json) => HcpType.fromJson(json)).toList();
+        }
       }
     } catch (e) {
-      print('Fetch HCP types error: $e');
-      rethrow;
+      print('Fetch HCP types online error: $e');
+    }
+
+    // Fallback to cache or bundled asset
+    try {
+      final cache = await _readFromCache('hcp_types_cache.json');
+      if (cache != null) {
+        final List<dynamic> dataList = jsonDecode(cache);
+        if (dataList.isNotEmpty) {
+          return dataList.map((json) => HcpType.fromJson(json)).toList();
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final String localData = await rootBundle.loadString('assets/hcp_types.json');
+      final List<dynamic> dataList = jsonDecode(localData);
+      return dataList.map((json) => HcpType.fromJson(json)).toList();
+    } catch (err) {
+      print('Failed to load local fallback HCP types: $err');
+      return [
+        HcpType(name: 'HCP-TYPE-01', typeName: 'Consultant', description: 'About this type'),
+        HcpType(name: 'HCP-TYPE-02', typeName: 'Resident', description: 'About this type'),
+        HcpType(name: 'HCP-TYPE-03', typeName: 'Fellow', description: 'About this type'),
+      ];
     }
   }
 
