@@ -1623,12 +1623,31 @@ class ApiService extends ChangeNotifier {
           : (fullNameParts.isNotEmpty ? fullNameParts : '${hcp.firstName.trim()} ${hcp.lastName.trim()}'.trim());
 
       payload['first_name'] = hcp.firstName.trim();
+      payload['middle_name'] = (hcp.middleName != null && hcp.middleName!.trim().isNotEmpty && hcp.middleName!.trim() != '-') ? hcp.middleName!.trim() : '-';
       payload['last_name'] = hcp.lastName.trim();
       payload['hcp_full_name'] = effectiveName;
       payload['full_name'] = effectiveName;
       payload['doctor_name'] = effectiveName;
       payload['hcp_name'] = effectiveName;
       payload['name_of_doctor'] = effectiveName;
+
+      // Ensure hcp_type Link ID is valid
+      final rawType = (payload['hcp_type'] ?? hcp.hcpType).toString().trim();
+      if (rawType.toLowerCase().contains('consultant') || rawType == 'HCP-TYPE-01') {
+        payload['hcp_type'] = 'HCP-TYPE-01';
+      } else if (rawType.toLowerCase().contains('resident') || rawType == 'HCP-TYPE-02') {
+        payload['hcp_type'] = 'HCP-TYPE-02';
+      } else if (rawType.toLowerCase().contains('fellow') || rawType == 'HCP-TYPE-03') {
+        payload['hcp_type'] = 'HCP-TYPE-03';
+      } else if (rawType.isNotEmpty) {
+        payload['hcp_type'] = rawType;
+      }
+
+      // Ensure hcp_practice is valid
+      final rawPractice = (payload['hcp_practice'] ?? hcp.hcpPractice).toString().trim();
+      if (rawPractice == 'Dispensing' || rawPractice == 'Prescribing' || rawPractice == 'Both') {
+        payload['hcp_practice'] = rawPractice;
+      }
 
       // Handle doctor photo upload if base64
       if (payload['hcp_photo'] != null) {
@@ -1677,6 +1696,26 @@ class ApiService extends ChangeNotifier {
         final body = jsonDecode(response.body);
         return Hcp.fromJson(body['data']);
       } else {
+        // Fallback: Try frappe.client.save RPC method
+        final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.save');
+        final rpcResp = await http.post(
+          rpcUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'HCP',
+              'name': name,
+              ...payload,
+            }
+          }),
+        );
+        if (rpcResp.statusCode == 200) {
+          final rpcBody = jsonDecode(rpcResp.body);
+          final docData = rpcBody['message'] ?? rpcBody['data'];
+          if (docData != null && docData is Map<String, dynamic>) {
+            return Hcp.fromJson(docData);
+          }
+        }
         throw Exception('Failed to update doctor: ${response.body}');
       }
     } catch (e) {
@@ -2225,12 +2264,97 @@ class ApiService extends ChangeNotifier {
         status: 'Active',
       );
 
+      final payload = accountData.toJson();
+
+      // Clean specialization links
+      if (payload['specialization'] is List && (payload['specialization'] as List).isNotEmpty) {
+        final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
+        if (specs.isNotEmpty) {
+          final List<Map<String, dynamic>> cleanSpecs = [];
+          for (var item in (payload['specialization'] as List)) {
+            if (item is Map<String, dynamic>) {
+              final map = Map<String, dynamic>.from(item);
+              final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? '').toString().trim();
+              if (rawSpec.isNotEmpty) {
+                final match = specs.firstWhere(
+                  (s) => s.name == rawSpec || s.specialty.toLowerCase() == rawSpec.toLowerCase(),
+                  orElse: () => specs.first,
+                );
+                map['hcp_specialty'] = match.name;
+              }
+              final rawSub = (map['sub_specialty'] ?? '').toString().trim();
+              if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
+                final subMatch = specs.firstWhere(
+                  (s) => s.name == rawSub || s.specialty.toLowerCase() == rawSub.toLowerCase(),
+                  orElse: () => specs.first,
+                );
+                map['sub_specialty'] = subMatch.name;
+              } else {
+                map.remove('sub_specialty');
+              }
+              cleanSpecs.add(map);
+            }
+          }
+          payload['specialization'] = cleanSpecs;
+        }
+      }
+
+      // Clean workplace_info links
+      if (payload['workplace_info'] is List && (payload['workplace_info'] as List).isNotEmpty) {
+        final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+        if (insts.isNotEmpty) {
+          final List<Map<String, dynamic>> cleanWps = [];
+          for (var item in (payload['workplace_info'] as List)) {
+            if (item is Map<String, dynamic>) {
+              final map = Map<String, dynamic>.from(item);
+              final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? '').toString().trim();
+              if (rawWp.isNotEmpty) {
+                final match = insts.firstWhere(
+                  (i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+                  orElse: () => insts.first,
+                );
+                map['hcp_workplace'] = match.name;
+              }
+              cleanWps.add(map);
+            }
+          }
+          payload['workplace_info'] = cleanWps;
+        }
+      }
+
       if (existingAccountName != null) {
         final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(existingAccountName)}');
-        await http.put(updateUrl, headers: _headers, body: jsonEncode(accountData.toJson()));
+        final resp = await http.put(updateUrl, headers: _headers, body: jsonEncode(payload));
+        if (resp.statusCode != 200) {
+          final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.save');
+          await http.post(
+            rpcUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doc': {
+                'doctype': 'HCP Account',
+                'name': existingAccountName,
+                ...payload,
+              }
+            }),
+          );
+        }
       } else {
         final createUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account');
-        await http.post(createUrl, headers: _headers, body: jsonEncode(accountData.toJson()));
+        final resp = await http.post(createUrl, headers: _headers, body: jsonEncode(payload));
+        if (resp.statusCode != 200) {
+          final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
+          await http.post(
+            rpcUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doc': {
+                'doctype': 'HCP Account',
+                ...payload,
+              }
+            }),
+          );
+        }
       }
     } catch (e) {
       print('Sync HCP Account error (non-fatal): $e');

@@ -819,13 +819,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false);
 
     // Determine approval requirement:
-    // - MedRep account: ALL submissions (adding new doctor or updating doctor info) MUST go to HCP Profile Submission for Manager Approval.
-    // - Existing doctor with changes: Requires Manager/Admin validation & approval.
-    // - Admin / Manager with existing doctor without changes: Auto-confirmed.
-    final bool requiresApproval = apiService.isMedRep || (isExistingDoctor && hasAnyChanges);
-    final String targetWorkflow = requiresApproval ? 'Pending Approval' : 'Approved';
-    final String targetAppStatus = requiresApproval ? 'Not Applied' : 'Applied';
-    final int targetDocstatus = requiresApproval ? 0 : 1;
+    // - Adding new doctor not in masterlist: Auto-approved freely into HCP universe (status: "Approved", application_status: "Applied", docstatus: 1)
+    // - Updating existing doctor / changes: Requires Managerial Approval (status: "Pending Approval", application_status: "Not Applied", docstatus: 0)
+    // - Admin account: Unrestricted, can do both without restrictions.
+    final bool isNewDoctor = !isExistingDoctor;
+    final bool requiresApproval = isExistingDoctor && hasAnyChanges && !apiService.isAdmin;
+    final String targetWorkflow = isNewDoctor ? 'Approved' : (requiresApproval ? 'Pending Approval' : 'Approved');
+    final String targetAppStatus = isNewDoctor ? 'Applied' : (requiresApproval ? 'Not Applied' : 'Applied');
+    final int targetDocstatus = isNewDoctor ? 1 : (requiresApproval ? 0 : 1);
 
     try {
       String effectiveHcpId = isExistingDoctor ? _selectedDoctor!.name! : '';
