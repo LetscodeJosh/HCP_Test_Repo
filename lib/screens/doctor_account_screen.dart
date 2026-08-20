@@ -47,12 +47,14 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
       final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
 
       final filtered = items.where((acc) {
-        if (apiService.selectedProgram.isEmpty) return true;
-        return acc.accountName.toLowerCase().contains(apiService.selectedProgram.toLowerCase());
+        if (apiService.selectedProgram.isEmpty || apiService.selectedProgram == 'All') return true;
+        final prog = apiService.selectedProgram.toLowerCase().trim();
+        final accProg = acc.accountName.toLowerCase().trim();
+        return accProg == prog || accProg.contains(prog) || prog.contains(accProg);
       }).toList();
 
       setState(() {
-        _allAccounts = filtered.isNotEmpty ? filtered : items;
+        _allAccounts = filtered;
         _doctors = doctorsList;
         _hcpTypes = types;
         _applyFilters();

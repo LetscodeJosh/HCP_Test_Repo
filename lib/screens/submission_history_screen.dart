@@ -52,6 +52,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   List<HcpProfileSubmission> _getFilteredAndSortedSubmissions(ApiService apiService) {
     List<HcpProfileSubmission> list = List.from(_submissions);
 
+    // Program-level isolation (Manager / Rep only views their assigned program)
+    if (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All') {
+      final prog = apiService.selectedProgram.toLowerCase().trim();
+      list = list.where((item) {
+        final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
+        if (subProg.isEmpty) return true;
+        return subProg.contains(prog) || prog.contains(subProg);
+      }).toList();
+    }
+
     if (apiService.isMedRep && _onlyMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
@@ -91,23 +101,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     if (_statusFilter != 'All') {
       list = list.where((item) {
         final wf = (item.workflowState ?? item.status ?? '').toLowerCase();
-        final app = (item.applicationStatus ?? '').toLowerCase();
-        final filter = _statusFilter.toLowerCase();
+        final isPending = wf.contains('pend') || wf.contains('draft') || item.docstatus == 0;
 
-        if (filter == 'pending approval') {
-          return wf.contains('pend') || item.docstatus == 0;
-        } else if (filter == 'approved') {
-          return wf.contains('appr') || item.docstatus == 1;
-        } else if (filter == 'draft') {
-          return wf.contains('draft');
-        } else if (filter == 'rejected') {
-          return wf.contains('reject') || item.docstatus == 2;
-        } else if (filter == 'cancelled') {
-          return wf.contains('cancel');
-        } else if (filter == 'applied') {
-          return app == 'applied';
-        } else if (filter == 'not applied') {
-          return app == 'not applied';
+        if (_statusFilter == 'Pending Approval') {
+          return isPending;
+        } else if (_statusFilter == 'Approved') {
+          return !isPending || wf.contains('appr') || item.docstatus == 1;
         }
         return true;
       }).toList();
@@ -1032,50 +1031,22 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   Widget _buildStatusBadge(HcpProfileSubmission item) {
-    final workflow = item.workflowState ?? item.status ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
-    final appStatus = item.applicationStatus ?? 'Not Applied';
+    final wf = (item.workflowState ?? item.status ?? '').toLowerCase().trim();
+    final bool isPending = wf.contains('pend') || wf.contains('draft') || item.docstatus == 0;
 
-    Color bg;
-    final wLower = workflow.toLowerCase().trim();
-    if (wLower.contains('reject')) {
-      bg = const Color(0xFFDC2626);
-    } else if (wLower.contains('cancel')) {
-      bg = const Color(0xFF991B1B);
-    } else if (wLower.contains('draft')) {
-      bg = const Color(0xFF64748B);
-    } else if (wLower.contains('pend')) {
-      bg = const Color(0xFFD97706);
-    } else if (wLower.contains('appr')) {
-      bg = const Color(0xFF16A34A);
-    } else {
-      bg = const Color(0xFF4B5563);
-    }
+    final String displayStatus = isPending ? 'Pending Approval' : 'Approved';
+    final Color bgColor = isPending ? const Color(0xFF6B7280) : const Color(0xFF10B981); // (color gray) pending approval, (color green) approved
 
-    Color appColor = (appStatus == 'Applied')
-        ? const Color(0xFF10B981)
-        : (appStatus == 'Applying' ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8));
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Text(
-            workflow,
-            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          'App: $appStatus',
-          style: TextStyle(color: appColor, fontSize: 9, fontWeight: FontWeight.w600),
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        displayStatus,
+        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+      ),
     );
   }
 
@@ -1302,11 +1273,6 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           DropdownMenuItem(value: 'All', child: Text('Status: All')),
                           DropdownMenuItem(value: 'Pending Approval', child: Text('Pending Approval')),
                           DropdownMenuItem(value: 'Approved', child: Text('Approved')),
-                          DropdownMenuItem(value: 'Draft', child: Text('Draft')),
-                          DropdownMenuItem(value: 'Rejected', child: Text('Rejected')),
-                          DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
-                          DropdownMenuItem(value: 'Applied', child: Text('Applied (App Status)')),
-                          DropdownMenuItem(value: 'Not Applied', child: Text('Not Applied (App Status)')),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _statusFilter = val);
