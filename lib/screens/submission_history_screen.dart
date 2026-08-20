@@ -459,24 +459,95 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
             const Text('Affix signature and/or take a group photo', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            Container(
-              height: 120,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFF27272A),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF3F3F46)),
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.gesture_rounded, color: Color(0xFF38BDF8), size: 36),
-                    SizedBox(height: 6),
-                    Text('Doctor Consent Signature Attached', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  ],
-                ),
-              ),
+            Builder(
+              builder: (ctx) {
+                final apiService = Provider.of<ApiService>(context, listen: false);
+                final photoUrl = submission.consentPhoto;
+                final sig = submission.consentSignature;
+
+                if (photoUrl != null && photoUrl.isNotEmpty) {
+                  final fullUrl = photoUrl.startsWith('http') ? photoUrl : '${apiService.baseUrl}$photoUrl';
+                  return Container(
+                    height: 160,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF27272A),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF3F3F46)),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.network(
+                        fullUrl,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Text('Group Consent Photo Attached', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        ),
+                      ),
+                    ),
+                  );
+                } else if (sig != null && sig.isNotEmpty) {
+                  if (sig.startsWith('http') || sig.startsWith('/files/')) {
+                    final fullUrl = sig.startsWith('http') ? sig : '${apiService.baseUrl}$sig';
+                    return Container(
+                      height: 120,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFF3F3F46)),
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          fullUrl,
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Text('Doctor Consent Signature Attached', style: TextStyle(color: Colors.black54, fontSize: 12)),
+                          ),
+                        ),
+                      ),
+                    );
+                  } else if (sig.startsWith('data:image')) {
+                    try {
+                      final bytes = base64Decode(sig.split(',').last.trim());
+                      return Container(
+                        height: 120,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF3F3F46)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.memory(bytes, fit: BoxFit.contain),
+                        ),
+                      );
+                    } catch (_) {}
+                  }
+                }
+
+                return Container(
+                  height: 100,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF3F3F46)),
+                  ),
+                  child: Center(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.draw_rounded, color: Color(0xFF38BDF8), size: 24),
+                        SizedBox(width: 8),
+                        Text('Doctor Consent Signature Attached', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         );
@@ -490,14 +561,30 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    width: 110,
-                    height: 140,
-                    color: const Color(0xFF27272A),
-                    child: const Icon(Icons.person_rounded, color: Color(0xFF38BDF8), size: 64),
-                  ),
+                Builder(
+                  builder: (ctx) {
+                    final apiService = Provider.of<ApiService>(context, listen: false);
+                    final docPhoto = submission.hcpPhoto;
+                    final fullDocPhotoUrl = (docPhoto != null && docPhoto.isNotEmpty)
+                        ? (docPhoto.startsWith('http') ? docPhoto : '${apiService.baseUrl}$docPhoto')
+                        : null;
+
+                    return ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        width: 110,
+                        height: 140,
+                        color: const Color(0xFF27272A),
+                        child: fullDocPhotoUrl != null
+                            ? Image.network(
+                                fullDocPhotoUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.person_rounded, color: Color(0xFF38BDF8), size: 64),
+                              )
+                            : const Icon(Icons.person_rounded, color: Color(0xFF38BDF8), size: 64),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(width: 16),
                 Expanded(

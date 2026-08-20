@@ -254,7 +254,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         borderRadius: BorderRadius.circular(8),
                         child: Image.network(
                           (fullDoctor.hcpPhoto != null && fullDoctor.hcpPhoto!.isNotEmpty)
-                              ? fullDoctor.hcpPhoto!
+                              ? (fullDoctor.hcpPhoto!.startsWith('http') ? fullDoctor.hcpPhoto! : '${apiService.baseUrl}${fullDoctor.hcpPhoto!}')
                               : 'https://pngimg.com/uploads/doctor/doctor_PNG16003.png',
                           fit: BoxFit.cover,
                           errorBuilder: (_, __, ___) => const Center(

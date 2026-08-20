@@ -2376,6 +2376,7 @@ class ApiService extends ChangeNotifier {
           middleName: submission.middleName ?? '',
           lastName: submission.lastName ?? '',
           birthDate: submission.birthDate ?? '',
+          hcpPhoto: submission.hcpPhoto,
           hcpType: (submission.hcpType != null && submission.hcpType!.isNotEmpty) ? submission.hcpType! : 'Resident',
           hcpPractice: (submission.hcpPractice != null && submission.hcpPractice!.isNotEmpty) ? submission.hcpPractice! : 'Both',
           specialties: submission.specialties
@@ -2413,6 +2414,7 @@ class ApiService extends ChangeNotifier {
           middleName: (submission.middleName != null && submission.middleName!.isNotEmpty) ? submission.middleName : existing.middleName,
           lastName: (submission.lastName != null && submission.lastName!.isNotEmpty) ? submission.lastName! : existing.lastName,
           birthDate: (submission.birthDate != null && submission.birthDate!.isNotEmpty) ? submission.birthDate : existing.birthDate,
+          hcpPhoto: (submission.hcpPhoto != null && submission.hcpPhoto!.isNotEmpty) ? submission.hcpPhoto : existing.hcpPhoto,
           hcpType: submission.hcpType ?? existing.hcpType,
           hcpPractice: submission.hcpPractice ?? existing.hcpPractice,
           specialties: submission.specialties.isNotEmpty
