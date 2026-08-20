@@ -136,7 +136,7 @@ class AppDrawer extends StatelessWidget {
                                     ),
                                   ),
                                   child: Text(
-                                    'ROLE: ${apiService.userPositionTitle.toUpperCase()}',
+                                    apiService.userDesignationTitle.toUpperCase(),
                                     style: TextStyle(
                                       color: apiService.isAdmin
                                           ? const Color(0xFFFCA5A5)

@@ -1188,7 +1188,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
               ),
             ),
             child: Text(
-              apiService.userPositionTitle,
+              apiService.userDesignationTitle,
               style: TextStyle(
                 color: apiService.isAdmin
                     ? const Color(0xFFFCA5A5)

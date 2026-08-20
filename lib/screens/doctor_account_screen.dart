@@ -1123,7 +1123,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
               ),
             ),
             child: Text(
-              apiService.userPositionTitle,
+              apiService.userDesignationTitle,
               style: TextStyle(
                 color: apiService.isAdmin
                     ? const Color(0xFFFCA5A5)

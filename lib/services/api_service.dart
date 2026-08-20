@@ -29,6 +29,14 @@ class ApiService extends ChangeNotifier {
   UserPosition _userPosition = UserPosition.medRep;
   UserPosition get userPosition => _userPosition;
 
+  // Employee Metadata & Designation
+  String _userDesignation = '';
+  String get userDesignation => _userDesignation;
+  String? employeeId;
+  String? employeeReportsTo;
+  String? employeeDepartment;
+  String? employeeBranch;
+
   bool get isAdmin => _userPosition == UserPosition.admin;
   bool get isManager => _userPosition == UserPosition.manager;
   bool get isMedRep => _userPosition == UserPosition.medRep;
@@ -41,10 +49,46 @@ class ApiService extends ChangeNotifier {
       case UserPosition.admin:
         return 'Admin';
       case UserPosition.manager:
-        return 'Manager (GM/DSM)';
+        return 'Manager';
       case UserPosition.medRep:
         return 'MedRep';
     }
+  }
+
+  /// Returns clean short / acronym title for the designation (e.g. Sales Rep, PHSR, PHSS, DSM, GM, etc.)
+  String get userDesignationTitle {
+    if (_userDesignation.isEmpty) {
+      return userPositionTitle;
+    }
+    final des = _userDesignation.trim();
+    final lower = des.toLowerCase();
+
+    // Standard recognized pharmaceutical & sales designations
+    if (lower == 'sales representative') return 'Sales Rep';
+    if (lower.contains('professional healthcare sales representative') || lower == 'phsr') return 'PHSR';
+    if (lower.contains('professional healthcare sales specialist') || lower == 'phss') return 'PHSS';
+    if (lower.contains('medical representative') || lower == 'medrep' || lower == 'mr') return 'MedRep';
+    if (lower.contains('district sales manager') || lower == 'dsm') return 'DSM';
+    if (lower.contains('regional sales manager') || lower == 'rsm') return 'RSM';
+    if (lower.contains('area sales manager') || lower == 'asm') return 'ASM';
+    if (lower.contains('general manager') || lower == 'gm') return 'GM';
+    if (lower.contains('territory sales manager') || lower == 'tsm') return 'TSM';
+    if (lower.contains('field sales representative') || lower == 'fsr') return 'FSR';
+    if (lower.contains('field sales specialist') || lower == 'fss') return 'FSS';
+    if (lower.contains('product specialist') || lower == 'ps') return 'PS';
+    if (lower.contains('sales executive')) return 'Sales Exec';
+    if (lower.contains('administrator') || lower == 'admin') return 'Admin';
+    if (lower.contains('system manager') || lower.contains('system administrator')) return 'Sys Admin';
+
+    // If string length is short enough (<= 15 chars), use it directly
+    if (des.length <= 15) return des;
+
+    // Otherwise generate acronym from capital letters or words
+    final words = des.split(RegExp(r'\s+'));
+    if (words.length > 1) {
+      return words.map((w) => w.isNotEmpty ? w[0].toUpperCase() : '').join();
+    }
+    return des;
   }
 
   void setUserPosition(UserPosition pos) {
@@ -515,7 +559,7 @@ class ApiService extends ChangeNotifier {
   Future<bool> login(String username, String password) async {
     if (_isOffline) {
       loggedInEmail = username.trim().isEmpty ? 'offline_user@pims-marketing.com' : username.trim();
-      _detectPositionFromEmail(loggedInEmail ?? '');
+      _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
       await fetchAvailablePrograms();
       return true;
     }
@@ -544,7 +588,7 @@ class ApiService extends ChangeNotifier {
             loggedInFullName = body['user_fullname'].toString();
           }
 
-          _detectPositionFromEmail(loggedInEmail ?? '');
+          _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
 
           // Parse cookie header to persist session (e.g. sid=xxxxxx)
           final rawCookie = response.headers['set-cookie'];
@@ -567,9 +611,108 @@ class ApiService extends ChangeNotifier {
     }
   }
 
+  /// Fetch Employee record and Designation from ERPNext Employee doctype (https://dev.pmii-marketing.com/app/employee)
+  Future<Map<String, dynamic>?> fetchEmployeeDesignation(String userEmail) async {
+    if (_isOffline) {
+      final cached = await _readFromCache('employee_profile_cache.json');
+      if (cached != null) {
+        try {
+          return jsonDecode(cached) as Map<String, dynamic>;
+        } catch (_) {}
+      }
+      return null;
+    }
+
+    // 1. Query Employee by user_id
+    try {
+      final empUrl = Uri.parse(
+        '$baseUrl/api/resource/Employee?filters=[["user_id","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","department","branch","reports_to"]&limit=1',
+      );
+      final empResp = await http.get(empUrl, headers: _headers);
+      if (empResp.statusCode == 200) {
+        final body = jsonDecode(empResp.body);
+        final List<dynamic> data = body['data'] ?? [];
+        if (data.isNotEmpty) {
+          final emp = data.first as Map<String, dynamic>;
+          await _writeToCache('employee_profile_cache.json', jsonEncode(emp));
+          return emp;
+        }
+      }
+    } catch (e) {
+      print('Employee query by user_id error: $e');
+    }
+
+    // 2. Query Employee by company_email
+    try {
+      final empUrl = Uri.parse(
+        '$baseUrl/api/resource/Employee?filters=[["company_email","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","department","branch","reports_to"]&limit=1',
+      );
+      final empResp = await http.get(empUrl, headers: _headers);
+      if (empResp.statusCode == 200) {
+        final body = jsonDecode(empResp.body);
+        final List<dynamic> data = body['data'] ?? [];
+        if (data.isNotEmpty) {
+          final emp = data.first as Map<String, dynamic>;
+          await _writeToCache('employee_profile_cache.json', jsonEncode(emp));
+          return emp;
+        }
+      }
+    } catch (e) {
+      print('Employee query by company_email error: $e');
+    }
+
+    // 3. Query Employee by personal_email
+    try {
+      final empUrl = Uri.parse(
+        '$baseUrl/api/resource/Employee?filters=[["personal_email","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","department","branch","reports_to"]&limit=1',
+      );
+      final empResp = await http.get(empUrl, headers: _headers);
+      if (empResp.statusCode == 200) {
+        final body = jsonDecode(empResp.body);
+        final List<dynamic> data = body['data'] ?? [];
+        if (data.isNotEmpty) {
+          final emp = data.first as Map<String, dynamic>;
+          await _writeToCache('employee_profile_cache.json', jsonEncode(emp));
+          return emp;
+        }
+      }
+    } catch (e) {
+      print('Employee query by personal_email error: $e');
+    }
+
+    // 4. Whitelisted client RPC method fallback
+    try {
+      final clientUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get_list?doctype=Employee&filters=[["user_id","=","$userEmail"]]&fields=["name","employee_name","first_name","last_name","designation","user_id","company_email","department","branch","reports_to"]&limit_page_length=1',
+      );
+      final clientResp = await http.get(clientUrl, headers: _headers);
+      if (clientResp.statusCode == 200) {
+        final body = jsonDecode(clientResp.body);
+        final List<dynamic> data = body['message'] ?? body['data'] ?? [];
+        if (data.isNotEmpty) {
+          final emp = data.first as Map<String, dynamic>;
+          await _writeToCache('employee_profile_cache.json', jsonEncode(emp));
+          return emp;
+        }
+      }
+    } catch (e) {
+      print('Employee client method query error: $e');
+    }
+
+    // 5. Cache fallback
+    final cached = await _readFromCache('employee_profile_cache.json');
+    if (cached != null) {
+      try {
+        return jsonDecode(cached) as Map<String, dynamic>;
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
   Future<void> fetchLoggedInUserInfo() async {
     if (_isOffline || _sessionCookie == null) {
-      _detectPositionFromEmail(loggedInEmail ?? '');
+      _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
       return;
     }
     try {
@@ -614,38 +757,79 @@ class ApiService extends ChangeNotifier {
             }
           }
 
-          final lowerEmail = userEmail.toLowerCase().trim();
-          if (lowerEmail == 'administrator' ||
-              lowerEmail == 'jptan@profinsights.biz' ||
-              lowerEmail.contains('cig-it') ||
-              roleNames.any((r) => r == 'system manager' || r == 'administrator' || r.contains('admin') || r.contains('it staff'))) {
-            _userPosition = UserPosition.admin;
-          } else if (roleNames.any((r) => r.contains('sales manager') || r.contains('manager') || r.contains('dsm') || r.contains('gm') || r.contains('supervisor') || r.contains('regional'))) {
-            _userPosition = UserPosition.manager;
-          } else {
-            _detectPositionFromEmail(userEmail);
+          // Fetch Employee Designation from Employee doctype
+          final empData = await fetchEmployeeDesignation(userEmail);
+          String designation = '';
+          if (empData != null) {
+            employeeId = empData['name']?.toString();
+            employeeReportsTo = empData['reports_to']?.toString();
+            employeeDepartment = empData['department']?.toString();
+            employeeBranch = empData['branch']?.toString();
+            if (empData['employee_name'] != null && empData['employee_name'].toString().trim().isNotEmpty) {
+              loggedInFullName = empData['employee_name'].toString().trim();
+            }
+            if (empData['designation'] != null) {
+              designation = empData['designation'].toString().trim();
+            }
           }
+
+          _applyPositionFromDesignation(designation, userEmail, roleNames);
           notifyListeners();
         }
       }
     } catch (e) {
       print('Error fetching logged in user info: $e');
-      _detectPositionFromEmail(loggedInEmail ?? '');
+      _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
     }
   }
 
-  void _detectPositionFromEmail(String email) {
-    final lower = email.toLowerCase().trim();
-    if (lower.contains('admin') ||
-        lower == 'administrator' ||
-        lower == 'jptan@profinsights.biz' ||
-        lower.contains('cig-it') ||
-        (lower.endsWith('@profinsights.biz') && (lower.contains('josh') || lower.contains('tan') || lower.contains('root') || lower.contains('admin')))) {
+  void _applyPositionFromDesignation(String designation, String email, List<String> roleNames) {
+    if (designation.isNotEmpty) {
+      _userDesignation = designation.trim();
+    }
+    final lowerDes = _userDesignation.toLowerCase();
+    final lowerEmail = email.toLowerCase().trim();
+
+    // 1. Admin Designation / System Master
+    if (lowerEmail == 'administrator' ||
+        lowerEmail == 'jptan@profinsights.biz' ||
+        lowerEmail.contains('cig-it') ||
+        lowerDes.contains('administrator') ||
+        lowerDes.contains('system manager') ||
+        lowerDes.contains('it manager') ||
+        lowerDes.contains('ceo') ||
+        lowerDes.contains('managing director') ||
+        lowerDes.contains('president') ||
+        (lowerEmail.endsWith('@profinsights.biz') && (lowerEmail.contains('josh') || lowerEmail.contains('tan') || lowerEmail.contains('root') || lowerEmail.contains('admin'))) ||
+        roleNames.any((r) => r == 'system manager' || r == 'administrator' || r.contains('it staff'))) {
       _userPosition = UserPosition.admin;
-    } else if (lower.contains('manager') || lower.contains('gm') || lower.contains('dsm') || lower.contains('director') || lower.contains('lead') || lower.contains('supervisor')) {
+      if (_userDesignation.isEmpty) _userDesignation = 'Administrator';
+    } 
+    // 2. Managerial Designation (GM, DSM, RSM, ASM, Supervisor, Approver)
+    else if (lowerDes.contains('district sales manager') ||
+             lowerDes.contains('regional sales manager') ||
+             lowerDes.contains('area sales manager') ||
+             lowerDes.contains('general manager') ||
+             lowerDes.contains('sales manager') ||
+             lowerDes.contains('territory sales manager') ||
+             lowerDes.contains('manager') ||
+             lowerDes.contains('dsm') ||
+             lowerDes.contains('rsm') ||
+             lowerDes.contains('asm') ||
+             lowerDes.contains('gm') ||
+             lowerDes.contains('tsm') ||
+             lowerDes.contains('supervisor') ||
+             lowerDes.contains('director') ||
+             lowerDes.contains('lead') ||
+             lowerDes.contains('head') ||
+             roleNames.any((r) => r.contains('sales manager') || r.contains('manager') || r.contains('dsm') || r.contains('gm') || r.contains('supervisor') || r.contains('regional'))) {
       _userPosition = UserPosition.manager;
-    } else {
+      if (_userDesignation.isEmpty) _userDesignation = 'District Sales Manager';
+    } 
+    // 3. MedRep / Field Sales Representative (Sales Representative, MedRep, PHSR, PHSS, etc.)
+    else {
       _userPosition = UserPosition.medRep;
+      if (_userDesignation.isEmpty) _userDesignation = 'Sales Representative';
     }
     notifyListeners();
   }
@@ -655,6 +839,11 @@ class ApiService extends ChangeNotifier {
     _sessionCookie = null;
     loggedInEmail = null;
     loggedInFullName = null;
+    _userDesignation = '';
+    employeeId = null;
+    employeeReportsTo = null;
+    employeeDepartment = null;
+    employeeBranch = null;
     _userPosition = UserPosition.medRep;
     notifyListeners();
   }
