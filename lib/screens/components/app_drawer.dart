@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
+import '../../services/biometric_service.dart';
 import '../hcp_dashboard_screen.dart';
 import '../doctor_masterlist_screen.dart';
 import '../submission_history_screen.dart';
@@ -255,6 +256,20 @@ class AppDrawer extends StatelessWidget {
                         _showInstitutionsModal(context);
                       },
                     ),
+                    if (apiService.isAdmin || apiService.isManager) ...[
+                      const SizedBox(height: 4),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.fingerprint_rounded,
+                        title: 'Device Touch ID',
+                        subtitle: 'Biometric Ownership',
+                        isSelected: false,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          _showBiometricsModal(context, apiService);
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -394,6 +409,117 @@ class AppDrawer extends StatelessWidget {
         ),
         trailing: isSelected ? const Icon(Icons.chevron_right_rounded, color: Color(0xFF38BDF8), size: 18) : null,
         onTap: onTap,
+      ),
+    );
+  }
+
+  void _showBiometricsModal(BuildContext context, ApiService apiService) async {
+    final currentOwner = await BiometricService.getEnrolledOwnerEmail();
+
+    if (!context.mounted) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (modalCtx, setModalState) => Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0066FF).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.fingerprint_rounded, color: Color(0xFF0066FF), size: 24),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Device Biometric Security',
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                        ),
+                        Text(
+                          'Manage Touch ID / Face ID device owner',
+                          style: TextStyle(fontSize: 12, color: Color(0xFF64748B)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Current Enrolled Device Owner:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text(
+                      currentOwner ?? 'No device owner registered',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: currentOwner != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      currentOwner != null
+                          ? 'This device is locked to the account above. Other users must log in manually using username and password.'
+                          : 'You can register your Admin account to enable Touch ID / Face ID.',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B), height: 1.3),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (currentOwner != null) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      await BiometricService.clearCredentials();
+                      if (context.mounted) {
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Device biometrics unlinked successfully.')),
+                        );
+                      }
+                    },
+                    icon: const Icon(Icons.link_off_rounded, color: Color(0xFFDC2626)),
+                    label: const Text('Unlink / Reset Device Biometrics', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: Color(0xFFDC2626), width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
       ),
     );
   }

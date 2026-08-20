@@ -80,12 +80,30 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       if (success) {
-        await BiometricService.saveCredentials(
-          username,
-          password,
-          position: apiService.userPosition.name,
-          fullName: apiService.loggedInFullName,
-        );
+        final lowerUsername = username.toLowerCase();
+        final lowerOwner = _enrolledOwner.toLowerCase();
+
+        // STRICT SECURITY RULE:
+        // Biometrics is locked to the iPad/device owner (Admin).
+        // 1. If this account is already the registered device owner, update stored credentials.
+        // 2. If NO owner is registered yet AND the user is Admin or Manager, register as the device owner.
+        // 3. If any other account (MedRep / guest) logs in, DO NOT save or overwrite device biometrics!
+        if (_enrolledOwner.isNotEmpty && lowerUsername == lowerOwner) {
+          await BiometricService.saveCredentials(
+            username,
+            password,
+            position: apiService.userPosition.name,
+            fullName: apiService.loggedInFullName,
+          );
+        } else if (_enrolledOwner.isEmpty && (apiService.isAdmin || apiService.isManager)) {
+          await BiometricService.saveCredentials(
+            username,
+            password,
+            position: apiService.userPosition.name,
+            fullName: apiService.loggedInFullName,
+          );
+        }
+
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy
@@ -97,6 +115,54 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() {
           _errorMessage = 'Authentication failed. Please verify your credentials.';
         });
+      }
+    }
+  }
+
+  Future<void> _handleResetBiometrics() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706)),
+            SizedBox(width: 8),
+            Text('Reset Device Biometrics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(
+          'Currently, this iPad is registered to:\n\n$_enrolledOwner\n\n'
+          'Do you want to unlink this account? After unlinking, only an Admin account can register as the device owner.',
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Unlink & Reset', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await BiometricService.clearCredentials();
+      await _checkBiometrics();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Device biometrics unlinked. Log in with your Admin account to bind Touch ID / Face ID.'),
+            backgroundColor: Color(0xFF0056B3),
+          ),
+        );
       }
     }
   }
@@ -449,7 +515,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   onPressed: _isLoading ? null : _handleBiometricLogin,
                                   icon: const Icon(Icons.fingerprint, color: Color(0xFF0056B3)),
                                   label: Text(
-                                    typed.isEmpty ? 'Log in with Biometrics ($displayName)' : 'Biometric Login as $displayName',
+                                    typed.isEmpty ? 'Touch ID Login (Owner: $displayName)' : 'Biometric Login as $displayName',
                                     style: const TextStyle(
                                       color: Color(0xFF0056B3),
                                       fontSize: 13.5,
@@ -479,7 +545,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Text(
-                                          'Biometrics locked to $_enrolledOwner. Enter password manually to log in as $typed.',
+                                          'Biometrics locked to iPad Owner ($_enrolledOwner). Enter password manually to log in as $typed.',
                                           style: const TextStyle(
                                             color: Color(0xFF92400E),
                                             fontSize: 11.5,
@@ -492,6 +558,22 @@ class _LoginScreenState extends State<LoginScreen> {
                                 );
                               }
                             },
+                          ),
+                          const SizedBox(height: 6),
+                          Center(
+                            child: TextButton.icon(
+                              onPressed: _isLoading ? null : _handleResetBiometrics,
+                              icon: const Icon(Icons.link_off_rounded, size: 14, color: Color(0xFF64748B)),
+                              label: const Text(
+                                'Unlink / Reset Device Biometrics',
+                                style: TextStyle(
+                                  color: Color(0xFF64748B),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ],

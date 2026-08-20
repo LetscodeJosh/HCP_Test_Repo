@@ -98,6 +98,12 @@ class BiometricService {
     return null;
   }
 
+  /// Get the email of the registered device owner
+  static Future<String?> getEnrolledOwnerEmail() async {
+    final creds = await getSavedCredentials();
+    return creds?['username'];
+  }
+
   /// Checks if the typed username matches the enrolled device owner.
   /// If a different username is entered, biometric login is blocked to prevent account breach.
   static Future<bool> isUsernameAllowedForBiometric(String? typedUsername) async {
@@ -113,7 +119,7 @@ class BiometricService {
     return typedUsername.trim().toLowerCase() == enrolledOwner;
   }
 
-  /// Clear saved credentials
+  /// Clear/Unlink saved biometric credentials completely
   static Future<void> clearCredentials() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_keyUsername);
