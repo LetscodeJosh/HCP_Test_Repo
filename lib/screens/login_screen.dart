@@ -116,53 +116,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _handleResetBiometrics() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Color(0xFFD97706)),
-            SizedBox(width: 8),
-            Text('Reset Device Biometrics', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text(
-          'Do you want to unlink and reset biometric credentials on this device?',
-          style: TextStyle(fontSize: 13, height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFDC2626),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            child: const Text('Reset', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await BiometricService.clearCredentials();
-      await _checkBiometrics();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Device biometrics reset successfully.'),
-            backgroundColor: Color(0xFF0056B3),
-          ),
-        );
-      }
-    }
-  }
-
   Future<void> _handleBiometricLogin() async {
     final credentials = await BiometricService.getSavedCredentials();
     if (credentials == null) {
@@ -528,22 +481,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return const SizedBox.shrink();
                               }
                             },
-                          ),
-                          const SizedBox(height: 6),
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: _isLoading ? null : _handleResetBiometrics,
-                              icon: const Icon(Icons.link_off_rounded, size: 14, color: Color(0xFF64748B)),
-                              label: const Text(
-                                'Reset Device Biometrics',
-                                style: TextStyle(
-                                  color: Color(0xFF64748B),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  decoration: TextDecoration.underline,
-                                ),
-                              ),
-                            ),
                           ),
                         ],
                       ],
