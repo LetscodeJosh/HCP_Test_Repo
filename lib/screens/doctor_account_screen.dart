@@ -648,39 +648,41 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.bold)),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0066FF),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        if (!apiService.isMedRep) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 2,
+                            child: ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF0066FF),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              ),
+                              icon: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 20),
+                              label: const Text('Update HCP Profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                              onPressed: () async {
+                                Navigator.pop(ctx);
+                                final apiService = Provider.of<ApiService>(context, listen: false);
+                                Hcp docToProfile = matchedDoctor;
+                                if (fullAccount.hcp != null && fullAccount.hcp!.isNotEmpty) {
+                                  try {
+                                    docToProfile = await apiService.fetchDoctorDetail(fullAccount.hcp!);
+                                  } catch (_) {}
+                                }
+                                if (!mounted) return;
+                                final result = await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => HcpWizardScreen(doctor: docToProfile),
+                                  ),
+                                );
+                                if (result == true) {
+                                  _loadAccounts();
+                                }
+                              },
                             ),
-                            icon: const Icon(Icons.edit_note_rounded, color: Colors.white, size: 20),
-                            label: const Text('Update HCP Profile', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                            onPressed: () async {
-                              Navigator.pop(ctx);
-                              final apiService = Provider.of<ApiService>(context, listen: false);
-                              Hcp docToProfile = matchedDoctor;
-                              if (fullAccount.hcp != null && fullAccount.hcp!.isNotEmpty) {
-                                try {
-                                  docToProfile = await apiService.fetchDoctorDetail(fullAccount.hcp!);
-                                } catch (_) {}
-                              }
-                              if (!mounted) return;
-                              final result = await Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => HcpWizardScreen(doctor: docToProfile),
-                                ),
-                              );
-                              if (result == true) {
-                                _loadAccounts();
-                              }
-                            },
                           ),
-                        ),
+                        ],
                       ],
                     ),
                   ],
