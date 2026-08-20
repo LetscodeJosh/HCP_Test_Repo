@@ -2540,10 +2540,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
           final filtered = _allDoctors.where((d) {
-            final name = '${d.firstName} ${d.lastName}'.toLowerCase();
+            final fullName = (d.hcpFullName ?? '').toLowerCase();
+            final parts = '${d.firstName} ${d.middleName ?? ''} ${d.lastName}'.toLowerCase();
             final id = (d.name ?? '').toLowerCase();
             final q = searchQuery.toLowerCase().trim();
-            return q.isEmpty || name.contains(q) || id.contains(q);
+            return q.isEmpty || fullName.contains(q) || parts.contains(q) || id.contains(q);
           }).toList();
 
           return Container(

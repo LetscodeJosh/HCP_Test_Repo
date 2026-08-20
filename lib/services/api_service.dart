@@ -1080,7 +1080,7 @@ class ApiService extends ChangeNotifier {
       return [];
     }
 
-    // Tier 1: Query HCP doctype with fields=["*"] (for Admin / unrestricted roles)
+    // Tier 1: Query HCP doctype with fields=["*"] via REST Resource API
     try {
       final url = Uri.parse('$baseUrl/api/resource/HCP?fields=["*"]&limit=2000');
       final response = await http.get(url, headers: _headers);
@@ -1097,7 +1097,26 @@ class ApiService extends ChangeNotifier {
       print('Tier 1 fetch doctors error: $e');
     }
 
-    // Tier 2: Query HCP doctype with explicit public fields (permlevel 0 safe for MedRep)
+    // Tier 2: Whitelisted client method with fields=["*"] strictly from HCP DocType
+    try {
+      final clientUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["*"]&limit_page_length=2000',
+      );
+      final clientResp = await http.get(clientUrl, headers: _headers);
+      if (clientResp.statusCode == 200) {
+        final body = jsonDecode(clientResp.body);
+        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
+        if (dataList.isNotEmpty) {
+          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+          return list;
+        }
+      }
+    } catch (e) {
+      print('Tier 2 client method fetch doctors error: $e');
+    }
+
+    // Tier 3: Query HCP doctype with explicit public fields (permlevel 0 safe for MedRep)
     try {
       final urlPublic = Uri.parse(
         '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit=2000',
@@ -1113,10 +1132,10 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Tier 2 fetch doctors error: $e');
+      print('Tier 3 fetch doctors error: $e');
     }
 
-    // Tier 3: Whitelisted client method (works when REST direct doctype query is restricted)
+    // Tier 4: Whitelisted client method with explicit fields strictly from HCP DocType
     try {
       final clientUrl = Uri.parse(
         '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_page_length=2000',
@@ -1132,44 +1151,10 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Tier 3 fetch doctors error: $e');
+      print('Tier 4 fetch doctors error: $e');
     }
 
-    // Tier 3: HCP Account Doctor Extraction (MedReps & Managers always have access to HCP Accounts)
-    try {
-      final accounts = await fetchHcpAccounts();
-      if (accounts.isNotEmpty) {
-        final Map<String, Hcp> docMap = {};
-        for (var acc in accounts) {
-          final docId = acc.hcp ?? acc.name ?? '';
-          final docName = acc.hcpName ?? 'Doctor';
-          if (docId.isNotEmpty && !docMap.containsKey(docId)) {
-            final nameParts = docName.split(' ');
-            final fName = nameParts.isNotEmpty ? nameParts.first : docName;
-            final lName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
-            docMap[docId] = Hcp(
-              name: docId,
-              firstName: fName,
-              lastName: lName,
-              hcpFullName: docName,
-              hcpType: 'Resident',
-              hcpPractice: 'Both',
-              isActive: acc.isActive,
-              specialties: acc.specialties.map((s) => HcpSpecialty(hcpSpecialty: s.hcpSpecialty, subSpecialty: s.subSpecialty, isPrimary: s.preferred)).toList(),
-              workplaces: acc.workplaces.map((w) => HcpWorkplace(workplace: w.hcpWorkplace, cityMunicipality: w.cityMunicipality, provinceName: w.provinceName, address: w.address, isPrimary: w.preferred)).toList(),
-              contacts: acc.contacts.map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred)).toList(),
-            );
-          }
-        }
-        if (docMap.isNotEmpty) {
-          return docMap.values.toList();
-        }
-      }
-    } catch (e) {
-      print('Tier 3 HCP Account doctor extraction error: $e');
-    }
-
-    // Tier 4: Cache fallback
+    // Tier 5: Cache fallback from previous successful HCP DocType fetches
     final cache = await _readFromCache('doctors_cache.json');
     if (cache != null) {
       try {
