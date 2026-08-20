@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../models/hcp.dart';
 import '../models/lookup_models.dart';
 import '../models/hcp_account.dart';
+import '../models/submission.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
 
@@ -824,31 +825,66 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                       }
                     }
 
-                    final newDoctor = Hcp(
-                      firstName: firstName.trim(),
-                      middleName: reqMiddleName,
-                      lastName: lastName.trim(),
-                      hcpFullName: computedFullName,
-                      hcpPhoto: uploadedPhotoUrl,
-                      hcpType: selectedType!,
-                      hcpPractice: selectedPractice,
-                      specialties: reqSpec.isNotEmpty ? [HcpSpecialty(hcpSpecialty: reqSpec)] : [],
-                      workplaces: reqWork.isNotEmpty ? [HcpWorkplace(workplace: reqWork)] : [],
-                    );
-                    final savedDoctor = await apiService.createDoctor(newDoctor);
-
-                    final newHcpAccount = HcpAccount(
-                      accountName: apiService.selectedProgram,
-                      territory: 'All Territories',
-                      salesPerson: 'JORGE MENGORIO (AD0110)',
-                      hcp: savedDoctor.name,
-                    );
-                    await apiService.hcpAccounts.create(newHcpAccount);
-
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Doctor registered and linked to active program successfully!')),
+                    if (apiService.isMedRep) {
+                      final submission = HcpProfileSubmission(
+                        hcpName: '',
+                        hcpFullName: computedFullName,
+                        firstName: firstName.trim(),
+                        middleName: reqMiddleName,
+                        lastName: lastName.trim(),
+                        hcpPhoto: uploadedPhotoUrl,
+                        hcpType: selectedType!,
+                        hcpPractice: selectedPractice,
+                        specialties: reqSpec.isNotEmpty ? [SubmissionSpecialty(hcpSpecialty: reqSpec, preferred: true)] : [],
+                        workplaces: reqWork.isNotEmpty ? [SubmissionWorkplace(hcpWorkplace: reqWork, preferred: true)] : [],
+                        accountOrProgram: apiService.selectedProgram,
+                        territory: 'AD0110',
+                        salesPerson: apiService.getTerritoryManagerForTerritory('AD0110'),
+                        userId: apiService.loggedInEmail,
+                        medrepEmail: apiService.loggedInEmail,
+                        submissionDate: DateTime.now().toIso8601String().split('.').first,
+                        workflowState: 'Pending Approval',
+                        applicationStatus: 'Not Applied',
+                        docstatus: 0,
                       );
+                      await apiService.createSubmission(submission);
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Doctor registration submitted to HCP Profile Submission (Pending Managerial Approval)!'),
+                            backgroundColor: Color(0xFF0066FF),
+                          ),
+                        );
+                      }
+                    } else {
+                      final newDoctor = Hcp(
+                        firstName: firstName.trim(),
+                        middleName: reqMiddleName,
+                        lastName: lastName.trim(),
+                        hcpFullName: computedFullName,
+                        hcpPhoto: uploadedPhotoUrl,
+                        hcpType: selectedType!,
+                        hcpPractice: selectedPractice,
+                        specialties: reqSpec.isNotEmpty ? [HcpSpecialty(hcpSpecialty: reqSpec)] : [],
+                        workplaces: reqWork.isNotEmpty ? [HcpWorkplace(workplace: reqWork)] : [],
+                      );
+                      final savedDoctor = await apiService.createDoctor(newDoctor);
+
+                      await apiService.syncHcpAccount(
+                        hcpId: savedDoctor.name ?? 'NEW-HCP',
+                        hcpFullName: computedFullName,
+                        program: apiService.selectedProgram,
+                        territory: 'AD0110',
+                        salesPerson: apiService.getTerritoryManagerForTerritory('AD0110'),
+                        userId: apiService.loggedInEmail,
+                      );
+
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Doctor registered and linked to active program successfully!')),
+                        );
+                      }
                     }
                     _loadData();
                   } catch (e) {

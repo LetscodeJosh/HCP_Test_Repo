@@ -819,10 +819,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false);
 
     // Determine approval requirement:
-    // - New doctor (not in masterlist): Directly registered into the universe list & HCP Account without blocking approval.
+    // - MedRep account: ALL submissions (adding new doctor or updating doctor info) MUST go to HCP Profile Submission for Manager Approval.
     // - Existing doctor with changes: Requires Manager/Admin validation & approval.
-    // - Existing doctor without changes: Auto-confirmed into the monthly HCP Account.
-    final bool requiresApproval = isExistingDoctor && hasAnyChanges;
+    // - Admin / Manager with existing doctor without changes: Auto-confirmed.
+    final bool requiresApproval = apiService.isMedRep || (isExistingDoctor && hasAnyChanges);
     final String targetWorkflow = requiresApproval ? 'Pending Approval' : 'Approved';
     final String targetAppStatus = requiresApproval ? 'Not Applied' : 'Applied';
     final int targetDocstatus = requiresApproval ? 0 : 1;
@@ -830,8 +830,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     try {
       String effectiveHcpId = isExistingDoctor ? _selectedDoctor!.name! : '';
 
-      // If New Doctor: register directly in HCP master doctype (doctor universe) first
-      if (!isExistingDoctor) {
+      // If New Doctor AND logged in as Admin / Manager, can directly register into HCP master
+      if (!isExistingDoctor && !apiService.isMedRep) {
         try {
           final newDoctor = Hcp(
             hcpFullName: fullDoctorName,
@@ -893,8 +893,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
       await apiService.createSubmission(submission);
 
-      if (!isExistingDoctor || !requiresApproval) {
-        // Auto-sync active HCP Account for this program (for new doctors and existing doctors with no changes)
+      if (!requiresApproval) {
+        // Auto-sync active HCP Account for this program (for Admin/Manager direct actions)
         await apiService.syncHcpAccount(
           hcpId: effectiveHcpId.isNotEmpty ? effectiveHcpId : 'NEW-HCP',
           hcpFullName: fullDoctorName,
@@ -917,14 +917,16 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             backgroundColor: requiresApproval ? const Color(0xFF0066FF) : const Color(0xFF10B981),
             content: Text(
               requiresApproval
-                  ? 'Doctor profile update submitted (Pending Managerial/Admin Approval).'
+                  ? (isExistingDoctor
+                      ? 'Doctor profile update submitted (Pending Managerial Approval).'
+                      : 'New doctor submitted to HCP Profile Submission (Pending Managerial Approval).')
                   : (isExistingDoctor
                       ? 'Doctor account confirmed for $_selectedProgram!'
                       : 'New doctor registered directly to HCP universe and $_selectedProgram Account!'),
             ),
           ),
         );
-        Navigator.pop(context, true);
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       setState(() => _isLoading = false);
