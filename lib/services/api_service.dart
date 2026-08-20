@@ -63,20 +63,32 @@ class ApiService extends ChangeNotifier {
     final des = _userDesignation.trim();
     final lower = des.toLowerCase();
 
-    // Standard recognized pharmaceutical & sales designations
+    // Exact PMII / PIMS ERPNext Designations
     if (lower == 'sales representative') return 'Sales Rep';
-    if (lower.contains('professional healthcare sales representative') || lower == 'phsr') return 'PHSR';
-    if (lower.contains('professional healthcare sales specialist') || lower == 'phss') return 'PHSS';
+    if (lower.contains('professional health specialist representative') || lower == 'phsr') return 'PHSR';
+    if (lower.contains('professional health specialist supervisor') || lower == 'phss') return 'PHSS';
+    if (lower.contains('virtual medical representative')) return 'V-MedRep';
     if (lower.contains('medical representative') || lower == 'medrep' || lower == 'mr') return 'MedRep';
+    if (lower.contains('senior district manager')) return 'Sr. DM';
     if (lower.contains('district sales manager') || lower == 'dsm') return 'DSM';
+    if (lower.contains('district manager') || lower == 'dm') return 'DM';
     if (lower.contains('regional sales manager') || lower == 'rsm') return 'RSM';
     if (lower.contains('area sales manager') || lower == 'asm') return 'ASM';
     if (lower.contains('general manager') || lower == 'gm') return 'GM';
     if (lower.contains('territory sales manager') || lower == 'tsm') return 'TSM';
-    if (lower.contains('field sales representative') || lower == 'fsr') return 'FSR';
-    if (lower.contains('field sales specialist') || lower == 'fss') return 'FSS';
+    if (lower.contains('sales force effectiveness manager')) return 'SFE Mgr';
+    if (lower.contains('trade pharmacy representative')) return 'TPR';
+    if (lower.contains('trade merchandising representative')) return 'TMR';
+    if (lower.contains('hospital account specialist')) return 'HAS';
+    if (lower.contains('hospital account manager')) return 'HAM';
+    if (lower.contains('field representative')) return 'Field Rep';
     if (lower.contains('product specialist') || lower == 'ps') return 'PS';
-    if (lower.contains('sales executive')) return 'Sales Exec';
+    if (lower.contains('program manager')) return 'Program Mgr';
+    if (lower.contains('program head')) return 'Program Head';
+    if (lower.contains('technical support') || lower == 'tech support') return 'Tech Support';
+    if (lower.contains('it manager')) return 'IT Mgr';
+    if (lower.contains('sales supervisor')) return 'Supervisor';
+    if (lower.contains('team leader')) return 'TL';
     if (lower.contains('administrator') || lower == 'admin') return 'Admin';
     if (lower.contains('system manager') || lower.contains('system administrator')) return 'Sys Admin';
 
