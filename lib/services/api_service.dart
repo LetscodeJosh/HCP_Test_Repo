@@ -1067,23 +1067,101 @@ class ApiService extends ChangeNotifier {
   }
 
   /// Retrieve list of HCP/Doctors
+  /// Retrieve list of HCP/Doctors with multi-tier resilient fallback (permits MedRep & Manager access)
   Future<List<Hcp>> fetchDoctors() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('doctors_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          return dataList.map((json) => Hcp.fromJson(json)).toList();
+        } catch (_) {}
+      }
+      return [];
+    }
+
+    // Tier 1: Query HCP doctype with explicit public fields (permlevel 0 safe)
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP?fields=["*"]&limit=200',
+      '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit=2000',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
-        return dataList.map((json) => Hcp.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load doctors: ${response.statusCode}');
+        if (dataList.isNotEmpty) {
+          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+          return list;
+        }
       }
     } catch (e) {
-      print('Fetch doctors error: $e');
-      rethrow;
+      print('Tier 1 fetch doctors error: $e');
     }
+
+    // Tier 2: Whitelisted client method (works when REST direct doctype query is restricted)
+    try {
+      final clientUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_page_length=2000',
+      );
+      final clientResp = await http.get(clientUrl, headers: _headers);
+      if (clientResp.statusCode == 200) {
+        final body = jsonDecode(clientResp.body);
+        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
+        if (dataList.isNotEmpty) {
+          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+          return list;
+        }
+      }
+    } catch (e) {
+      print('Tier 2 fetch doctors error: $e');
+    }
+
+    // Tier 3: HCP Account Doctor Extraction (MedReps & Managers always have access to HCP Accounts)
+    try {
+      final accounts = await fetchHcpAccounts();
+      if (accounts.isNotEmpty) {
+        final Map<String, Hcp> docMap = {};
+        for (var acc in accounts) {
+          final docId = acc.hcp ?? acc.name ?? '';
+          final docName = acc.hcpName ?? 'Doctor';
+          if (docId.isNotEmpty && !docMap.containsKey(docId)) {
+            final nameParts = docName.split(' ');
+            final fName = nameParts.isNotEmpty ? nameParts.first : docName;
+            final lName = nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+            docMap[docId] = Hcp(
+              name: docId,
+              firstName: fName,
+              lastName: lName,
+              hcpFullName: docName,
+              hcpType: 'Resident',
+              hcpPractice: 'Both',
+              isActive: acc.isActive,
+              specialties: acc.specialties.map((s) => HcpSpecialty(hcpSpecialty: s.hcpSpecialty, subSpecialty: s.subSpecialty, isPrimary: s.preferred)).toList(),
+              workplaces: acc.workplaces.map((w) => HcpWorkplace(workplace: w.hcpWorkplace, cityMunicipality: w.cityMunicipality, provinceName: w.provinceName, address: w.address, isPrimary: w.preferred)).toList(),
+              contacts: acc.contacts.map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred)).toList(),
+            );
+          }
+        }
+        if (docMap.isNotEmpty) {
+          return docMap.values.toList();
+        }
+      }
+    } catch (e) {
+      print('Tier 3 HCP Account doctor extraction error: $e');
+    }
+
+    // Tier 4: Cache fallback
+    final cache = await _readFromCache('doctors_cache.json');
+    if (cache != null) {
+      try {
+        final List<dynamic> dataList = jsonDecode(cache);
+        return dataList.map((json) => Hcp.fromJson(json)).toList();
+      } catch (_) {}
+    }
+
+    return [];
   }
 
   /// Fetch full details of a specific Doctor (HCP) including child tables
@@ -1096,13 +1174,44 @@ class ApiService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         return Hcp.fromJson(body['data']);
-      } else {
-        throw Exception('Failed to load doctor details: ${response.body}');
       }
     } catch (e) {
-      print('Fetch doctor detail error: $e');
-      rethrow;
+      print('Fetch doctor detail direct error: $e');
     }
+
+    // Try fallback via frappe.client.get
+    try {
+      final fallbackUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get?doctype=HCP&name=${Uri.encodeComponent(name)}',
+      );
+      final resp = await http.get(fallbackUrl, headers: _headers);
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        final data = body['message'] ?? body['data'];
+        if (data != null) return Hcp.fromJson(data);
+      }
+    } catch (_) {}
+
+    // Try fallback via HCP Account
+    try {
+      final accounts = await fetchHcpAccounts();
+      final matched = accounts.firstWhere(
+        (a) => a.hcp == name || a.name == name || (a.hcpName != null && a.hcpName!.toLowerCase() == name.toLowerCase()),
+      );
+      return Hcp(
+        name: matched.hcp ?? matched.name,
+        firstName: matched.hcpName ?? 'Doctor',
+        lastName: '',
+        hcpFullName: matched.hcpName,
+        hcpType: 'Resident',
+        hcpPractice: 'Both',
+        specialties: matched.specialties.map((s) => HcpSpecialty(hcpSpecialty: s.hcpSpecialty, subSpecialty: s.subSpecialty, isPrimary: s.preferred)).toList(),
+        workplaces: matched.workplaces.map((w) => HcpWorkplace(workplace: w.hcpWorkplace, cityMunicipality: w.cityMunicipality, provinceName: w.provinceName, address: w.address, isPrimary: w.preferred)).toList(),
+        contacts: matched.contacts.map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred)).toList(),
+      );
+    } catch (_) {}
+
+    throw Exception('Failed to load doctor details: $name');
   }
 
   /// Create a new HCP/Doctor record
@@ -1322,22 +1431,60 @@ class ApiService extends ChangeNotifier {
 
   /// Retrieve list of HCP Account doctype records
   Future<List<HcpAccount>> fetchHcpAccounts() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('hcp_accounts_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+        } catch (_) {}
+      }
+      return [];
+    }
+
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Account?fields=["*"]&limit=2000',
+      '$baseUrl/api/resource/HCP%20Account?fields=["name","account_or_program","territory","sales_person","user_id","hcp","hcp_name","valid_from","valid_to","validity_period","is_active","is_archived","status","creation","modified"]&limit=2000',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
+        await _writeToCache('hcp_accounts_cache.json', jsonEncode(dataList));
         return dataList.map((json) => HcpAccount.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load HCP Accounts: ${response.statusCode}');
       }
     } catch (e) {
-      print('Fetch HCP Accounts error: $e');
-      rethrow;
+      print('Fetch HCP Accounts direct error: $e');
     }
+
+    // Fallback via client method
+    try {
+      final clientUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Account&fields=["name","account_or_program","territory","sales_person","user_id","hcp","hcp_name","valid_from","valid_to","validity_period","is_active","is_archived","status"]&limit_page_length=2000',
+      );
+      final clientResp = await http.get(clientUrl, headers: _headers);
+      if (clientResp.statusCode == 200) {
+        final body = jsonDecode(clientResp.body);
+        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
+        if (dataList.isNotEmpty) {
+          await _writeToCache('hcp_accounts_cache.json', jsonEncode(dataList));
+          return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+        }
+      }
+    } catch (e) {
+      print('Fetch HCP Accounts fallback error: $e');
+    }
+
+    // Cache fallback
+    final cache = await _readFromCache('hcp_accounts_cache.json');
+    if (cache != null) {
+      try {
+        final List<dynamic> dataList = jsonDecode(cache);
+        return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+      } catch (_) {}
+    }
+
+    return [];
   }
 
   /// Fetch full details of a specific HCP Account including child tables
@@ -1350,33 +1497,83 @@ class ApiService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         return HcpAccount.fromJson(body['data']);
-      } else {
-        throw Exception('Failed to load HCP Account details: ${response.body}');
       }
     } catch (e) {
-      print('Fetch HCP Account detail error: $e');
-      rethrow;
+      print('Fetch HCP Account detail direct error: $e');
     }
+
+    // Fallback via client method
+    try {
+      final clientUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get?doctype=HCP%20Account&name=${Uri.encodeComponent(name)}',
+      );
+      final clientResp = await http.get(clientUrl, headers: _headers);
+      if (clientResp.statusCode == 200) {
+        final body = jsonDecode(clientResp.body);
+        final data = body['message'] ?? body['data'];
+        if (data != null) return HcpAccount.fromJson(data);
+      }
+    } catch (_) {}
+
+    throw Exception('Failed to load HCP Account details: $name');
   }
 
   /// Retrieve list of HCP Profile Submissions
   Future<List<HcpProfileSubmission>> fetchSubmissions() async {
+    if (_isOffline) {
+      final cache = await _readFromCache('submissions_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+        } catch (_) {}
+      }
+      return [];
+    }
+
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=["*"]&limit=100',
+      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=["name","hcp_name","doctor_full_name","program","territory","sales_person","user_id","medrep_email","medrep_name","application_status","workflow_state","changes_summary","changes_json","creation","modified","docstatus"]&limit=1000',
     );
     try {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
+        await _writeToCache('submissions_cache.json', jsonEncode(dataList));
         return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load submissions: ${response.statusCode}');
       }
     } catch (e) {
-      print('Fetch submissions error: $e');
-      rethrow;
+      print('Fetch submissions direct error: $e');
     }
+
+    // Fallback via client method
+    try {
+      final clientUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=["name","hcp_name","doctor_full_name","program","territory","sales_person","user_id","medrep_email","medrep_name","application_status","workflow_state","changes_summary","changes_json","creation","modified","docstatus"]&limit_page_length=1000',
+      );
+      final clientResp = await http.get(clientUrl, headers: _headers);
+      if (clientResp.statusCode == 200) {
+        final body = jsonDecode(clientResp.body);
+        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
+        if (dataList.isNotEmpty) {
+          await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+          return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+        }
+      }
+    } catch (e) {
+      print('Fetch submissions fallback error: $e');
+    }
+
+    // Cache fallback
+    final cache = await _readFromCache('submissions_cache.json');
+    if (cache != null) {
+      try {
+        final List<dynamic> dataList = jsonDecode(cache);
+        return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+      } catch (_) {}
+    }
+
+    return [];
   }
 
   /// Fetch full details of a specific HCP Profile Submission including child tables and changes

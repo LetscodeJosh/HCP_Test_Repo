@@ -47,28 +47,35 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     });
     final apiService = Provider.of<ApiService>(context, listen: false);
     try {
-      final doctors = await apiService.fetchDoctors();
-      final institutions = await apiService.fetchInstitutions();
-      final specializations = await apiService.fetchSpecializations();
-      final psgc = await apiService.fetchPsgcLocations();
-      final types = await apiService.fetchHcpTypes();
+      final doctors = await apiService.fetchDoctors().catchError((e) {
+        print('Fetch doctors caught error: $e');
+        return <Hcp>[];
+      });
+      final institutions = await apiService.fetchInstitutions().catchError((_) => <Institution>[]);
+      final specializations = await apiService.fetchSpecializations().catchError((_) => <Specialization>[]);
+      final psgc = await apiService.fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
+      final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
 
-      setState(() {
-        _allDoctors = doctors;
-        _institutions = institutions;
-        _specializations = specializations.where((s) => !s.isGroup).toList();
-        _psgcLocations = psgc;
-        _hcpTypes = types;
-        _applyFilters();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _allDoctors = doctors;
+          _institutions = institutions;
+          _specializations = specializations.where((s) => !s.isGroup).toList();
+          _psgcLocations = psgc;
+          _hcpTypes = types;
+          _applyFilters();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading doctor list: $e')),
-      );
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading doctor list: $e')),
+        );
+      }
     }
   }
 

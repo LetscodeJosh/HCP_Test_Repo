@@ -24,11 +24,26 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _isBiometricAvailable = false;
   bool _hasSavedCredentials = false;
+  String _enrolledOwner = '';
+  String _enrolledOwnerName = '';
 
   @override
   void initState() {
     super.initState();
+    _usernameController.addListener(_onUsernameChanged);
     _checkBiometrics();
+  }
+
+  @override
+  void dispose() {
+    _usernameController.removeListener(_onUsernameChanged);
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  void _onUsernameChanged() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _checkBiometrics() async {
@@ -38,9 +53,9 @@ class _LoginScreenState extends State<LoginScreen> {
       setState(() {
         _isBiometricAvailable = available;
         _hasSavedCredentials = credentials != null;
-        if (credentials != null && credentials['username'] != null) {
-          _usernameController.text = credentials['username']!;
-        }
+        _enrolledOwner = credentials?['username']?.trim() ?? '';
+        _enrolledOwnerName = credentials?['full_name']?.trim() ?? '';
+        // Note: Do not auto-populate password or enforce username so fields remain clean on fresh/logout state
       });
     }
   }
@@ -65,7 +80,12 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       if (success) {
-        await BiometricService.saveCredentials(username, password, position: apiService.userPosition.name);
+        await BiometricService.saveCredentials(
+          username,
+          password,
+          position: apiService.userPosition.name,
+          fullName: apiService.loggedInFullName,
+        );
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy
@@ -85,12 +105,26 @@ class _LoginScreenState extends State<LoginScreen> {
     final credentials = await BiometricService.getSavedCredentials();
     if (credentials == null) {
       setState(() {
-        _errorMessage = 'No saved credentials found. Please log in manually first.';
+        _errorMessage = 'No registered biometric owner found on this device. Please log in manually.';
       });
       return;
     }
 
-    final authenticated = await BiometricService.authenticate();
+    final ownerEmail = credentials['username']?.trim() ?? '';
+    final typedUsername = _usernameController.text.trim();
+
+    // STRICT ANTI-BREACH GUARD:
+    // If a different username is typed into the box, reject biometric execution immediately
+    if (typedUsername.isNotEmpty && typedUsername.toLowerCase() != ownerEmail.toLowerCase()) {
+      setState(() {
+        _errorMessage = 'Security Alert: Biometric login is bound to device owner ($ownerEmail). You cannot use biometrics for $typedUsername. Please enter password manually.';
+      });
+      return;
+    }
+
+    final authenticated = await BiometricService.authenticate(
+      customReason: 'Authenticate as $ownerEmail to log in to PIMS HCP',
+    );
     if (!authenticated) return;
 
     setState(() {
@@ -101,6 +135,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final username = credentials['username']!;
     final password = credentials['password']!;
 
+    // Sync username field to reflect actual authenticated identity
+    _usernameController.text = username;
+
     final apiService = Provider.of<ApiService>(context, listen: false);
     final success = await apiService.login(username, password);
 
@@ -110,7 +147,12 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       if (success) {
-        await BiometricService.saveCredentials(username, password, position: apiService.userPosition.name);
+        await BiometricService.saveCredentials(
+          username,
+          password,
+          position: apiService.userPosition.name,
+          fullName: apiService.loggedInFullName,
+        );
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy
@@ -120,7 +162,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         setState(() {
-          _errorMessage = 'Biometric login failed. Please verify your credentials manually.';
+          _errorMessage = 'Biometric login failed on server. Please verify your credentials manually.';
         });
       }
     }
@@ -395,25 +437,61 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                         ),
                         if (_isBiometricAvailable && _hasSavedCredentials) ...[
-                          const SizedBox(height: 12),
-                          OutlinedButton.icon(
-                            onPressed: _isLoading ? null : _handleBiometricLogin,
-                            icon: const Icon(Icons.fingerprint, color: Color(0xFF0056B3)),
-                            label: const Text(
-                              'Biometric Login',
-                              style: TextStyle(
-                                color: Color(0xFF0056B3),
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                              side: const BorderSide(color: Color(0xFF0056B3), width: 1.5),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
+                          const SizedBox(height: 14),
+                          Builder(
+                            builder: (context) {
+                              final typed = _usernameController.text.trim();
+                              final bool isOwnerMatching = typed.isEmpty || typed.toLowerCase() == _enrolledOwner.toLowerCase();
+
+                              if (isOwnerMatching) {
+                                final displayName = _enrolledOwnerName.isNotEmpty ? _enrolledOwnerName : _enrolledOwner;
+                                return OutlinedButton.icon(
+                                  onPressed: _isLoading ? null : _handleBiometricLogin,
+                                  icon: const Icon(Icons.fingerprint, color: Color(0xFF0056B3)),
+                                  label: Text(
+                                    typed.isEmpty ? 'Log in with Biometrics ($displayName)' : 'Biometric Login as $displayName',
+                                    style: const TextStyle(
+                                      color: Color(0xFF0056B3),
+                                      fontSize: 13.5,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  style: OutlinedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
+                                    side: const BorderSide(color: Color(0xFF0056B3), width: 1.5),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFEF3C7),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFFF59E0B), width: 1),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.lock_person_rounded, color: Color(0xFFD97706), size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          'Biometrics locked to $_enrolledOwner. Enter password manually to log in as $typed.',
+                                          style: const TextStyle(
+                                            color: Color(0xFF92400E),
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }
+                            },
                           ),
                         ],
                       ],

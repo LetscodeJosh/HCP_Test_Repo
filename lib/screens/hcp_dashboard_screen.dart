@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/hcp.dart';
+import '../models/hcp_account.dart';
 import '../models/lookup_models.dart';
 import '../models/submission.dart';
 import '../services/api_service.dart';
@@ -126,11 +127,11 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     final apiService = Provider.of<ApiService>(context, listen: false);
 
     try {
-      final doctorsList = await apiService.fetchDoctors();
-      final institutions = await apiService.fetchInstitutions();
-      final specializations = await apiService.fetchSpecializations();
-      final submissions = await apiService.submissions.list(limit: 500);
-      final hcpAccounts = await apiService.fetchHcpAccounts();
+      final doctorsList = await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
+      final institutions = await apiService.fetchInstitutions().catchError((_) => <Institution>[]);
+      final specializations = await apiService.fetchSpecializations().catchError((_) => <Specialization>[]);
+      final submissions = await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
+      final hcpAccounts = await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
 
       final List<Hcp> doctors = [];
       for (var doc in doctorsList) {

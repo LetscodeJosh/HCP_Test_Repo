@@ -214,13 +214,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     setState(() => _isLoading = true);
     final apiService = Provider.of<ApiService>(context, listen: false);
     try {
-      final doctors = await apiService.fetchDoctors();
-      final insts = await apiService.fetchInstitutions();
-      final specs = await apiService.fetchSpecializations();
-      final types = await apiService.fetchHcpTypes();
-      final templates = await apiService.fetchSurveyTemplates();
-      final territories = await apiService.fetchTerritories();
-      final programs = await apiService.fetchPrograms();
+      final doctors = await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
+      final insts = await apiService.fetchInstitutions().catchError((_) => <Institution>[]);
+      final specs = await apiService.fetchSpecializations().catchError((_) => <Specialization>[]);
+      final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
+      final templates = await apiService.fetchSurveyTemplates().catchError((_) => <HcpSurveyTemplate>[]);
+      final territories = await apiService.fetchTerritories().catchError((_) => <String>[]);
+      final programs = await apiService.fetchPrograms().catchError((_) => <String>[]);
 
       setState(() {
         _allDoctors = doctors;

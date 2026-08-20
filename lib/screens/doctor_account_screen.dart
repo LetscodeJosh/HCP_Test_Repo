@@ -42,9 +42,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     setState(() => _isLoading = true);
     final apiService = Provider.of<ApiService>(context, listen: false);
     try {
-      final items = await apiService.fetchHcpAccounts();
-      final doctorsList = await apiService.fetchDoctors();
-      final types = await apiService.fetchHcpTypes();
+      final items = await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
+      final doctorsList = await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
+      final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
 
       final filtered = items.where((acc) {
         if (apiService.selectedProgram.isEmpty) return true;
