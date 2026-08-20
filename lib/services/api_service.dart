@@ -1605,13 +1605,32 @@ class ApiService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         return HcpProfileSubmission.fromJson(body['data']);
-      } else {
-        throw Exception('Failed to load submission details: ${response.body}');
       }
     } catch (e) {
-      print('Fetch submission detail error: $e');
-      rethrow;
+      print('Fetch submission detail direct error: $e');
     }
+
+    // Fallback via frappe.client.get
+    try {
+      final fallbackUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.client.get?doctype=HCP%20Profile%20Submission&name=${Uri.encodeComponent(name)}',
+      );
+      final resp = await http.get(fallbackUrl, headers: _headers);
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        final data = body['message'] ?? body['data'];
+        if (data != null) return HcpProfileSubmission.fromJson(data);
+      }
+    } catch (_) {}
+
+    // Fallback via cached list
+    try {
+      final list = await fetchSubmissions();
+      final found = list.firstWhere((s) => s.name == name);
+      return found;
+    } catch (_) {}
+
+    throw Exception('Failed to load submission details: $name');
   }
 
   /// Upload a file or image to ERPNext (/api/method/upload_file)
