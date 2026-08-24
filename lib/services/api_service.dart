@@ -2631,33 +2631,34 @@ class ApiService extends ChangeNotifier {
           ? submission.salesPerson!.trim()
           : getTerritoryManagerForTerritory(submission.territory ?? 'AD0110'),
       userId: submission.userId ?? submission.medrepEmail ?? loggedInEmail,
+      // Only sync PREFERRED items to HCP Account (all items remain in HCP master doctype)
       specialties: submission.specialties
-          .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+          .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty && s.preferred)
           .map((s) => HcpAccountSpecialization(
                 hcpSpecialty: s.hcpSpecialty!,
                 subSpecialty: s.subSpecialty,
-                isPrimary: s.preferred,
-                preferred: s.preferred,
+                isPrimary: true,
+                preferred: true,
               ))
           .toList(),
       workplaces: submission.workplaces
-          .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+          .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty && w.preferred)
           .map((w) => HcpAccountWorkplace(
                 hcpWorkplace: w.hcpWorkplace!,
                 cityMunicipality: w.cityMunicipality,
                 provinceName: w.provinceName,
                 address: w.workplaceName,
-                isPrimary: w.preferred,
-                preferred: w.preferred,
+                isPrimary: true,
+                preferred: true,
               ))
           .toList(),
       contacts: submission.contacts
-          .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
+          .where((c) => ((c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)) && c.preferred)
           .map((c) => HcpAccountContact(
                 contactNumber: c.contactNumber,
                 emailAddress: c.emailAddress,
-                isPrimary: c.preferred,
-                preferred: c.preferred,
+                isPrimary: true,
+                preferred: true,
               ))
           .toList(),
     );
