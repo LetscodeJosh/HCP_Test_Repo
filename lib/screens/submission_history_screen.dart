@@ -1465,7 +1465,6 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ),
         ),
         actions: [
-          // Role Badge
           Container(
             alignment: Alignment.center,
             margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
@@ -1510,151 +1509,240 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       body: Column(
         children: [
           _buildFilterAndSortBar(apiService),
-
-          // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
-          Container(
-            decoration: const BoxDecoration(
-              color: Color(0xFF0B192C),
-              border: Border(
-                top: BorderSide(color: Colors.white38, width: 1.0),
-                bottom: BorderSide(color: Colors.white12, width: 1.0),
-              ),
-            ),
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: IntrinsicHeight(
-              child: Row(
-                children: [
-                  const SizedBox(width: 16),
-                  const Expanded(
-                    flex: 3,
-                    child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                  const Expanded(
-                    flex: 4,
-                    child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                  const Expanded(
-                    flex: 2,
-                    child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                  const Expanded(
-                    flex: 3,
-                    child: Text('Submission Date', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                  const Expanded(
-                    flex: 3,
-                    child: Text('Status', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                  Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                  SizedBox(
-                    width: 45,
-                    child: Text(
-                      '${filteredList.length} of ${_submissions.length}',
-                      style: const TextStyle(color: Colors.white70, fontSize: 11),
-                      textAlign: TextAlign.right,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                ],
-              ),
-            ),
-          ),
-
-          // Clean White Card Rows for Unified Interface
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF)))
-                : filteredList.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isMobile = constraints.maxWidth < 650;
+                return Column(
+                  children: [
+                    if (!isMobile)
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF0B192C),
+                          border: Border(
+                            top: BorderSide(color: Colors.white38, width: 1.0),
+                            bottom: BorderSide(color: Colors.white12, width: 1.0),
+                          ),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: IntrinsicHeight(
+                          child: Row(
+                            children: [
+                              const SizedBox(width: 16),
+                              const Expanded(
+                                flex: 3,
+                                child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 4,
+                                child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 2,
+                                child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 3,
+                                child: Text('Submission Date', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 3,
+                                child: Text('Status', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              SizedBox(
+                                width: 45,
+                                child: Text(
+                                  '${filteredList.length} of ${_submissions.length}',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                            ],
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        color: const Color(0xFF0B192C),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(Icons.inbox_rounded, size: 64, color: const Color(0xFF0066FF).withOpacity(0.3)),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'No matching HCP Profile Submissions found.',
-                              style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold),
+                            const Text('SUBMISSIONS', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text(
+                              'Showing ${filteredList.length} of ${_submissions.length}',
+                              style: const TextStyle(color: Colors.white70, fontSize: 11),
                             ),
                           ],
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadSubmissions,
-                        color: const Color(0xFF0066FF),
-                        child: ListView.separated(
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          itemCount: filteredList.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 2),
-                          itemBuilder: (ctx, idx) {
-                            final item = filteredList[idx];
-                            return Container(
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-                              ),
-                              child: InkWell(
-                                onTap: () => _showSubmissionDetail(item),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Row(
+                      ),
+                    Expanded(
+                      child: _isLoading
+                          ? const Center(child: CircularProgressIndicator(color: Color(0xFF0066FF)))
+                          : filteredList.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                      // ID
-                                      Expanded(
-                                        flex: 3,
-                                        child: Text(
-                                          item.name ?? 'HCP-PROF-2026-00030',
-                                          style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.bold),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
+                                      Icon(Icons.inbox_rounded, size: 64, color: const Color(0xFF0066FF).withOpacity(0.3)),
+                                      const SizedBox(height: 16),
+                                      const Text(
+                                        'No matching HCP Profile Submissions found.',
+                                        style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold),
                                       ),
-                                      // Name of Doctor
-                                      Expanded(
-                                        flex: 4,
-                                        child: Text(
-                                          item.hcpFullName ?? item.hcpName,
-                                          style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      // Type
-                                      Expanded(
-                                        flex: 2,
-                                        child: Text(
-                                          item.hcpType ?? 'HCP',
-                                          style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      // Submission Date
-                                      Expanded(
-                                        flex: 3,
-                                        child: Text(
-                                          item.submissionDate ?? 'No date',
-                                          style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      ),
-                                      // Status Badge
-                                      Expanded(
-                                        flex: 3,
-                                        child: Align(
-                                          alignment: Alignment.centerLeft,
-                                          child: _buildStatusBadge(item),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 45),
                                     ],
                                   ),
-                                ),
+                                )
+                              : RefreshIndicator(
+                                  onRefresh: _loadSubmissions,
+                                  color: const Color(0xFF0066FF),
+                                  child: ListView.separated(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    itemCount: filteredList.length,
+                                    separatorBuilder: (_, __) => const SizedBox(height: 2),
+                                    itemBuilder: (ctx, idx) {
+                                      final item = filteredList[idx];
+                                      if (isMobile) {
+                                        return Container(
+                                          margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(10),
+                                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                                            boxShadow: const [
+                                              BoxShadow(color: Color(0x04000000), blurRadius: 3, offset: Offset(0, 1)),
+                                            ],
+                                          ),
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(10),
+                                            onTap: () => _showSubmissionDetail(item),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(12),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: Text(
+                                                          item.hcpFullName ?? item.hcpName,
+                                                          style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 8),
+                                                      _buildStatusBadge(item),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 6),
+                                                  Row(
+                                                    children: [
+                                                      const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFF64748B)),
+                                                      const SizedBox(width: 4),
+                                                      Text(
+                                                        item.submissionDate ?? 'No date',
+                                                        style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
+                                                  Row(
+                                                    children: [
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFF1F5F9),
+                                                          borderRadius: BorderRadius.circular(6),
+                                                        ),
+                                                        child: Text(
+                                                          item.hcpType ?? 'HCP',
+                                                          style: const TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.w500),
+                                                        ),
+                                                      ),
+                                                      const Spacer(),
+                                                      Text(
+                                                        item.name ?? '',
+                                                        style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontFamily: 'monospace'),
+                                                      ),
+                                                      const SizedBox(width: 2),
+                                                      const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      }
+                                      return Container(
+                                        decoration: const BoxDecoration(
+                                          color: Colors.white,
+                                          border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                                        ),
+                                        child: InkWell(
+                                          onTap: () => _showSubmissionDetail(item),
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                            child: Row(
+                                              children: [
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    item.name ?? 'HCP-PROF-2026-00030',
+                                                    style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.bold),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 4,
+                                                  child: Text(
+                                                    item.hcpFullName ?? item.hcpName,
+                                                    style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 2,
+                                                  child: Text(
+                                                    item.hcpType ?? 'HCP',
+                                                    style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    item.submissionDate ?? 'No date',
+                                                    style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Align(
+                                                    alignment: Alignment.centerLeft,
+                                                    child: _buildStatusBadge(item),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 45),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
         ],
       ),

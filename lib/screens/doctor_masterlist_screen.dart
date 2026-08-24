@@ -1245,191 +1245,324 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                       ),
                     ),
 
-                  // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0B192C),
-                      border: Border(
-                        top: BorderSide(color: Colors.white38, width: 1.0),
-                        bottom: BorderSide(color: Colors.white12, width: 1.0),
-                      ),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: IntrinsicHeight(
-                      child: Row(
-                        children: [
-                          const SizedBox(width: 16),
-                          const Expanded(
-                            flex: 4,
-                            child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                          const SizedBox(
-                            width: 75,
-                            child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                          const Expanded(
-                            flex: 3,
-                            child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                          const Expanded(
-                            flex: 3,
-                            child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                          const Expanded(
-                            flex: 2,
-                            child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                          const Expanded(
-                            flex: 2,
-                            child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          ),
-                          Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                          SizedBox(
-                            width: 45,
-                            child: Text(
-                              '${_filteredDoctors.length} of ${_allDoctors.length}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 11),
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  // Clean White Card Rows with Exact Flex Alignment
+                  // Responsive Layout: Multi-column Table on Wide Screens, Beautiful Cards on Mobile
                   Expanded(
-                    child: _filteredDoctors.isEmpty
-                        ? const Center(
-                            child: Text('No doctors match your criteria.', style: TextStyle(color: Color(0xFF64748B))),
-                          )
-                        : ListView.separated(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            itemCount: _filteredDoctors.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 2),
-                            itemBuilder: (ctx, index) {
-                              final doctor = _filteredDoctors[index];
-                              final computedParts = [
-                                if (doctor.firstName.trim().isNotEmpty) doctor.firstName.trim(),
-                                if (doctor.middleName != null && doctor.middleName!.trim().isNotEmpty && doctor.middleName!.trim() != '-') doctor.middleName!.trim(),
-                                if (doctor.lastName.trim().isNotEmpty) doctor.lastName.trim(),
-                              ].join(' ');
-                              final fullName = (doctor.hcpFullName != null && doctor.hcpFullName!.trim().isNotEmpty && !doctor.hcpFullName!.startsWith('HCP-'))
-                                  ? doctor.hcpFullName!.trim()
-                                  : (computedParts.isNotEmpty ? computedParts : (doctor.name ?? 'Unknown Doctor'));
-                              final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isMobile = constraints.maxWidth < 650;
 
-                              final prefDocWorkplaces = doctor.workplaces.where((w) => w.isPrimary).toList();
-                              final String instDisplay = prefDocWorkplaces.isNotEmpty
-                                  ? prefDocWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).join(', ')
-                                  : (doctor.workplaces.isNotEmpty
-                                      ? ((doctor.workplaces.first.address != null && doctor.workplaces.first.address!.isNotEmpty)
-                                          ? doctor.workplaces.first.address!
-                                          : doctor.workplaces.first.workplace)
-                                      : ((doctor.institution != null && doctor.institution!.isNotEmpty) ? doctor.institution! : '-'));
-
-                              return Container(
+                        return Column(
+                          children: [
+                            if (!isMobile)
+                              // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
+                              Container(
                                 decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                                  color: Color(0xFF0B192C),
+                                  border: Border(
+                                    top: BorderSide(color: Colors.white38, width: 1.0),
+                                    bottom: BorderSide(color: Colors.white12, width: 1.0),
+                                  ),
                                 ),
-                                child: InkWell(
-                                  onTap: () => _openDoctorProfile(doctor),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    child: Row(
-                                      children: [
-                                        // Name of Doctor
-                                        Expanded(
-                                          flex: 4,
-                                          child: Text(
-                                            fullName,
-                                            style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                child: IntrinsicHeight(
+                                  child: Row(
+                                    children: [
+                                      const SizedBox(width: 16),
+                                      const Expanded(
+                                        flex: 4,
+                                        child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const SizedBox(
+                                        width: 75,
+                                        child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 3,
+                                        child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 3,
+                                        child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 2,
+                                        child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 2,
+                                        child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      SizedBox(
+                                        width: 45,
+                                        child: Text(
+                                          '${_filteredDoctors.length} of ${_allDoctors.length}',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                          textAlign: TextAlign.right,
                                         ),
-                                        // Is Active Check Icon
-                                        SizedBox(
-                                          width: 75,
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Icon(
-                                              doctor.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
-                                              color: doctor.isActive ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
-                                              size: 18,
+                                      ),
+                                      const SizedBox(width: 16),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              // Compact Count Bar for Mobile
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                color: const Color(0xFF0B192C),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('DOCTORS LIST', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    Text(
+                                      'Showing ${_filteredDoctors.length} of ${_allDoctors.length}',
+                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            Expanded(
+                              child: _filteredDoctors.isEmpty
+                                  ? const Center(
+                                      child: Text('No doctors match your criteria.', style: TextStyle(color: Color(0xFF64748B))),
+                                    )
+                                  : ListView.separated(
+                                      padding: const EdgeInsets.symmetric(vertical: 4),
+                                      itemCount: _filteredDoctors.length,
+                                      separatorBuilder: (_, __) => const SizedBox(height: 2),
+                                      itemBuilder: (ctx, index) {
+                                        final doctor = _filteredDoctors[index];
+                                        final computedParts = [
+                                          if (doctor.firstName.trim().isNotEmpty) doctor.firstName.trim(),
+                                          if (doctor.middleName != null && doctor.middleName!.trim().isNotEmpty && doctor.middleName!.trim() != '-') doctor.middleName!.trim(),
+                                          if (doctor.lastName.trim().isNotEmpty) doctor.lastName.trim(),
+                                        ].join(' ');
+                                        final fullName = (doctor.hcpFullName != null && doctor.hcpFullName!.trim().isNotEmpty && !doctor.hcpFullName!.startsWith('HCP-'))
+                                            ? doctor.hcpFullName!.trim()
+                                            : (computedParts.isNotEmpty ? computedParts : (doctor.name ?? 'Unknown Doctor'));
+                                        final typeLabel = _hcpTypes.firstWhere((t) => t.name == doctor.hcpType, orElse: () => HcpType(name: doctor.hcpType, typeName: doctor.hcpType)).typeName;
+
+                                        final prefDocWorkplaces = doctor.workplaces.where((w) => w.isPrimary).toList();
+                                        final String instDisplay = prefDocWorkplaces.isNotEmpty
+                                            ? prefDocWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).join(', ')
+                                            : (doctor.workplaces.isNotEmpty
+                                                ? ((doctor.workplaces.first.address != null && doctor.workplaces.first.address!.isNotEmpty)
+                                                    ? doctor.workplaces.first.address!
+                                                    : doctor.workplaces.first.workplace)
+                                                : ((doctor.institution != null && doctor.institution!.isNotEmpty) ? doctor.institution! : '-'));
+
+                                        if (isMobile) {
+                                          return Container(
+                                            margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(10),
+                                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                                              boxShadow: const [
+                                                BoxShadow(color: Color(0x04000000), blurRadius: 3, offset: Offset(0, 1)),
+                                              ],
                                             ),
-                                          ),
-                                        ),
-                                        // Institution
-                                        Expanded(
-                                          flex: 3,
-                                          child: Text(
-                                            instDisplay,
-                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        // Practice Tag Capsule
-                                        Expanded(
-                                          flex: 3,
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF1F5F9),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                                            child: InkWell(
+                                              borderRadius: BorderRadius.circular(10),
+                                              onTap: () => _openDoctorProfile(doctor),
+                                              child: Padding(
+                                                padding: const EdgeInsets.all(12),
+                                                child: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Expanded(
+                                                          child: Text(
+                                                            fullName,
+                                                            style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                          ),
+                                                        ),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: doctor.isActive ? const Color(0xFF10B981).withOpacity(0.1) : const Color(0xFF64748B).withOpacity(0.1),
+                                                            borderRadius: BorderRadius.circular(4),
+                                                            border: Border.all(
+                                                              color: doctor.isActive ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFCBD5E1),
+                                                              width: 0.6,
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            doctor.isActive ? 'Active' : 'Inactive',
+                                                            style: TextStyle(
+                                                              color: doctor.isActive ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                                              fontSize: 10,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 6),
+                                                    Row(
+                                                      children: [
+                                                        const Icon(Icons.domain_rounded, size: 13, color: Color(0xFF64748B)),
+                                                        const SizedBox(width: 4),
+                                                        Expanded(
+                                                          child: Text(
+                                                            instDisplay,
+                                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                            overflow: TextOverflow.ellipsis,
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 8),
+                                                    Row(
+                                                      children: [
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFFF1F5F9),
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Text(
+                                                            typeLabel,
+                                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.w500),
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 6),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFF0066FF).withOpacity(0.08),
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Text(
+                                                            doctor.hcpPractice,
+                                                            style: const TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.w600),
+                                                          ),
+                                                        ),
+                                                        const Spacer(),
+                                                        Text(
+                                                          doctor.name ?? '',
+                                                          style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontFamily: 'monospace'),
+                                                        ),
+                                                        const SizedBox(width: 2),
+                                                        const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
+                                            ),
+                                          );
+                                        }
+
+                                        return Container(
+                                          decoration: const BoxDecoration(
+                                            color: Colors.white,
+                                            border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                                          ),
+                                          child: InkWell(
+                                            onTap: () => _openDoctorProfile(doctor),
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                               child: Row(
-                                                mainAxisSize: MainAxisSize.min,
                                                 children: [
-                                                  const CircleAvatar(radius: 3, backgroundColor: Color(0xFF0B192C)),
-                                                  const SizedBox(width: 4),
-                                                  Flexible(
+                                                  // Name of Doctor
+                                                  Expanded(
+                                                    flex: 4,
                                                     child: Text(
-                                                      doctor.hcpPractice,
-                                                      style: const TextStyle(color: Color(0xFF0B192C), fontSize: 11, fontWeight: FontWeight.w600),
+                                                      fullName,
+                                                      style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
                                                       overflow: TextOverflow.ellipsis,
                                                     ),
                                                   ),
+                                                  // Is Active Check Icon
+                                                  SizedBox(
+                                                    width: 75,
+                                                    child: Align(
+                                                      alignment: Alignment.centerLeft,
+                                                      child: Icon(
+                                                        doctor.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
+                                                        color: doctor.isActive ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
+                                                        size: 18,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  // Institution
+                                                  Expanded(
+                                                    flex: 3,
+                                                    child: Text(
+                                                      instDisplay,
+                                                      style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  // Practice Tag Capsule
+                                                  Expanded(
+                                                    flex: 3,
+                                                    child: Align(
+                                                      alignment: Alignment.centerLeft,
+                                                      child: Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFF1F5F9),
+                                                          borderRadius: BorderRadius.circular(12),
+                                                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                                                        ),
+                                                        child: Row(
+                                                          mainAxisSize: MainAxisSize.min,
+                                                          children: [
+                                                            const CircleAvatar(radius: 3, backgroundColor: Color(0xFF0B192C)),
+                                                            const SizedBox(width: 4),
+                                                            Flexible(
+                                                              child: Text(
+                                                                doctor.hcpPractice,
+                                                                style: const TextStyle(color: Color(0xFF0B192C), fontSize: 11, fontWeight: FontWeight.w600),
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  // Type
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      typeLabel,
+                                                      style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  // ID
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      doctor.name ?? '',
+                                                      style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11),
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 45),
                                                 ],
                                               ),
                                             ),
                                           ),
-                                        ),
-                                        // Type
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(
-                                            typeLabel,
-                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        // ID
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(
-                                            doctor.name ?? '',
-                                            style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 45),
-                                      ],
+                                        );
+                                      },
                                     ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

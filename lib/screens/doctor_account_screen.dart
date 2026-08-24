@@ -1173,235 +1173,368 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                       ],
                     ),
                   ),
+                  // Responsive Layout: Multi-column Table on Wide Screens, Beautiful Cards on Mobile
+                  Expanded(
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isMobile = constraints.maxWidth < 650;
 
-                // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
-                Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0B192C),
-                    border: Border(
-                      top: BorderSide(color: Colors.white38, width: 1.0),
-                      bottom: BorderSide(color: Colors.white12, width: 1.0),
-                    ),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  child: IntrinsicHeight(
-                    child: Row(
-                      children: [
-                        const SizedBox(width: 16),
-                        const Expanded(
-                          flex: 4,
-                          child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                        const SizedBox(
-                          width: 75,
-                          child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                        const Expanded(
-                          flex: 3,
-                          child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                        const Expanded(
-                          flex: 3,
-                          child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                        const Expanded(
-                          flex: 2,
-                          child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                        const Expanded(
-                          flex: 2,
-                          child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                        Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                        SizedBox(
-                          width: 45,
-                          child: Text(
-                            '${_filteredAccounts.length} of ${_allAccounts.length}',
-                            style: const TextStyle(color: Colors.white70, fontSize: 11),
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                      ],
-                    ),
-                  ),
-                ),
-
-                // Clean White Card Rows for Unified Interface
-                Expanded(
-                  child: _filteredAccounts.isEmpty
-                      ? const Center(
-                          child: Text('No Doctor Accounts match your criteria.', style: TextStyle(color: Color(0xFF64748B))),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: _loadAccounts,
-                          color: const Color(0xFF0066FF),
-                          child: ListView.separated(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
-                            itemCount: _filteredAccounts.length,
-                            separatorBuilder: (_, __) => const SizedBox(height: 2),
-                            itemBuilder: (ctx, index) {
-                              final item = _filteredAccounts[index];
-                              final doc = _getMatchedDoctor(item);
-                              final doctorFullName = _getDoctorFullName(item);
-                              final typeLabel = _hcpTypes.firstWhere((t) => t.name == doc.hcpType, orElse: () => HcpType(name: doc.hcpType, typeName: doc.hcpType)).typeName;
-
-                              final prefAccWorkplaces = item.workplaces.where((w) => w.preferred || w.isPrimary).toList();
-                              String prefInstDisplay = '';
-                              if (prefAccWorkplaces.isNotEmpty) {
-                                prefInstDisplay = prefAccWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
-                              } else if (item.workplaces.isNotEmpty) {
-                                prefInstDisplay = item.workplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
-                              } else {
-                                final prefDocWorkplaces = doc.workplaces.where((w) => w.isPrimary).toList();
-                                if (prefDocWorkplaces.isNotEmpty) {
-                                  prefInstDisplay = prefDocWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
-                                } else if (doc.workplaces.isNotEmpty) {
-                                  prefInstDisplay = (doc.workplaces.first.address != null && doc.workplaces.first.address!.isNotEmpty)
-                                      ? doc.workplaces.first.address!
-                                      : doc.workplaces.first.workplace;
-                                } else if (doc.institution != null && doc.institution!.isNotEmpty) {
-                                  prefInstDisplay = doc.institution!;
-                                } else {
-                                  prefInstDisplay = '-';
-                                }
-                              }
-
-                              return Container(
+                        return Column(
+                          children: [
+                            if (!isMobile)
+                              // Darkish Blue Table Header Strip with Top Border & Vertical Column Separators
+                              Container(
                                 decoration: const BoxDecoration(
-                                  color: Colors.white,
-                                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-                                ),
-                                child: InkWell(
-                                  onTap: () => _showAccountDetail(item),
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    child: Row(
-                                      children: [
-                                        // Name of Doctor & Monthly Validity Badge
-                                        Expanded(
-                                          flex: 4,
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                doctorFullName,
-                                                style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Container(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                                    decoration: BoxDecoration(
-                                                      color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.1) : const Color(0xFF64748B).withOpacity(0.1),
-                                                      borderRadius: BorderRadius.circular(4),
-                                                      border: Border.all(
-                                                        color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFCBD5E1),
-                                                        width: 0.6,
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      item.isCurrentMonthActive() ? (item.validityPeriod ?? HcpAccount.calculateMonthLabel()) : 'Archived',
-                                                      style: TextStyle(
-                                                        color: item.isCurrentMonthActive() ? const Color(0xFF059669) : const Color(0xFF64748B),
-                                                        fontSize: 9.5,
-                                                        fontWeight: FontWeight.w600,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        // Is Active Check Icon
-                                        SizedBox(
-                                          width: 75,
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Icon(
-                                              doc.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
-                                              color: doc.isActive ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
-                                              size: 18,
-                                            ),
-                                          ),
-                                        ),
-                                        // Institution
-                                        Expanded(
-                                          flex: 3,
-                                          child: Text(
-                                            prefInstDisplay,
-                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        // Practice Tag Capsule
-                                        Expanded(
-                                          flex: 3,
-                                          child: Align(
-                                            alignment: Alignment.centerLeft,
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFF1F5F9),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(color: const Color(0xFFCBD5E1)),
-                                              ),
-                                              child: Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  const CircleAvatar(radius: 3, backgroundColor: Color(0xFF0B192C)),
-                                                  const SizedBox(width: 4),
-                                                  Flexible(
-                                                    child: Text(
-                                                      doc.hcpPractice,
-                                                      style: const TextStyle(color: Color(0xFF0B192C), fontSize: 11, fontWeight: FontWeight.w600),
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        // Type
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(
-                                            typeLabel,
-                                            style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        // ID
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(
-                                            item.name ?? doc.name ?? 'HCP-ACC-00004',
-                                            style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 45),
-                                      ],
-                                    ),
+                                  color: Color(0xFF0B192C),
+                                  border: Border(
+                                    top: BorderSide(color: Colors.white38, width: 1.0),
+                                    bottom: BorderSide(color: Colors.white12, width: 1.0),
                                   ),
                                 ),
-                              );
-                            },
-                          ),
-                        ),
-                ),
-              ],
-            ),
+                                padding: const EdgeInsets.symmetric(vertical: 10),
+                                child: IntrinsicHeight(
+                                  child: Row(
+                                    children: [
+                                      const SizedBox(width: 16),
+                                      const Expanded(
+                                        flex: 4,
+                                        child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const SizedBox(
+                                        width: 75,
+                                        child: Text('Is Active', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 3,
+                                        child: Text('Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 3,
+                                        child: Text('Practice', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 2,
+                                        child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      const Expanded(
+                                        flex: 2,
+                                        child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                      ),
+                                      Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                                      SizedBox(
+                                        width: 45,
+                                        child: Text(
+                                          '${_filteredAccounts.length} of ${_allAccounts.length}',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                          textAlign: TextAlign.right,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 16),
+                                    ],
+                                  ),
+                                ),
+                              )
+                            else
+                              // Compact Count Bar for Mobile
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                color: const Color(0xFF0B192C),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    const Text('DOCTOR ACCOUNTS', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                    Text(
+                                      'Showing ${_filteredAccounts.length} of ${_allAccounts.length}',
+                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                    ),
+                                  ],
+                                ),
+                              ),
+
+                            Expanded(
+                              child: _filteredAccounts.isEmpty
+                                  ? const Center(
+                                      child: Text('No Doctor Accounts match your criteria.', style: TextStyle(color: Color(0xFF64748B))),
+                                    )
+                                  : RefreshIndicator(
+                                      onRefresh: _loadAccounts,
+                                      color: const Color(0xFF0066FF),
+                                      child: ListView.separated(
+                                        padding: const EdgeInsets.symmetric(vertical: 4),
+                                        itemCount: _filteredAccounts.length,
+                                        separatorBuilder: (_, __) => const SizedBox(height: 2),
+                                        itemBuilder: (ctx, index) {
+                                          final item = _filteredAccounts[index];
+                                          final doc = _getMatchedDoctor(item);
+                                          final doctorFullName = _getDoctorFullName(item);
+                                          final typeLabel = _hcpTypes.firstWhere((t) => t.name == doc.hcpType, orElse: () => HcpType(name: doc.hcpType, typeName: doc.hcpType)).typeName;
+
+                                          final prefAccWorkplaces = item.workplaces.where((w) => w.preferred || w.isPrimary).toList();
+                                          String prefInstDisplay = '';
+                                          if (prefAccWorkplaces.isNotEmpty) {
+                                            prefInstDisplay = prefAccWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
+                                          } else if (item.workplaces.isNotEmpty) {
+                                            prefInstDisplay = item.workplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
+                                          } else {
+                                            final prefDocWorkplaces = doc.workplaces.where((w) => w.isPrimary).toList();
+                                            if (prefDocWorkplaces.isNotEmpty) {
+                                              prefInstDisplay = prefDocWorkplaces.map((w) => (w.address != null && w.address!.isNotEmpty) ? w.address! : w.workplace).where((s) => s.isNotEmpty).join(', ');
+                                            } else if (doc.workplaces.isNotEmpty) {
+                                              prefInstDisplay = (doc.workplaces.first.address != null && doc.workplaces.first.address!.isNotEmpty)
+                                                  ? doc.workplaces.first.address!
+                                                  : doc.workplaces.first.workplace;
+                                            } else if (doc.institution != null && doc.institution!.isNotEmpty) {
+                                              prefInstDisplay = doc.institution!;
+                                            } else {
+                                              prefInstDisplay = '-';
+                                            }
+                                          }
+
+                                          if (isMobile) {
+                                            return Container(
+                                              margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(10),
+                                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                                boxShadow: const [
+                                                  BoxShadow(color: Color(0x04000000), blurRadius: 3, offset: Offset(0, 1)),
+                                                ],
+                                              ),
+                                              child: InkWell(
+                                                borderRadius: BorderRadius.circular(10),
+                                                onTap: () => _showAccountDetail(item),
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(12),
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Row(
+                                                        children: [
+                                                          Expanded(
+                                                            child: Text(
+                                                              doctorFullName,
+                                                              style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13.5),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 6),
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                            decoration: BoxDecoration(
+                                                              color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.1) : const Color(0xFF64748B).withOpacity(0.1),
+                                                              borderRadius: BorderRadius.circular(4),
+                                                              border: Border.all(
+                                                                color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFCBD5E1),
+                                                                width: 0.6,
+                                                              ),
+                                                            ),
+                                                            child: Text(
+                                                              item.isCurrentMonthActive() ? (item.validityPeriod ?? HcpAccount.calculateMonthLabel()) : 'Archived',
+                                                              style: TextStyle(
+                                                                color: item.isCurrentMonthActive() ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                                                fontSize: 9.5,
+                                                                fontWeight: FontWeight.w600,
+                                                             ),
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 6),
+                                                      Row(
+                                                        children: [
+                                                          const Icon(Icons.domain_rounded, size: 13, color: Color(0xFF64748B)),
+                                                          const SizedBox(width: 4),
+                                                          Expanded(
+                                                            child: Text(
+                                                              prefInstDisplay,
+                                                              style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                              overflow: TextOverflow.ellipsis,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                      const SizedBox(height: 8),
+                                                      Row(
+                                                        children: [
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                            decoration: BoxDecoration(
+                                                              color: const Color(0xFFF1F5F9),
+                                                              borderRadius: BorderRadius.circular(6),
+                                                            ),
+                                                            child: Text(
+                                                              typeLabel,
+                                                              style: const TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.w500),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 6),
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                            decoration: BoxDecoration(
+                                                              color: const Color(0xFF0066FF).withOpacity(0.08),
+                                                              borderRadius: BorderRadius.circular(6),
+                                                            ),
+                                                            child: Text(
+                                                              doc.hcpPractice,
+                                                              style: const TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.w600),
+                                                            ),
+                                                          ),
+                                                          const Spacer(),
+                                                          Text(
+                                                            item.name ?? doc.name ?? '',
+                                                            style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11, fontFamily: 'monospace'),
+                                                          ),
+                                                          const SizedBox(width: 2),
+                                                          const Icon(Icons.chevron_right_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                            );
+                                          }
+
+                                          return Container(
+                                            decoration: const BoxDecoration(
+                                              color: Colors.white,
+                                              border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                                            ),
+                                            child: InkWell(
+                                              onTap: () => _showAccountDetail(item),
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                                child: Row(
+                                                  children: [
+                                                    // Name of Doctor & Monthly Validity Badge
+                                                    Expanded(
+                                                      flex: 4,
+                                                      child: Column(
+                                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                                        children: [
+                                                          Text(
+                                                            doctorFullName,
+                                                            style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+                                                            overflow: TextOverflow.ellipsis,
+                                                          ),
+                                                          const SizedBox(height: 2),
+                                                          Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              Container(
+                                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                                decoration: BoxDecoration(
+                                                                  color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.1) : const Color(0xFF64748B).withOpacity(0.1),
+                                                                  borderRadius: BorderRadius.circular(4),
+                                                                  border: Border.all(
+                                                                    color: item.isCurrentMonthActive() ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFCBD5E1),
+                                                                    width: 0.6,
+                                                                  ),
+                                                                ),
+                                                                child: Text(
+                                                                  item.isCurrentMonthActive() ? (item.validityPeriod ?? HcpAccount.calculateMonthLabel()) : 'Archived',
+                                                                  style: TextStyle(
+                                                                    color: item.isCurrentMonthActive() ? const Color(0xFF059669) : const Color(0xFF64748B),
+                                                                    fontSize: 9.5,
+                                                                    fontWeight: FontWeight.w600,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    // Is Active Check Icon
+                                                    SizedBox(
+                                                      width: 75,
+                                                      child: Align(
+                                                        alignment: Alignment.centerLeft,
+                                                        child: Icon(
+                                                          doc.isActive ? Icons.check_box_rounded : Icons.check_box_outline_blank,
+                                                          color: doc.isActive ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
+                                                          size: 18,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    // Institution
+                                                    Expanded(
+                                                      flex: 3,
+                                                      child: Text(
+                                                        prefInstDisplay,
+                                                        style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    // Practice Tag Capsule
+                                                    Expanded(
+                                                      flex: 3,
+                                                      child: Align(
+                                                        alignment: Alignment.centerLeft,
+                                                        child: Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFFF1F5F9),
+                                                            borderRadius: BorderRadius.circular(12),
+                                                            border: Border.all(color: const Color(0xFFCBD5E1)),
+                                                          ),
+                                                          child: Row(
+                                                            mainAxisSize: MainAxisSize.min,
+                                                            children: [
+                                                              const CircleAvatar(radius: 3, backgroundColor: Color(0xFF0B192C)),
+                                                              const SizedBox(width: 4),
+                                                              Flexible(
+                                                                child: Text(
+                                                                  doc.hcpPractice,
+                                                                  style: const TextStyle(color: Color(0xFF0B192C), fontSize: 11, fontWeight: FontWeight.w600),
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    // Type
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Text(
+                                                        typeLabel,
+                                                        style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    // ID
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Text(
+                                                        item.name ?? doc.name ?? 'HCP-ACC-00004',
+                                                        style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 45),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
     );
   }
 }

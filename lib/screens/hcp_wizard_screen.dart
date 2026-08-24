@@ -2405,221 +2405,234 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
             const Text('Affix signature and/or take a group photo', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // SIGNATURE COLUMN
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Signature', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
-                          ValueListenableBuilder<List<Offset>>(
-                            valueListenable: _signaturePoints,
-                            builder: (context, points, _) {
-                              if (points.isEmpty) return const SizedBox.shrink();
-                              return InkWell(
-                                onTap: () => setState(() => _signaturePoints.value = []),
-                                child: const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                  child: Text('Clear', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
-                                ),
-                              );
-                            },
-                          ),
+            Builder(
+              builder: (context) {
+                final isMobile = MediaQuery.of(context).size.width < 700;
+                final sigBox = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Signature', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
+                        ValueListenableBuilder<List<Offset>>(
+                          valueListenable: _signaturePoints,
+                          builder: (context, points, _) {
+                            if (points.isEmpty) return const SizedBox.shrink();
+                            return InkWell(
+                              onTap: () => setState(() => _signaturePoints.value = []),
+                              child: const Padding(
+                                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                child: Text('Clear', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: isMobile ? 180 : 150,
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x04000000), blurRadius: 4, offset: Offset(0, 1)),
                         ],
                       ),
-                      const SizedBox(height: 6),
-                      Container(
-                        height: 150,
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                          boxShadow: const [
-                            BoxShadow(color: Color(0x04000000), blurRadius: 4, offset: Offset(0, 1)),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: SignatureCanvas(pointsNotifier: _signaturePoints),
-                        ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SignatureCanvas(pointsNotifier: _signaturePoints),
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Sign inside the box', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Sign inside the box', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+                        InkWell(
+                          onTap: () => setState(() => _signaturePoints.value = []),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: const [
+                              Icon(Icons.clear_rounded, size: 14, color: Color(0xFFDC2626)),
+                              SizedBox(width: 2),
+                              Text('Clear', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+
+                final photoBox = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Photo', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
+                        if (_consentPhotoBytes != null)
                           InkWell(
-                            onTap: () => setState(() => _signaturePoints.value = []),
+                            onTap: _showPhotoPreviewDialog,
+                            child: const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                              child: Text('View Full', style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold)),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: isMobile ? 180 : 150,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x04000000), blurRadius: 4, offset: Offset(0, 1)),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: _consentPhotoBytes != null
+                            ? Stack(
+                                fit: StackFit.expand,
+                                children: [
+                                  Image.memory(
+                                    _consentPhotoBytes!,
+                                    fit: BoxFit.cover,
+                                  ),
+                                  Positioned.fill(
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: InkWell(
+                                        onTap: _showPhotoPreviewDialog,
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    bottom: 8,
+                                    right: 8,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.65),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: const [
+                                          Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white),
+                                          SizedBox(width: 4),
+                                          Text('Tap to preview', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500)),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : InkWell(
+                                onTap: _capturePhoto,
+                                child: Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: const [
+                                      Icon(Icons.camera_alt_rounded, color: Color(0xFF0066FF), size: 28),
+                                      SizedBox(height: 6),
+                                      Text('Take Photo', style: TextStyle(color: Color(0xFF0066FF), fontSize: 13, fontWeight: FontWeight.w600)),
+                                      SizedBox(height: 2),
+                                      Text('Tap to capture group / consent photo', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _consentPhotoBytes != null ? 'Photo captured' : 'No photo captured',
+                          style: TextStyle(
+                            color: _consentPhotoBytes != null ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
+                            fontSize: 11,
+                            fontWeight: _consentPhotoBytes != null ? FontWeight.w600 : FontWeight.normal,
+                          ),
+                        ),
+                        if (_consentPhotoBytes != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              InkWell(
+                                onTap: _capturePhoto,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.camera_alt_outlined, size: 13, color: Color(0xFF0066FF)),
+                                    SizedBox(width: 2),
+                                    Text('Retake', style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    _consentPhotoFile = null;
+                                    _consentPhotoBytes = null;
+                                  });
+                                },
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: const [
+                                    Icon(Icons.delete_outline_rounded, size: 13, color: Color(0xFFDC2626)),
+                                    SizedBox(width: 2),
+                                    Text('Remove', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          )
+                        else
+                          InkWell(
+                            onTap: _capturePhoto,
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: const [
-                                Icon(Icons.clear_rounded, size: 14, color: Color(0xFFDC2626)),
+                                Icon(Icons.camera_alt_rounded, size: 13, color: Color(0xFF0066FF)),
                                 SizedBox(width: 2),
-                                Text('Clear', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
+                                Text('Capture', style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 14),
-                // PHOTO COLUMN
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                      ],
+                    ),
+                  ],
+                );
+
+                if (isMobile) {
+                  return Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('Photo', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
-                          if (_consentPhotoBytes != null)
-                            InkWell(
-                              onTap: _showPhotoPreviewDialog,
-                              child: const Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                child: Text('View Full', style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Container(
-                        height: 150,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFCBD5E1)),
-                          boxShadow: const [
-                            BoxShadow(color: Color(0x04000000), blurRadius: 4, offset: Offset(0, 1)),
-                          ],
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: _consentPhotoBytes != null
-                              ? Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    Image.memory(
-                                      _consentPhotoBytes!,
-                                      fit: BoxFit.cover,
-                                    ),
-                                    Positioned.fill(
-                                      child: Material(
-                                        color: Colors.transparent,
-                                        child: InkWell(
-                                          onTap: _showPhotoPreviewDialog,
-                                        ),
-                                      ),
-                                    ),
-                                    Positioned(
-                                      bottom: 8,
-                                      right: 8,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.65),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: const [
-                                            Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white),
-                                            SizedBox(width: 4),
-                                            Text('Tap to preview', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500)),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                )
-                              : InkWell(
-                                  onTap: _capturePhoto,
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: const [
-                                        Icon(Icons.camera_alt_rounded, color: Color(0xFF0066FF), size: 28),
-                                        SizedBox(height: 6),
-                                        Text('Take Photo', style: TextStyle(color: Color(0xFF0066FF), fontSize: 13, fontWeight: FontWeight.w600)),
-                                        SizedBox(height: 2),
-                                        Text('Tap to capture group / consent photo', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10)),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _consentPhotoBytes != null ? 'Photo captured' : 'No photo captured',
-                            style: TextStyle(
-                              color: _consentPhotoBytes != null ? const Color(0xFF16A34A) : const Color(0xFF94A3B8),
-                              fontSize: 11,
-                              fontWeight: _consentPhotoBytes != null ? FontWeight.w600 : FontWeight.normal,
-                            ),
-                          ),
-                          if (_consentPhotoBytes != null)
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                InkWell(
-                                  onTap: _capturePhoto,
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Icon(Icons.camera_alt_outlined, size: 13, color: Color(0xFF0066FF)),
-                                      SizedBox(width: 2),
-                                      Text('Retake', style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                InkWell(
-                                  onTap: () {
-                                    setState(() {
-                                      _consentPhotoFile = null;
-                                      _consentPhotoBytes = null;
-                                    });
-                                  },
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: const [
-                                      Icon(Icons.delete_outline_rounded, size: 13, color: Color(0xFFDC2626)),
-                                      SizedBox(width: 2),
-                                      Text('Remove', style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold)),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            )
-                          else
-                            InkWell(
-                              onTap: _capturePhoto,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: const [
-                                  Icon(Icons.camera_alt_rounded, size: 13, color: Color(0xFF0066FF)),
-                                  SizedBox(width: 2),
-                                  Text('Capture', style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold)),
-                                ],
-                              ),
-                            ),
-                        ],
-                      ),
+                      sigBox,
+                      const SizedBox(height: 16),
+                      photoBox,
                     ],
-                  ),
-                ),
-              ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: sigBox),
+                    const SizedBox(width: 14),
+                    Expanded(child: photoBox),
+                  ],
+                );
+              },
             ),
           ],
           const SizedBox(height: 24),
@@ -3951,6 +3964,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
   // --- STEP 2: DOCTOR'S INFORMATION ---
   Widget _buildStep2DoctorInfo() {
+    final isMobile = MediaQuery.of(context).size.width < 700;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -3959,14 +3974,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           const Text('DOCTOR\'S INFORMATION', style: TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           
-          // Image 1 Header Section Layout
+          // Doctor Header Section
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Doctor Profile Photo (Display-Only / Non-Editable for Security)
               Container(
-                width: 110,
-                height: 130,
+                width: isMobile ? 84 : 110,
+                height: isMobile ? 104 : 130,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: BorderRadius.circular(10),
@@ -3985,42 +4000,43 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                               Provider.of<ApiService>(context, listen: false).formatFileUrl(_doctorPhotoUrl),
                               headers: Provider.of<ApiService>(context, listen: false).authHeaders,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Color(0xFF64748B), size: 64),
+                              errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Color(0xFF64748B), size: 48),
                             )
                           : Column(
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(Icons.account_box_rounded, color: Color(0xFF94A3B8), size: 48),
-                                SizedBox(height: 4),
-                                Text('HCP Photo', style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.bold)),
-                                Text('(HCP Record)', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 9)),
+                              children: [
+                                Icon(Icons.account_box_rounded, color: const Color(0xFF94A3B8), size: isMobile ? 36 : 48),
+                                const SizedBox(height: 2),
+                                const Text('HCP Photo', style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold)),
                               ],
                             )),
                 ),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TextFormField(
                       controller: _hcpFullNameController,
-                      style: const TextStyle(color: Color(0xFF0F172A)),
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
                       readOnly: true,
                       decoration: InputDecoration(
                         labelText: 'HCP Full Name',
-                        labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                        labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
+                        isDense: isMobile,
+                        contentPadding: isMobile ? const EdgeInsets.symmetric(horizontal: 10, vertical: 10) : null,
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     InkWell(
                       onTap: _showHcpSelectorModal,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: isMobile ? 10 : 14),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(8),
@@ -4032,18 +4048,21 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              _selectedDoctor != null ? '${_selectedDoctor!.name}' : 'Select HCP *',
-                              style: const TextStyle(color: Color(0xFF0B192C), fontWeight: FontWeight.bold, fontSize: 14, fontFamily: 'monospace'),
+                            Expanded(
+                              child: Text(
+                                _selectedDoctor != null ? '${_selectedDoctor!.name}' : 'Select HCP *',
+                                style: TextStyle(color: const Color(0xFF0B192C), fontWeight: FontWeight.bold, fontSize: isMobile ? 13 : 14, fontFamily: 'monospace'),
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                            const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF0066FF), size: 14),
+                            const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF0066FF), size: 13),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     const Text(
-                      'To begin, search for your doctor by typing the surname, the firstname, or both in the box provided.\nIf you could not find your doctor, create a new doctor profile instead.',
+                      'Search doctor or add new profile.',
                       style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
                     ),
                   ],
@@ -4051,549 +4070,696 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
           const Text('BASIC INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextFormField(
-                  controller: _firstNameController,
-                  style: const TextStyle(color: Color(0xFF0F172A)),
-                  decoration: InputDecoration(
-                    labelText: 'First Name *',
-                    labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+
+          // Responsive Basic Info Form Fields
+          if (isMobile) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _firstNameController,
+                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'First Name *',
+                      labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                      filled: true,
+                      fillColor: Colors.white,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _middleNameController,
-                  style: const TextStyle(color: Color(0xFF0F172A)),
-                  decoration: InputDecoration(
-                    labelText: 'Middle Name *',
-                    labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _middleNameController,
+                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Middle Name *',
+                      labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                      filled: true,
+                      fillColor: Colors.white,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextFormField(
-                  controller: _lastNameController,
-                  style: const TextStyle(color: Color(0xFF0F172A)),
-                  decoration: InputDecoration(
-                    labelText: 'Last Name *',
-                    labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _lastNameController,
+                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Last Name *',
+                      labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                      filled: true,
+                      fillColor: Colors.white,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: InkWell(
-                  onTap: () async {
-                    DateTime initial = DateTime(1985, 1, 1);
-                    if (_birthDateController.text.isNotEmpty) {
-                      try {
-                        initial = DateTime.parse(_birthDateController.text);
-                      } catch (_) {}
-                    }
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: initial,
-                      firstDate: DateTime(1920),
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) {
-                      final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                      setState(() {
-                        _birthDateController.text = formatted;
-                      });
-                    }
-                  },
-                  child: IgnorePointer(
-                    child: TextFormField(
-                      controller: _birthDateController,
-                      readOnly: true,
-                      style: const TextStyle(color: Color(0xFF0F172A)),
-                      decoration: InputDecoration(
-                        labelText: 'Birth Date',
-                        labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                        suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
-                        filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      DateTime initial = DateTime(1985, 1, 1);
+                      if (_birthDateController.text.isNotEmpty) {
+                        try {
+                          initial = DateTime.parse(_birthDateController.text);
+                        } catch (_) {}
+                      }
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: initial,
+                        firstDate: DateTime(1920),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                        setState(() {
+                          _birthDateController.text = formatted;
+                        });
+                      }
+                    },
+                    child: IgnorePointer(
+                      child: TextFormField(
+                        controller: _birthDateController,
+                        readOnly: true,
+                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: 'Birth Date',
+                          labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                          suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 18),
+                          filled: true,
+                          fillColor: Colors.white,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                          focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ] else ...[
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _firstNameController,
+                    style: const TextStyle(color: Color(0xFF0F172A)),
+                    decoration: InputDecoration(
+                      labelText: 'First Name *',
+                      labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _middleNameController,
+                    style: const TextStyle(color: Color(0xFF0F172A)),
+                    decoration: InputDecoration(
+                      labelText: 'Middle Name *',
+                      labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _lastNameController,
+                    style: const TextStyle(color: Color(0xFF0F172A)),
+                    decoration: InputDecoration(
+                      labelText: 'Last Name *',
+                      labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                      filled: true,
+                      fillColor: Colors.white,
+                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      DateTime initial = DateTime(1985, 1, 1);
+                      if (_birthDateController.text.isNotEmpty) {
+                        try {
+                          initial = DateTime.parse(_birthDateController.text);
+                        } catch (_) {}
+                      }
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: initial,
+                        firstDate: DateTime(1920),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) {
+                        final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                        setState(() {
+                          _birthDateController.text = formatted;
+                        });
+                      }
+                    },
+                    child: IgnorePointer(
+                      child: TextFormField(
+                        controller: _birthDateController,
+                        readOnly: true,
+                        style: const TextStyle(color: Color(0xFF0F172A)),
+                        decoration: InputDecoration(
+                          labelText: 'Birth Date',
+                          labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                          suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
+                          filled: true,
+                          fillColor: Colors.white,
+                          enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                          focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 20),
 
           const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 3,
-                child: Column(
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            color: const Color(0xFFF1F5F9),
-                            child: Row(
-                              children: const [
-                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                Expanded(child: Text('Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
-                                Text('Sub Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold)),
-                                SizedBox(width: 44),
-                              ],
-                            ),
-                          ),
-                          ..._selectedSpecialties.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final s = entry.value;
 
-                            final rawSpec = (s.specialtyName != null && s.specialtyName!.isNotEmpty) ? s.specialtyName! : (s.hcpSpecialty ?? '');
-                            final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
-                            final rawSub = (s.subSpecialtyName != null && s.subSpecialtyName!.isNotEmpty && s.subSpecialtyName != '-') ? s.subSpecialtyName! : (s.subSpecialty ?? '-');
-                            final subName = (rawSub != '-' && rawSub.isNotEmpty) ? LocationResolver.resolveSpecialtyName(rawSub, _specializations) : '-';
-
-                            return InkWell(
-                              onTap: () => _showEditSpecialtyDialog(idx),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                child: Row(
-                                  children: [
-                                    InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          for (int i = 0; i < _selectedSpecialties.length; i++) {
-                                            final item = _selectedSpecialties[i];
-                                            _selectedSpecialties[i] = SubmissionSpecialty(
-                                              preferred: (i == idx),
-                                              hcpSpecialty: item.hcpSpecialty,
-                                              specialtyName: item.specialtyName,
-                                              subSpecialty: item.subSpecialty,
-                                              subSpecialtyName: item.subSpecialtyName,
-                                            );
-                                          }
-                                        });
-                                      },
-                                      child: SizedBox(
-                                        width: 24,
-                                        child: Icon(
-                                          s.preferred ? Icons.star_rounded : Icons.star_border_rounded,
-                                          size: 18,
-                                          color: s.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              specName,
-                                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (s.preferred) ...[
-                                            const SizedBox(width: 4),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFFEF3C7),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                              ),
-                                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(subName, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
-                                    const SizedBox(width: 6),
-                                    GestureDetector(
-                                      onTap: () => _showEditSpecialtyDialog(idx),
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 4),
-                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          _selectedSpecialties.removeAt(idx);
-                                        });
-                                      },
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 8),
-                                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                        label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                        onPressed: _showAddSpecialtySelector,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                flex: 2,
-                child: Column(
-                  children: [
-                    DropdownButtonFormField<String>(
-                      value: _selectedHcpType,
-                      dropdownColor: Colors.white,
-                      style: const TextStyle(color: Color(0xFF0F172A)),
-                      decoration: InputDecoration(
-                        labelText: 'Type *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                        filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                      ),
-                      items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
-                      onChanged: (val) => setState(() => _selectedHcpType = val),
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: _selectedPractice,
-                      dropdownColor: Colors.white,
-                      style: const TextStyle(color: Color(0xFF0F172A)),
-                      decoration: InputDecoration(
-                        labelText: 'Practice *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                        filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
-                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
-                        DropdownMenuItem(value: 'Both', child: Text('Both')),
+          // SPECIALTY SECTION BUILDER
+          Builder(
+            builder: (context) {
+              final specialtyCard = Column(
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
                       ],
-                      onChanged: (val) => setState(() => _selectedPractice = val!),
+                    ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          color: const Color(0xFFF1F5F9),
+                          child: Row(
+                            children: const [
+                              SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
+                              Expanded(child: Text('Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
+                              Text('Sub Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold)),
+                              SizedBox(width: 44),
+                            ],
+                          ),
+                        ),
+                        ..._selectedSpecialties.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final s = entry.value;
+
+                          final rawSpec = (s.specialtyName != null && s.specialtyName!.isNotEmpty) ? s.specialtyName! : (s.hcpSpecialty ?? '');
+                          final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
+                          final rawSub = (s.subSpecialtyName != null && s.subSpecialtyName!.isNotEmpty && s.subSpecialtyName != '-') ? s.subSpecialtyName! : (s.subSpecialty ?? '-');
+                          final subName = (rawSub != '-' && rawSub.isNotEmpty) ? LocationResolver.resolveSpecialtyName(rawSub, _specializations) : '-';
+
+                          return InkWell(
+                            onTap: () => _showEditSpecialtyDialog(idx),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        for (int i = 0; i < _selectedSpecialties.length; i++) {
+                                          final item = _selectedSpecialties[i];
+                                          _selectedSpecialties[i] = SubmissionSpecialty(
+                                            preferred: (i == idx),
+                                            hcpSpecialty: item.hcpSpecialty,
+                                            specialtyName: item.specialtyName,
+                                            subSpecialty: item.subSpecialty,
+                                            subSpecialtyName: item.subSpecialtyName,
+                                          );
+                                        }
+                                      });
+                                    },
+                                    child: SizedBox(
+                                      width: 24,
+                                      child: Icon(
+                                        s.preferred ? Icons.star_rounded : Icons.star_border_rounded,
+                                        size: 18,
+                                        color: s.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            specName,
+                                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (s.preferred) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF3C7),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                            ),
+                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(subName, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () => _showEditSpecialtyDialog(idx),
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedSpecialties.removeAt(idx);
+                                      });
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 8),
+                                      child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
+                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      onPressed: _showAddSpecialtySelector,
+                    ),
+                  ),
+                ],
+              );
+
+              final typePracticeControls = [
+                DropdownButtonFormField<String>(
+                  value: _selectedHcpType,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Type *',
+                    labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                    filled: true,
+                    fillColor: Colors.white,
+                    isDense: isMobile,
+                    contentPadding: isMobile ? const EdgeInsets.symmetric(horizontal: 10, vertical: 12) : null,
+                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                  ),
+                  items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
+                  onChanged: (val) => setState(() => _selectedHcpType = val),
+                ),
+                SizedBox(height: isMobile ? 8 : 10),
+                DropdownButtonFormField<String>(
+                  value: _selectedPractice,
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                  decoration: InputDecoration(
+                    labelText: 'Practice *',
+                    labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                    filled: true,
+                    fillColor: Colors.white,
+                    isDense: isMobile,
+                    contentPadding: isMobile ? const EdgeInsets.symmetric(horizontal: 10, vertical: 12) : null,
+                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                    DropdownMenuItem(value: 'Both', child: Text('Both')),
+                  ],
+                  onChanged: (val) => setState(() => _selectedPractice = val!),
+                ),
+              ];
+
+              if (isMobile) {
+                return Column(
+                  children: [
+                    specialtyCard,
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(child: typePracticeControls[0]),
+                        const SizedBox(width: 8),
+                        Expanded(child: typePracticeControls[2]),
+                      ],
                     ),
                   ],
-                ),
-              ),
-            ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 3, child: specialtyCard),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    flex: 2,
+                    child: Column(children: typePracticeControls),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 20),
 
           const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            color: const Color(0xFFF1F5F9),
-                            child: Row(
-                              children: const [
-                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                Expanded(child: Text('Workplace Name', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
-                                Text('City Name', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                                SizedBox(width: 8),
-                                Text('Province Name', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                                SizedBox(width: 44),
-                              ],
-                            ),
-                          ),
-                          ..._selectedWorkplaces.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final w = entry.value;
-                            final wpName = LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace, _institutions);
-                            final cityName = LocationResolver.resolveCityName(w.cityTitle ?? w.cityMunicipality);
-                            final provName = LocationResolver.resolveProvinceName(w.provinceTitle ?? w.provinceName);
 
-                            return InkWell(
-                              onTap: () => _showEditWorkplaceDialog(idx),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                child: Row(
-                                  children: [
-                                    InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          for (int i = 0; i < _selectedWorkplaces.length; i++) {
-                                            final item = _selectedWorkplaces[i];
-                                            _selectedWorkplaces[i] = SubmissionWorkplace(
-                                              preferred: (i == idx),
-                                              hcpWorkplace: item.hcpWorkplace,
-                                              workplaceName: item.workplaceName,
-                                              cityMunicipality: item.cityMunicipality,
-                                              cityTitle: item.cityTitle,
-                                              provinceName: item.provinceName,
-                                              provinceTitle: item.provinceTitle,
-                                            );
-                                          }
-                                        });
-                                      },
-                                      child: SizedBox(
-                                        width: 24,
-                                        child: Icon(
-                                          w.preferred ? Icons.star_rounded : Icons.star_border_rounded,
-                                          size: 18,
-                                          color: w.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                        ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              wpName.isNotEmpty ? wpName : 'Manila Doctors Hospital',
-                                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                          if (w.preferred) ...[
-                                            const SizedBox(width: 4),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFFEF3C7),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                              ),
-                                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(cityName.isNotEmpty ? cityName : 'Ermita', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                    const SizedBox(width: 8),
-                                    Text(provName.isNotEmpty ? provName : 'Metro Manila-Manila', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                    const SizedBox(width: 6),
-                                    GestureDetector(
-                                      onTap: () => _showEditWorkplaceDialog(idx),
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 4),
-                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          _selectedWorkplaces.removeAt(idx);
-                                        });
-                                      },
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 6),
-                                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
+          // WORKPLACES & CONTACTS SECTION BUILDER
+          Builder(
+            builder: (context) {
+              final workplaceCard = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                      onPressed: _showAddWorkplaceSelector,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                        boxShadow: const [
-                          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
-                        ],
-                      ),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            color: const Color(0xFFF1F5F9),
-                            child: Row(
-                              children: const [
-                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
-                                Text('Email Address', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                                SizedBox(width: 44),
-                              ],
-                            ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          color: const Color(0xFFF1F5F9),
+                          child: Row(
+                            children: const [
+                              SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
+                              Expanded(child: Text('Workplace Name', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
+                              Text('City', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
+                              SizedBox(width: 8),
+                              Text('Province', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
+                              SizedBox(width: 44),
+                            ],
                           ),
-                          ..._contacts.asMap().entries.map((entry) {
-                            final idx = entry.key;
-                            final c = entry.value;
-                            return InkWell(
-                              onTap: () => _showEditContactDialog(idx),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                child: Row(
-                                  children: [
-                                    InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          for (int i = 0; i < _contacts.length; i++) {
-                                            final item = _contacts[i];
-                                            _contacts[i] = SubmissionContact(
-                                              preferred: (i == idx),
-                                              contactNumber: item.contactNumber,
-                                              emailAddress: item.emailAddress,
-                                            );
-                                          }
-                                        });
-                                      },
-                                      child: SizedBox(
-                                        width: 24,
-                                        child: Icon(
-                                          c.preferred ? Icons.star_rounded : Icons.star_border_rounded,
-                                          size: 18,
-                                          color: c.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                        ),
+                        ),
+                        ..._selectedWorkplaces.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final w = entry.value;
+                          final wpName = LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace, _institutions);
+                          final cityName = LocationResolver.resolveCityName(w.cityTitle ?? w.cityMunicipality);
+                          final provName = LocationResolver.resolveProvinceName(w.provinceTitle ?? w.provinceName);
+
+                          return InkWell(
+                            onTap: () => _showEditWorkplaceDialog(idx),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        for (int i = 0; i < _selectedWorkplaces.length; i++) {
+                                          final item = _selectedWorkplaces[i];
+                                          _selectedWorkplaces[i] = SubmissionWorkplace(
+                                            preferred: (i == idx),
+                                            hcpWorkplace: item.hcpWorkplace,
+                                            workplaceName: item.workplaceName,
+                                            cityMunicipality: item.cityMunicipality,
+                                            cityTitle: item.cityTitle,
+                                            provinceName: item.provinceName,
+                                            provinceTitle: item.provinceTitle,
+                                          );
+                                        }
+                                      });
+                                    },
+                                    child: SizedBox(
+                                      width: 24,
+                                      child: Icon(
+                                        w.preferred ? Icons.star_rounded : Icons.star_border_rounded,
+                                        size: 18,
+                                        color: w.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
                                       ),
                                     ),
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              c.contactNumber ?? 'N/A',
-                                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
+                                  ),
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            wpName.isNotEmpty ? wpName : 'Manila Doctors Hospital',
+                                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          if (c.preferred) ...[
-                                            const SizedBox(width: 4),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFFFEF3C7),
-                                                borderRadius: BorderRadius.circular(4),
-                                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                              ),
-                                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
+                                        ),
+                                        if (w.preferred) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF3C7),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
                                             ),
-                                          ],
+                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
+                                          ),
                                         ],
-                                      ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 6),
-                                    Text(c.emailAddress ?? '', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                    const SizedBox(width: 6),
-                                    GestureDetector(
-                                      onTap: () => _showEditContactDialog(idx),
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 4),
-                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
-                                      ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(cityName.isNotEmpty ? cityName : 'Ermita', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                  const SizedBox(width: 8),
+                                  Text(provName.isNotEmpty ? provName : 'Metro Manila-Manila', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () => _showEditWorkplaceDialog(idx),
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
                                     ),
-                                    GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          _contacts.removeAt(idx);
-                                        });
-                                      },
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 6),
-                                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                      ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _selectedWorkplaces.removeAt(idx);
+                                      });
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
-                            );
-                          }),
-                        ],
-                      ),
+                            ),
+                          );
+                        }),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                      onPressed: _showAddContactSelector,
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
+                    icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                    label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    onPressed: _showAddWorkplaceSelector,
+                  ),
+                ],
+              );
+
+              final contactCard = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                      boxShadow: const [
+                        BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
+                      ],
                     ),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          color: const Color(0xFFF1F5F9),
+                          child: Row(
+                            children: const [
+                              SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
+                              Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
+                              Text('Email Address', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
+                              SizedBox(width: 44),
+                            ],
+                          ),
+                        ),
+                        ..._contacts.asMap().entries.map((entry) {
+                          final idx = entry.key;
+                          final c = entry.value;
+                          return InkWell(
+                            onTap: () => _showEditContactDialog(idx),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              child: Row(
+                                children: [
+                                  InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        for (int i = 0; i < _contacts.length; i++) {
+                                          final item = _contacts[i];
+                                          _contacts[i] = SubmissionContact(
+                                            preferred: (i == idx),
+                                            contactNumber: item.contactNumber,
+                                            emailAddress: item.emailAddress,
+                                          );
+                                        }
+                                      });
+                                    },
+                                    child: SizedBox(
+                                      width: 24,
+                                      child: Icon(
+                                        c.preferred ? Icons.star_rounded : Icons.star_border_rounded,
+                                        size: 18,
+                                        color: c.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            c.contactNumber ?? 'N/A',
+                                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        if (c.preferred) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFFEF3C7),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                            ),
+                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(c.emailAddress ?? '', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                  const SizedBox(width: 6),
+                                  GestureDetector(
+                                    onTap: () => _showEditContactDialog(idx),
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 4),
+                                      child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                    ),
+                                  ),
+                                  GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        _contacts.removeAt(idx);
+                                      });
+                                    },
+                                    child: const Padding(
+                                      padding: EdgeInsets.only(left: 6),
+                                      child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
+                    icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                    label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
+                    onPressed: _showAddContactSelector,
+                  ),
+                ],
+              );
+
+              if (isMobile) {
+                return Column(
+                  children: [
+                    workplaceCard,
+                    const SizedBox(height: 16),
+                    contactCard,
                   ],
-                ),
-              ),
-            ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: workplaceCard),
+                  const SizedBox(width: 14),
+                  Expanded(child: contactCard),
+                ],
+              );
+            },
           ),
         ],
       ),
