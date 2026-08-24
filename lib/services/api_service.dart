@@ -1509,34 +1509,27 @@ class ApiService extends ChangeNotifier {
       // Ensure hcp_specialty Link fields map to valid ERPNext Specialization primary keys
       if (payload['hcp_specialty'] is List && (payload['hcp_specialty'] as List).isNotEmpty) {
         final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
-        if (specs.isNotEmpty) {
-          final List<Map<String, dynamic>> cleanSpecs = [];
-          for (var item in (payload['hcp_specialty'] as List)) {
-            if (item is Map<String, dynamic>) {
-              final map = Map<String, dynamic>.from(item);
-              final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? '').toString().trim();
-              if (rawSpec.isNotEmpty) {
-                final match = specs.firstWhere(
-                  (s) => s.name == rawSpec || s.specialty.toLowerCase() == rawSpec.toLowerCase(),
-                  orElse: () => specs.first,
-                );
-                map['hcp_specialty'] = match.name;
-              }
-              final rawSub = (map['sub_specialty'] ?? '').toString().trim();
-              if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
-                final subMatch = specs.firstWhere(
-                  (s) => s.name == rawSub || s.specialty.toLowerCase() == rawSub.toLowerCase(),
-                  orElse: () => specs.first,
-                );
-                map['sub_specialty'] = subMatch.name;
-              } else {
-                map.remove('sub_specialty');
-              }
-              cleanSpecs.add(map);
+        final List<Map<String, dynamic>> cleanSpecs = [];
+        for (var item in (payload['hcp_specialty'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? '').toString().trim();
+            if (rawSpec.isNotEmpty) {
+              final specId = LocationResolver.resolveSpecialtyId(rawSpec, specs.isNotEmpty ? specs : null);
+              map['hcp_specialty'] = specId.isNotEmpty ? specId : 'SPEC-00001';
+              map['specialty'] = specId.isNotEmpty ? specId : 'SPEC-00001';
             }
+            final rawSub = (map['sub_specialty'] ?? '').toString().trim();
+            if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
+              final subId = LocationResolver.resolveSpecialtyId(rawSub, specs.isNotEmpty ? specs : null);
+              map['sub_specialty'] = subId.isNotEmpty ? subId : null;
+            } else {
+              map.remove('sub_specialty');
+            }
+            cleanSpecs.add(map);
           }
-          payload['hcp_specialty'] = cleanSpecs;
         }
+        payload['hcp_specialty'] = cleanSpecs;
       }
       if (payload['hcp_specialty'] == null || (payload['hcp_specialty'] as List).isEmpty) {
         payload['hcp_specialty'] = [
@@ -1547,25 +1540,20 @@ class ApiService extends ChangeNotifier {
       // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
       if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
         final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
-        if (insts.isNotEmpty) {
-          final List<Map<String, dynamic>> cleanWps = [];
-          for (var item in (payload['hcp_workplace'] as List)) {
-            if (item is Map<String, dynamic>) {
-              final map = Map<String, dynamic>.from(item);
-              final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? '').toString().trim();
-              if (rawWp.isNotEmpty) {
-                final match = insts.firstWhere(
-                  (i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase(),
-                  orElse: () => insts.first,
-                );
-                map['hcp_workplace'] = match.name;
-                map['workplace'] = match.name;
-              }
-              cleanWps.add(map);
+        final List<Map<String, dynamic>> cleanWps = [];
+        for (var item in (payload['hcp_workplace'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['address'] ?? '').toString().trim();
+            if (rawWp.isNotEmpty) {
+              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
+              map['hcp_workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
+              map['workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
             }
+            cleanWps.add(map);
           }
-          payload['hcp_workplace'] = cleanWps;
         }
+        payload['hcp_workplace'] = cleanWps;
       }
       if (payload['hcp_workplace'] == null || (payload['hcp_workplace'] as List).isEmpty) {
         payload['hcp_workplace'] = [
@@ -1689,6 +1677,51 @@ class ApiService extends ChangeNotifier {
           payload['image'] = hp;
           payload['photo'] = hp;
         }
+      }
+
+      // Ensure hcp_specialty Link fields map to valid ERPNext Specialization primary keys
+      if (payload['hcp_specialty'] is List && (payload['hcp_specialty'] as List).isNotEmpty) {
+        final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
+        final List<Map<String, dynamic>> cleanSpecs = [];
+        for (var item in (payload['hcp_specialty'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? '').toString().trim();
+            if (rawSpec.isNotEmpty) {
+              final specId = LocationResolver.resolveSpecialtyId(rawSpec, specs.isNotEmpty ? specs : null);
+              map['hcp_specialty'] = specId.isNotEmpty ? specId : 'SPEC-00001';
+              map['specialty'] = specId.isNotEmpty ? specId : 'SPEC-00001';
+            }
+            final rawSub = (map['sub_specialty'] ?? '').toString().trim();
+            if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
+              final subId = LocationResolver.resolveSpecialtyId(rawSub, specs.isNotEmpty ? specs : null);
+              map['sub_specialty'] = subId.isNotEmpty ? subId : null;
+            } else {
+              map.remove('sub_specialty');
+            }
+            cleanSpecs.add(map);
+          }
+        }
+        payload['hcp_specialty'] = cleanSpecs;
+      }
+
+      // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
+      if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
+        final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+        final List<Map<String, dynamic>> cleanWps = [];
+        for (var item in (payload['hcp_workplace'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['address'] ?? '').toString().trim();
+            if (rawWp.isNotEmpty) {
+              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
+              map['hcp_workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
+              map['workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
+            }
+            cleanWps.add(map);
+          }
+        }
+        payload['hcp_workplace'] = cleanWps;
       }
 
       final response = await http.put(
