@@ -927,4 +927,157 @@ class LocationResolver {
 
     return trimmed;
   }
+
+  /// Resolve a Specialty title (e.g. "Family Medicine") to its ERPNext Link ID (e.g. "SPEC-00003")
+  static String resolveSpecialtyId(String? raw, [List<Specialization>? dynamicSpecs]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return '';
+    final trimmed = raw.trim();
+
+    // 1. Check dynamicSpecs
+    if (dynamicSpecs != null && dynamicSpecs.isNotEmpty) {
+      final found = dynamicSpecs.firstWhere(
+        (s) => s.specialty.toLowerCase() == trimmed.toLowerCase() || s.name.toLowerCase() == trimmed.toLowerCase(),
+        orElse: () => Specialization(name: '', specialty: '', specialtyGroup: ''),
+      );
+      if (found.name.isNotEmpty) return found.name;
+    }
+
+    // 2. Check dynamic in-memory registry
+    for (var entry in _dynamicSpecialties.entries) {
+      if (entry.value.toLowerCase() == trimmed.toLowerCase()) {
+        return entry.key.toUpperCase();
+      }
+    }
+
+    // 3. Check static map
+    for (var entry in _staticSpecialties.entries) {
+      if (entry.value.toLowerCase() == trimmed.toLowerCase()) {
+        return entry.key;
+      }
+    }
+
+    // If it already starts with SPEC-, return it
+    if (trimmed.toUpperCase().startsWith('SPEC-')) {
+      return trimmed.toUpperCase();
+    }
+
+    return trimmed;
+  }
+
+  /// Resolve an Institution title (e.g. "UP-Philippine General Hospital") to its ERPNext Link ID (e.g. "INST-00006")
+  static String resolveInstitutionId(String? raw, [List<Institution>? dynamicInsts]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return '';
+    final trimmed = raw.trim();
+
+    // 1. Check dynamicInsts
+    if (dynamicInsts != null && dynamicInsts.isNotEmpty) {
+      final found = dynamicInsts.firstWhere(
+        (i) => i.institutionName.toLowerCase() == trimmed.toLowerCase() || i.name.toLowerCase() == trimmed.toLowerCase(),
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (found.name.isNotEmpty) return found.name;
+    }
+
+    // 2. Check dynamic in-memory registry
+    for (var entry in _dynamicInstitutions.entries) {
+      if (entry.value.toLowerCase() == trimmed.toLowerCase()) {
+        return entry.key.toUpperCase();
+      }
+    }
+
+    // 3. Check static map
+    for (var entry in _staticInstitutions.entries) {
+      if (entry.value.toLowerCase() == trimmed.toLowerCase()) {
+        return entry.key;
+      }
+    }
+
+    // If it already starts with INST-, return it
+    if (trimmed.toUpperCase().startsWith('INST-')) {
+      return trimmed.toUpperCase();
+    }
+
+    return trimmed;
+  }
+
+  /// Resolve a Province name (e.g. "Bulacan") to its ERPNext Link ID / PSGC Code (e.g. "0301400000")
+  static String resolveProvinceId(String? raw, [List<PsgcLocation>? dynamicLocations]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return '';
+    final trimmed = raw.trim();
+
+    // 1. Check dynamic locations
+    if (dynamicLocations != null && dynamicLocations.isNotEmpty) {
+      final match = dynamicLocations.firstWhere(
+        (loc) => loc.locationLabel.toLowerCase() == trimmed.toLowerCase() || loc.name.toLowerCase() == trimmed.toLowerCase() || (loc.psgcCode != null && loc.psgcCode == trimmed),
+        orElse: () => PsgcLocation(name: '', locationLabel: '', locationType: ''),
+      );
+      if (match.name.isNotEmpty) return match.name;
+    }
+
+    // 2. Check in-memory registered PSGC locations
+    for (var entry in _dynamicPsgcLocations.entries) {
+      if (entry.value.toLowerCase() == trimmed.toLowerCase()) {
+        return entry.key;
+      }
+    }
+
+    // 3. Check standard provinces list
+    for (var p in standardProvinces) {
+      if (p.name.toLowerCase() == trimmed.toLowerCase() || p.code == trimmed) {
+        return p.code;
+      }
+    }
+
+    return trimmed;
+  }
+
+  /// Resolve a City/Municipality name (e.g. "Ermita") to its ERPNext Link ID / PSGC Code
+  static String resolveCityId(String? raw, [List<PsgcLocation>? dynamicLocations]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return '';
+    final trimmed = raw.trim();
+
+    if (dynamicLocations != null && dynamicLocations.isNotEmpty) {
+      final match = dynamicLocations.firstWhere(
+        (loc) => loc.locationLabel.toLowerCase() == trimmed.toLowerCase() || loc.name.toLowerCase() == trimmed.toLowerCase() || (loc.psgcCode != null && loc.psgcCode == trimmed),
+        orElse: () => PsgcLocation(name: '', locationLabel: '', locationType: ''),
+      );
+      if (match.name.isNotEmpty) return match.name;
+    }
+
+    for (var entry in _dynamicPsgcLocations.entries) {
+      if (entry.value.toLowerCase() == trimmed.toLowerCase()) {
+        return entry.key;
+      }
+    }
+
+    for (var c in standardCities) {
+      if (c.name.toLowerCase() == trimmed.toLowerCase() || c.code == trimmed) {
+        return c.code;
+      }
+    }
+
+    return trimmed;
+  }
+
+  /// Resolve a Region name to its ERPNext Link ID / PSGC Code
+  static String resolveRegionId(String? raw, [List<PsgcLocation>? dynamicLocations]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return '';
+    final trimmed = raw.trim();
+
+    if (dynamicLocations != null && dynamicLocations.isNotEmpty) {
+      final match = dynamicLocations.firstWhere(
+        (loc) => loc.locationLabel.toLowerCase() == trimmed.toLowerCase() || loc.name.toLowerCase() == trimmed.toLowerCase(),
+        orElse: () => PsgcLocation(name: '', locationLabel: '', locationType: ''),
+      );
+      if (match.name.isNotEmpty) return match.name;
+    }
+
+    for (var r in standardRegions) {
+      if (r.name.toLowerCase() == trimmed.toLowerCase() || r.code == trimmed) {
+        return r.code;
+      }
+    }
+
+    return trimmed;
+  }
 }

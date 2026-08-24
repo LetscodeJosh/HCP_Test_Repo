@@ -2054,7 +2054,7 @@ class ApiService extends ChangeNotifier {
         }
       }
 
-      // Ensure table_specialties fields store human-readable names across all specialty fields & preserve preferred flag
+      // Ensure table_specialties fields store valid Link IDs for Frappe Link fields and human-readable names in data fields
       if (payload['table_specialties'] is List && (payload['table_specialties'] as List).isNotEmpty) {
         final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
         final List<Map<String, dynamic>> cleanSpecs = [];
@@ -2072,18 +2072,22 @@ class ApiService extends ChangeNotifier {
 
             final rawSpec = (map['specialty_name'] ?? map['specialty'] ?? map['hcp_specialty'] ?? '').toString().trim();
             if (rawSpec.isNotEmpty) {
-              final resolvedSpec = LocationResolver.resolveSpecialtyName(rawSpec, specs.isNotEmpty ? specs : null);
-              final finalSpec = resolvedSpec.isNotEmpty ? resolvedSpec : rawSpec;
-              map['hcp_specialty'] = finalSpec;
-              map['specialty'] = finalSpec;
-              map['specialty_name'] = finalSpec;
+              final specId = LocationResolver.resolveSpecialtyId(rawSpec, specs.isNotEmpty ? specs : null);
+              final specName = LocationResolver.resolveSpecialtyName(rawSpec, specs.isNotEmpty ? specs : null);
+              final finalId = specId.isNotEmpty ? specId : rawSpec;
+              final finalName = specName.isNotEmpty ? specName : rawSpec;
+              map['hcp_specialty'] = finalId;
+              map['specialty'] = finalId;
+              map['specialty_name'] = finalName;
             }
             final rawSub = (map['sub_specialty_name'] ?? map['sub_specialty'] ?? '').toString().trim();
             if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
-              final resolvedSub = LocationResolver.resolveSpecialtyName(rawSub, specs.isNotEmpty ? specs : null);
-              final finalSub = (resolvedSub.isNotEmpty && resolvedSub != '-') ? resolvedSub : rawSub;
-              map['sub_specialty'] = finalSub;
-              map['sub_specialty_name'] = finalSub;
+              final subId = LocationResolver.resolveSpecialtyId(rawSub, specs.isNotEmpty ? specs : null);
+              final subName = LocationResolver.resolveSpecialtyName(rawSub, specs.isNotEmpty ? specs : null);
+              final finalSubId = subId.isNotEmpty ? subId : rawSub;
+              final finalSubName = subName.isNotEmpty ? subName : rawSub;
+              map['sub_specialty'] = finalSubId;
+              map['sub_specialty_name'] = finalSubName;
             } else {
               map.remove('sub_specialty');
               map.remove('sub_specialty_name');
@@ -2094,7 +2098,7 @@ class ApiService extends ChangeNotifier {
         payload['table_specialties'] = cleanSpecs;
       }
 
-      // Ensure table_workplaces fields store human-readable workplace and province names & preserve preferred flag
+      // Ensure table_workplaces fields store valid Link IDs for Frappe Link fields and human-readable names in data fields
       if (payload['table_workplaces'] is List && (payload['table_workplaces'] as List).isNotEmpty) {
         final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
         final psgc = await fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
@@ -2116,34 +2120,34 @@ class ApiService extends ChangeNotifier {
             final rawProv = (map['province_name'] ?? map['province_title'] ?? map['province'] ?? '').toString().trim();
 
             if (rawWp.isNotEmpty) {
-              final resolvedWp = LocationResolver.resolveInstitutionName(rawWp, insts.isNotEmpty ? insts : null);
-              final finalWp = resolvedWp.isNotEmpty ? resolvedWp : rawWp;
-              map['hcp_workplace'] = finalWp;
-              map['workplace'] = finalWp;
-              map['workplace_name'] = finalWp;
-              map['address'] = finalWp;
+              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
+              final wpName = LocationResolver.resolveInstitutionName(rawWp, insts.isNotEmpty ? insts : null);
+              final finalWpId = wpId.isNotEmpty ? wpId : rawWp;
+              final finalWpName = wpName.isNotEmpty ? wpName : rawWp;
+              map['hcp_workplace'] = finalWpId;
+              map['workplace'] = finalWpId;
+              map['workplace_name'] = finalWpName;
+              map['address'] = finalWpName;
 
-              final instMatch = insts.where((i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase() || i.institutionName.toLowerCase() == finalWp.toLowerCase()).firstOrNull;
+              final instMatch = insts.where((i) => i.name == rawWp || i.name == wpId || i.institutionName.toLowerCase() == rawWp.toLowerCase() || i.institutionName.toLowerCase() == wpName.toLowerCase()).firstOrNull;
 
-              final resolvedCity = LocationResolver.resolveCityName(
-                rawCity.isNotEmpty ? rawCity : (instMatch?.cityMunicipality ?? ''),
-                psgc.isNotEmpty ? psgc : null,
-              );
-              if (resolvedCity.isNotEmpty) {
-                map['city_municipality'] = resolvedCity;
-                map['city_title'] = resolvedCity;
-                map['city_name'] = resolvedCity;
-                map['city'] = resolvedCity;
+              final cityInput = rawCity.isNotEmpty ? rawCity : (instMatch?.cityMunicipality ?? '');
+              if (cityInput.isNotEmpty) {
+                final cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
+                final cityName = LocationResolver.resolveCityName(cityInput, psgc.isNotEmpty ? psgc : null);
+                map['city_municipality'] = cityId.isNotEmpty ? cityId : cityInput;
+                map['city'] = cityId.isNotEmpty ? cityId : cityInput;
+                map['city_title'] = cityName.isNotEmpty ? cityName : cityInput;
+                map['city_name'] = cityName.isNotEmpty ? cityName : cityInput;
               }
 
-              final resolvedProv = LocationResolver.resolveProvinceName(
-                rawProv.isNotEmpty ? rawProv : (instMatch?.provinceName ?? ''),
-                psgc.isNotEmpty ? psgc : null,
-              );
-              if (resolvedProv.isNotEmpty) {
-                map['province_name'] = resolvedProv;
-                map['province_title'] = resolvedProv;
-                map['province'] = resolvedProv;
+              final provInput = rawProv.isNotEmpty ? rawProv : (instMatch?.provinceName ?? '');
+              if (provInput.isNotEmpty) {
+                final provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
+                final provName = LocationResolver.resolveProvinceName(provInput, psgc.isNotEmpty ? psgc : null);
+                map['province_name'] = provId.isNotEmpty ? provId : provInput;
+                map['province'] = provId.isNotEmpty ? provId : provInput;
+                map['province_title'] = provName.isNotEmpty ? provName : provInput;
               }
             }
             cleanWps.add(map);
@@ -2172,33 +2176,35 @@ class ApiService extends ChangeNotifier {
         payload['table_contact_info'] = cleanContacts;
       }
 
-      // Ensure root-level location and institution fields are human-readable
-      if (payload['province_name'] != null) {
-        final res = LocationResolver.resolveProvinceName(payload['province_name'].toString());
-        if (res.isNotEmpty) {
-          payload['province_name'] = res;
-          payload['province'] = res;
-          payload['province_title'] = res;
-        }
+      // Ensure root-level location and institution fields have valid Link IDs and human-readable names
+      if (payload['province_name'] != null || payload['province'] != null) {
+        final raw = (payload['province_name'] ?? payload['province']).toString();
+        final provId = LocationResolver.resolveProvinceId(raw);
+        final provName = LocationResolver.resolveProvinceName(raw);
+        payload['province_name'] = provId.isNotEmpty ? provId : raw;
+        payload['province'] = provId.isNotEmpty ? provId : raw;
+        payload['province_title'] = provName.isNotEmpty ? provName : raw;
       }
-      if (payload['city_municipality'] != null) {
-        final res = LocationResolver.resolveCityName(payload['city_municipality'].toString());
-        if (res.isNotEmpty) {
-          payload['city_municipality'] = res;
-          payload['city'] = res;
-          payload['city_title'] = res;
-        }
+      if (payload['city_municipality'] != null || payload['city'] != null) {
+        final raw = (payload['city_municipality'] ?? payload['city']).toString();
+        final cityId = LocationResolver.resolveCityId(raw);
+        final cityName = LocationResolver.resolveCityName(raw);
+        payload['city_municipality'] = cityId.isNotEmpty ? cityId : raw;
+        payload['city'] = cityId.isNotEmpty ? cityId : raw;
+        payload['city_title'] = cityName.isNotEmpty ? cityName : raw;
       }
-      if (payload['region_name'] != null) {
-        final res = LocationResolver.resolveRegionName(payload['region_name'].toString());
-        if (res.isNotEmpty) {
-          payload['region_name'] = res;
-          payload['region'] = res;
-        }
+      if (payload['region_name'] != null || payload['region'] != null) {
+        final raw = (payload['region_name'] ?? payload['region']).toString();
+        final regId = LocationResolver.resolveRegionId(raw);
+        payload['region_name'] = regId.isNotEmpty ? regId : raw;
+        payload['region'] = regId.isNotEmpty ? regId : raw;
       }
       if (payload['institution'] != null) {
-        final res = LocationResolver.resolveInstitutionName(payload['institution'].toString());
-        if (res.isNotEmpty) payload['institution'] = res;
+        final raw = payload['institution'].toString();
+        final instId = LocationResolver.resolveInstitutionId(raw);
+        final instName = LocationResolver.resolveInstitutionName(raw);
+        payload['institution'] = instId.isNotEmpty ? instId : raw;
+        payload['institution_name'] = instName.isNotEmpty ? instName : raw;
       }
 
       final response = await http.post(
@@ -2497,14 +2503,18 @@ class ApiService extends ChangeNotifier {
           hcpPractice: (submission.hcpPractice != null && submission.hcpPractice!.isNotEmpty) ? submission.hcpPractice! : 'Both',
           specialties: submission.specialties
               .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
-              .map((s) => HcpSpecialty(hcpSpecialty: s.hcpSpecialty!, subSpecialty: s.subSpecialty, isPrimary: s.preferred))
+              .map((s) => HcpSpecialty(
+                    hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
+                    subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty) ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                    isPrimary: s.preferred,
+                  ))
               .toList(),
           workplaces: submission.workplaces
               .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
               .map((w) => HcpWorkplace(
-                    workplace: w.hcpWorkplace!,
-                    provinceName: w.provinceName,
-                    cityMunicipality: w.cityMunicipality,
+                    workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
+                    provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
+                    cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
                     address: w.workplaceName,
                     isPrimary: w.preferred,
                   ))
@@ -2534,13 +2544,32 @@ class ApiService extends ChangeNotifier {
           hcpType: submission.hcpType ?? existing.hcpType,
           hcpPractice: submission.hcpPractice ?? existing.hcpPractice,
           specialties: submission.specialties.isNotEmpty
-              ? submission.specialties.where((s) => s.hcpSpecialty != null).map((s) => HcpSpecialty(hcpSpecialty: s.hcpSpecialty!, subSpecialty: s.subSpecialty, isPrimary: s.preferred)).toList()
+              ? submission.specialties
+                  .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+                  .map((s) => HcpSpecialty(
+                        hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
+                        subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty) ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                        isPrimary: s.preferred,
+                      ))
+                  .toList()
               : existing.specialties,
           workplaces: submission.workplaces.isNotEmpty
-              ? submission.workplaces.where((w) => w.hcpWorkplace != null).map((w) => HcpWorkplace(workplace: w.hcpWorkplace!, provinceName: w.provinceName, cityMunicipality: w.cityMunicipality, address: w.workplaceName, isPrimary: w.preferred)).toList()
+              ? submission.workplaces
+                  .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+                  .map((w) => HcpWorkplace(
+                        workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
+                        provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
+                        cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
+                        address: w.workplaceName,
+                        isPrimary: w.preferred,
+                      ))
+                  .toList()
               : existing.workplaces,
           contacts: submission.contacts.isNotEmpty
-              ? submission.contacts.where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)).map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred)).toList()
+              ? submission.contacts
+                  .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
+                  .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
+                  .toList()
               : existing.contacts,
           profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
         );

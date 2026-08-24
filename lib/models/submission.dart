@@ -175,11 +175,22 @@ class HcpProfileSubmission {
       'table_specialties': specialties.map((e) => e.toJson()).toList(),
       'table_workplaces': workplaces.map((e) => e.toJson()).toList(),
       'table_contact_info': contacts.map((e) => e.toJson()).toList(),
-      if (regionName != null) 'region_name': LocationResolver.resolveRegionName(regionName),
-      if (provinceName != null) 'province_name': LocationResolver.resolveProvinceName(provinceName),
-      if (cityMunicipality != null) 'city_municipality': LocationResolver.resolveCityName(cityMunicipality),
+      if (regionName != null) 'region_name': LocationResolver.resolveRegionId(regionName),
+      if (provinceName != null) ...{
+        'province_name': LocationResolver.resolveProvinceId(provinceName),
+        'province': LocationResolver.resolveProvinceId(provinceName),
+        'province_title': LocationResolver.resolveProvinceName(provinceName),
+      },
+      if (cityMunicipality != null) ...{
+        'city_municipality': LocationResolver.resolveCityId(cityMunicipality),
+        'city': LocationResolver.resolveCityId(cityMunicipality),
+        'city_title': LocationResolver.resolveCityName(cityMunicipality),
+      },
       if (barangayName != null) 'barangay_name': barangayName,
-      if (institution != null) 'institution': LocationResolver.resolveInstitutionName(institution),
+      if (institution != null) ...{
+        'institution': LocationResolver.resolveInstitutionId(institution),
+        'institution_name': LocationResolver.resolveInstitutionName(institution),
+      },
       if (accountOrProgram != null) 'account_or_program': accountOrProgram,
       if (territory != null) 'territory': territory,
       if (salesPerson != null) 'sales_person': salesPerson,
@@ -246,22 +257,26 @@ class SubmissionSpecialty {
   }
 
   Map<String, dynamic> toJson() {
-    final resolvedSpecName = LocationResolver.resolveSpecialtyName(specialtyName ?? hcpSpecialty);
-    final resolvedSubName = LocationResolver.resolveSpecialtyName(subSpecialtyName ?? subSpecialty);
+    final specId = LocationResolver.resolveSpecialtyId(specialtyName ?? hcpSpecialty);
+    final specName = LocationResolver.resolveSpecialtyName(specialtyName ?? hcpSpecialty);
+    final subId = LocationResolver.resolveSpecialtyId(subSpecialtyName ?? subSpecialty);
+    final subName = LocationResolver.resolveSpecialtyName(subSpecialtyName ?? subSpecialty);
 
-    final finalSpec = resolvedSpecName.isNotEmpty ? resolvedSpecName : (specialtyName ?? hcpSpecialty ?? '');
-    final finalSub = (resolvedSubName.isNotEmpty && resolvedSubName != '-') ? resolvedSubName : (subSpecialtyName ?? subSpecialty);
+    final finalSpecId = specId.isNotEmpty ? specId : (hcpSpecialty ?? '');
+    final finalSpecName = specName.isNotEmpty ? specName : (specialtyName ?? finalSpecId);
+    final finalSubId = (subId.isNotEmpty && subId != '-') ? subId : subSpecialty;
+    final finalSubName = (subName.isNotEmpty && subName != '-') ? subName : (subSpecialtyName ?? finalSubId);
 
     return {
       'preferred': preferred ? 1 : 0,
       'is_preferred': preferred ? 1 : 0,
       'is_primary': preferred ? 1 : 0,
       'primary': preferred ? 1 : 0,
-      if (finalSpec.isNotEmpty) 'hcp_specialty': finalSpec,
-      if (finalSpec.isNotEmpty) 'specialty': finalSpec,
-      if (finalSpec.isNotEmpty) 'specialty_name': finalSpec,
-      if (finalSub != null && finalSub.isNotEmpty && finalSub != '-') 'sub_specialty': finalSub,
-      if (finalSub != null && finalSub.isNotEmpty && finalSub != '-') 'sub_specialty_name': finalSub,
+      if (finalSpecId.isNotEmpty) 'hcp_specialty': finalSpecId,
+      if (finalSpecId.isNotEmpty) 'specialty': finalSpecId,
+      if (finalSpecName.isNotEmpty) 'specialty_name': finalSpecName,
+      if (finalSubId != null && finalSubId.isNotEmpty && finalSubId != '-') 'sub_specialty': finalSubId,
+      if (finalSubName != null && finalSubName.isNotEmpty && finalSubName != '-') 'sub_specialty_name': finalSubName,
     };
   }
 }
@@ -314,30 +329,36 @@ class SubmissionWorkplace {
   }
 
   Map<String, dynamic> toJson() {
-    final resolvedWp = LocationResolver.resolveInstitutionName(workplaceName ?? hcpWorkplace);
-    final resolvedCity = LocationResolver.resolveCityName(cityTitle ?? cityMunicipality);
-    final resolvedProv = LocationResolver.resolveProvinceName(provinceTitle ?? provinceName);
+    final wpId = LocationResolver.resolveInstitutionId(workplaceName ?? hcpWorkplace);
+    final wpName = LocationResolver.resolveInstitutionName(workplaceName ?? hcpWorkplace);
+    final cityId = LocationResolver.resolveCityId(cityTitle ?? cityMunicipality);
+    final cityName = LocationResolver.resolveCityName(cityTitle ?? cityMunicipality);
+    final provId = LocationResolver.resolveProvinceId(provinceTitle ?? provinceName);
+    final provName = LocationResolver.resolveProvinceName(provinceTitle ?? provinceName);
 
-    final finalWp = resolvedWp.isNotEmpty ? resolvedWp : (workplaceName ?? hcpWorkplace ?? '');
-    final finalCity = resolvedCity.isNotEmpty ? resolvedCity : (cityTitle ?? cityMunicipality ?? '');
-    final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (provinceTitle ?? provinceName ?? '');
+    final finalWpId = wpId.isNotEmpty ? wpId : (hcpWorkplace ?? '');
+    final finalWpName = wpName.isNotEmpty ? wpName : (workplaceName ?? finalWpId);
+    final finalCityId = cityId.isNotEmpty ? cityId : (cityMunicipality ?? '');
+    final finalCityName = cityName.isNotEmpty ? cityName : (cityTitle ?? finalCityId);
+    final finalProvId = provId.isNotEmpty ? provId : (provinceName ?? '');
+    final finalProvName = provName.isNotEmpty ? provName : (provinceTitle ?? finalProvId);
 
     return {
       'preferred': preferred ? 1 : 0,
       'is_preferred': preferred ? 1 : 0,
       'is_primary': preferred ? 1 : 0,
       'primary': preferred ? 1 : 0,
-      if (finalWp.isNotEmpty) 'hcp_workplace': finalWp,
-      if (finalWp.isNotEmpty) 'workplace': finalWp,
-      if (finalWp.isNotEmpty) 'workplace_name': finalWp,
-      if (finalWp.isNotEmpty) 'address': finalWp,
-      if (finalCity.isNotEmpty) 'city_municipality': finalCity,
-      if (finalCity.isNotEmpty) 'city_title': finalCity,
-      if (finalCity.isNotEmpty) 'city_name': finalCity,
-      if (finalCity.isNotEmpty) 'city': finalCity,
-      if (finalProv.isNotEmpty) 'province_name': finalProv,
-      if (finalProv.isNotEmpty) 'province_title': finalProv,
-      if (finalProv.isNotEmpty) 'province': finalProv,
+      if (finalWpId.isNotEmpty) 'hcp_workplace': finalWpId,
+      if (finalWpId.isNotEmpty) 'workplace': finalWpId,
+      if (finalWpName.isNotEmpty) 'workplace_name': finalWpName,
+      if (finalWpName.isNotEmpty) 'address': finalWpName,
+      if (finalCityId.isNotEmpty) 'city_municipality': finalCityId,
+      if (finalCityId.isNotEmpty) 'city': finalCityId,
+      if (finalCityName.isNotEmpty) 'city_title': finalCityName,
+      if (finalCityName.isNotEmpty) 'city_name': finalCityName,
+      if (finalProvId.isNotEmpty) 'province_name': finalProvId,
+      if (finalProvId.isNotEmpty) 'province': finalProvId,
+      if (finalProvName.isNotEmpty) 'province_title': finalProvName,
     };
   }
 }
