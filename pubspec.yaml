@@ -1,5 +1,5 @@
-name: mcp_profiling
-description: A Flutter test environment app for MCP Test (HCP Profiling) interfacing with ERPNext v15.
+name: hcp_profiling
+description: A Flutter app for HCP Profiling (HCP App) interfacing with ERPNext v15.
 version: 1.0.0+1
 
 environment:

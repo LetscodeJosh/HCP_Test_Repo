@@ -1,6 +1,6 @@
-# mcp_profiling
+# HCP Profiling (HCP App)
 
-A new Flutter project.
+A Flutter application for HCP Profiling interfacing with ERPNext v15.
 
 ## Getting Started
 
