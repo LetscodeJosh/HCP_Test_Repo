@@ -471,7 +471,8 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                 )
                               else
                                 ...displayWorkplaces.map((w) {
-                                        final locStr = [
+                                  final isPref = w.preferred || w.isPrimary;
+                                  final locStr = [
                                           if (w.city != null && w.city!.isNotEmpty) LocationResolver.resolveCityName(w.city!),
                                           if (w.province != null && w.province!.isNotEmpty) LocationResolver.resolveProvinceName(w.province!),
                                         ].join(', ');
