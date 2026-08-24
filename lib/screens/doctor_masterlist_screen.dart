@@ -308,14 +308,14 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               if (fullDoctor.specialties.isNotEmpty)
                                 ...fullDoctor.specialties.map((s) {
                                   final rawSpec = s.hcpSpecialty;
-                                  final specName = specLookup[rawSpec] ?? rawSpec;
+                                  final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
                                   final rawSub = s.subSpecialty ?? '';
-                                  final subName = specLookup[rawSub] ?? rawSub;
+                                  final subName = LocationResolver.resolveSpecialtyName(rawSub, _specializations);
                                   return Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                     child: Row(
                                       children: [
-                                        Expanded(child: Text(specName, style: const TextStyle(color: Colors.white, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                        Expanded(child: Text(specName.isNotEmpty ? specName : rawSpec, style: const TextStyle(color: Colors.white, fontSize: 12), overflow: TextOverflow.ellipsis)),
                                         Expanded(child: Text(subName.isNotEmpty ? subName : 'General Practice', style: const TextStyle(color: Colors.white70, fontSize: 12), overflow: TextOverflow.ellipsis)),
                                       ],
                                     ),
@@ -411,6 +411,12 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               if (displayWorkplaces.isNotEmpty)
                                 ...displayWorkplaces.map((w) {
                                   final isPref = w.isPrimary;
+                                  final wpName = LocationResolver.resolveInstitutionName(w.workplace, _institutions);
+                                  final locParts = [
+                                    if (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) LocationResolver.resolveCityName(w.cityMunicipality!),
+                                    if (w.provinceName != null && w.provinceName!.isNotEmpty) LocationResolver.resolveProvinceName(w.provinceName!),
+                                    if (w.address != null && w.address!.isNotEmpty && w.address != w.workplace && w.address != w.cityMunicipality && w.address != w.provinceName) w.address!,
+                                  ].join(', ');
                                   return Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     child: Row(
@@ -422,7 +428,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                         Expanded(
                                           flex: 2,
                                           child: Text(
-                                            w.workplace,
+                                            wpName.isNotEmpty ? wpName : w.workplace,
                                             style: TextStyle(
                                               color: isPref ? const Color(0xFFFCD34D) : Colors.white,
                                               fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
@@ -431,7 +437,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        Expanded(child: Text(w.address ?? '', style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                        Expanded(child: Text(locParts.isNotEmpty ? locParts : (w.address ?? ''), style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
                                         if (isPref && !isMedRep) ...[
                                           const SizedBox(width: 4),
                                           Container(

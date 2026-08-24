@@ -1,3 +1,5 @@
+import 'lookup_models.dart';
+
 class Hcp {
   final String? name;
   final String? hcpFullName;
@@ -98,11 +100,11 @@ class Hcp {
       contacts: (json['hcp_contact_info'] as List? ?? json['contacts'] as List? ?? json['hcp_contact'] as List?)
               ?.map((e) => HcpContact.fromJson(e))
               .toList() ?? [],
-      regionName: json['region_name'],
-      provinceName: json['province_name'],
-      cityMunicipality: json['city_municipality'],
+      regionName: json['region_name'] != null ? LocationResolver.resolveRegionName(json['region_name'].toString()) : null,
+      provinceName: json['province_name'] != null ? LocationResolver.resolveProvinceName(json['province_name'].toString()) : null,
+      cityMunicipality: json['city_municipality'] != null ? LocationResolver.resolveCityName(json['city_municipality'].toString()) : null,
       barangayName: json['barangay_name'],
-      institution: json['institution'],
+      institution: json['institution'] != null ? LocationResolver.resolveInstitutionName(json['institution'].toString()) : null,
       profileLastUpdated: json['profile_last_updated'],
     );
   }
@@ -159,9 +161,13 @@ class HcpSpecialty {
   });
 
   factory HcpSpecialty.fromJson(Map<String, dynamic> json) {
+    final rawSpec = json['specialty_name'] ?? json['specialty'] ?? json['hcp_specialty'] ?? '';
+    final specName = LocationResolver.resolveSpecialtyName(rawSpec.toString());
+    final rawSub = json['sub_specialty_name'] ?? json['sub_specialty'];
+    final subName = (rawSub != null && rawSub.toString().isNotEmpty && rawSub != '-') ? LocationResolver.resolveSpecialtyName(rawSub.toString()) : null;
     return HcpSpecialty(
-      hcpSpecialty: json['hcp_specialty'] ?? json['specialty'] ?? json['specialty_name'] ?? '',
-      subSpecialty: json['sub_specialty'] ?? json['sub_specialty_name'],
+      hcpSpecialty: specName.isNotEmpty ? specName : rawSpec.toString(),
+      subSpecialty: subName ?? (rawSub != null ? rawSub.toString() : null),
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true,
     );
   }
@@ -192,10 +198,14 @@ class HcpWorkplace {
   });
 
   factory HcpWorkplace.fromJson(Map<String, dynamic> json) {
+    final rawWp = json['workplace_name'] ?? json['workplace'] ?? json['hcp_workplace'] ?? '';
+    final wpName = LocationResolver.resolveInstitutionName(rawWp.toString());
+    final rawProv = json['province_name'] ?? json['province'];
+    final rawCity = json['city_municipality'] ?? json['city'];
     return HcpWorkplace(
-      workplace: json['hcp_workplace'] ?? json['workplace'] ?? json['workplace_name'] ?? '',
-      provinceName: json['province_name'] ?? json['province'],
-      cityMunicipality: json['city_municipality'] ?? json['city'],
+      workplace: wpName.isNotEmpty ? wpName : rawWp.toString(),
+      provinceName: rawProv != null ? LocationResolver.resolveProvinceName(rawProv.toString()) : null,
+      cityMunicipality: rawCity != null ? LocationResolver.resolveCityName(rawCity.toString()) : null,
       address: json['address'] ?? json['workplace_name'],
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true,
     );

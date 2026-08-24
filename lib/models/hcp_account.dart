@@ -1,3 +1,5 @@
+import 'lookup_models.dart';
+
 class HcpAccount {
   final String? name;
   final String accountName; // Map to account_or_program
@@ -172,9 +174,13 @@ class HcpAccountSpecialization {
 
   factory HcpAccountSpecialization.fromJson(Map<String, dynamic> json) {
     final pref = json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true;
+    final rawSpec = json['specialty_name'] ?? json['specialty'] ?? json['hcp_specialty'] ?? '';
+    final specName = LocationResolver.resolveSpecialtyName(rawSpec.toString());
+    final rawSub = json['sub_specialty_name'] ?? json['sub_specialty'];
+    final subName = (rawSub != null && rawSub.toString().isNotEmpty && rawSub != '-') ? LocationResolver.resolveSpecialtyName(rawSub.toString()) : null;
     return HcpAccountSpecialization(
-      hcpSpecialty: json['hcp_specialty'] ?? json['specialty'] ?? json['specialty_name'] ?? '',
-      subSpecialty: json['sub_specialty'] ?? json['sub_specialty_name'],
+      hcpSpecialty: specName.isNotEmpty ? specName : rawSpec.toString(),
+      subSpecialty: subName ?? (rawSub != null ? rawSub.toString() : null),
       isPrimary: pref,
       preferred: pref,
     );
@@ -221,10 +227,14 @@ class HcpAccountWorkplace {
 
   factory HcpAccountWorkplace.fromJson(Map<String, dynamic> json) {
     final pref = json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true;
+    final rawWp = json['workplace_name'] ?? json['workplace'] ?? json['hcp_workplace'] ?? '';
+    final wpName = LocationResolver.resolveInstitutionName(rawWp.toString());
+    final rawCity = json['city_municipality'] ?? json['city'] ?? json['city_title'];
+    final rawProv = json['province_name'] ?? json['province'] ?? json['province_title'];
     return HcpAccountWorkplace(
-      hcpWorkplace: json['hcp_workplace'] ?? json['workplace'] ?? json['workplace_name'] ?? '',
-      cityMunicipality: json['city_municipality'] ?? json['city'] ?? json['city_title'],
-      provinceName: json['province_name'] ?? json['province'] ?? json['province_title'],
+      hcpWorkplace: wpName.isNotEmpty ? wpName : rawWp.toString(),
+      cityMunicipality: rawCity != null ? LocationResolver.resolveCityName(rawCity.toString()) : null,
+      provinceName: rawProv != null ? LocationResolver.resolveProvinceName(rawProv.toString()) : null,
       address: json['address'],
       isPrimary: pref,
       preferred: pref,

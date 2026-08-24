@@ -920,7 +920,9 @@ class ApiService extends ChangeNotifier {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
         await _writeToCache('institutions_cache.json', jsonEncode(dataList));
-        return dataList.map((json) => Institution.fromJson(json)).toList();
+        final list = dataList.map((json) => Institution.fromJson(json)).toList();
+        LocationResolver.registerInstitutions(list);
+        return list;
       } else {
         throw Exception('Server returned ${response.statusCode}');
       }
@@ -929,7 +931,9 @@ class ApiService extends ChangeNotifier {
       try {
         final String localData = await rootBundle.loadString('assets/institutions.json');
         final List<dynamic> dataList = jsonDecode(localData);
-        return dataList.map((json) => Institution.fromJson(json)).toList();
+        final list = dataList.map((json) => Institution.fromJson(json)).toList();
+        LocationResolver.registerInstitutions(list);
+        return list;
       } catch (err) {
         print('Failed to load local fallback institutions: $err');
         rethrow;
@@ -2050,66 +2054,114 @@ class ApiService extends ChangeNotifier {
         }
       }
 
-      // Ensure table_specialties Link fields map to valid ERPNext Specialization primary keys
+      // Ensure table_specialties fields store human-readable names across all specialty fields
       if (payload['table_specialties'] is List && (payload['table_specialties'] as List).isNotEmpty) {
         final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
-        if (specs.isNotEmpty) {
-          final List<Map<String, dynamic>> cleanSpecs = [];
-          for (var item in (payload['table_specialties'] as List)) {
-            if (item is Map<String, dynamic>) {
-              final map = Map<String, dynamic>.from(item);
-              final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? map['specialty_name'] ?? '').toString().trim();
-              if (rawSpec.isNotEmpty) {
-                final match = specs.firstWhere(
-                  (s) => s.name == rawSpec || s.specialty.toLowerCase() == rawSpec.toLowerCase(),
-                  orElse: () => specs.first,
-                );
-                map['hcp_specialty'] = match.name;
-                map['specialty'] = match.name;
-                map['specialty_name'] = match.name;
-              }
-              final rawSub = (map['sub_specialty'] ?? map['sub_specialty_name'] ?? '').toString().trim();
-              if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
-                final subMatch = specs.firstWhere(
-                  (s) => s.name == rawSub || s.specialty.toLowerCase() == rawSub.toLowerCase(),
-                  orElse: () => specs.first,
-                );
-                map['sub_specialty'] = subMatch.name;
-                map['sub_specialty_name'] = subMatch.name;
-              } else {
-                map.remove('sub_specialty');
-                map.remove('sub_specialty_name');
-              }
-              cleanSpecs.add(map);
+        final List<Map<String, dynamic>> cleanSpecs = [];
+        for (var item in (payload['table_specialties'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final rawSpec = (map['specialty_name'] ?? map['specialty'] ?? map['hcp_specialty'] ?? '').toString().trim();
+            if (rawSpec.isNotEmpty) {
+              final resolvedSpec = LocationResolver.resolveSpecialtyName(rawSpec, specs.isNotEmpty ? specs : null);
+              final finalSpec = resolvedSpec.isNotEmpty ? resolvedSpec : rawSpec;
+              map['hcp_specialty'] = finalSpec;
+              map['specialty'] = finalSpec;
+              map['specialty_name'] = finalSpec;
             }
+            final rawSub = (map['sub_specialty_name'] ?? map['sub_specialty'] ?? '').toString().trim();
+            if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
+              final resolvedSub = LocationResolver.resolveSpecialtyName(rawSub, specs.isNotEmpty ? specs : null);
+              final finalSub = (resolvedSub.isNotEmpty && resolvedSub != '-') ? resolvedSub : rawSub;
+              map['sub_specialty'] = finalSub;
+              map['sub_specialty_name'] = finalSub;
+            } else {
+              map.remove('sub_specialty');
+              map.remove('sub_specialty_name');
+            }
+            cleanSpecs.add(map);
           }
-          payload['table_specialties'] = cleanSpecs;
         }
+        payload['table_specialties'] = cleanSpecs;
       }
 
-      // Ensure table_workplaces Link fields map to valid ERPNext Institution primary keys
+      // Ensure table_workplaces fields store human-readable workplace and province names
       if (payload['table_workplaces'] is List && (payload['table_workplaces'] as List).isNotEmpty) {
         final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
-        if (insts.isNotEmpty) {
-          final List<Map<String, dynamic>> cleanWps = [];
-          for (var item in (payload['table_workplaces'] as List)) {
-            if (item is Map<String, dynamic>) {
-              final map = Map<String, dynamic>.from(item);
-              final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['workplace_name'] ?? '').toString().trim();
-              if (rawWp.isNotEmpty) {
-                final match = insts.firstWhere(
-                  (i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase(),
-                  orElse: () => insts.first,
-                );
-                map['hcp_workplace'] = match.name;
-                map['workplace'] = match.name;
-                map['workplace_name'] = match.name;
+        final psgc = await fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
+        final List<Map<String, dynamic>> cleanWps = [];
+        for (var item in (payload['table_workplaces'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final rawWp = (map['workplace_name'] ?? map['workplace'] ?? map['hcp_workplace'] ?? map['address'] ?? '').toString().trim();
+            final rawCity = (map['city_municipality'] ?? map['city_title'] ?? map['city_name'] ?? map['city'] ?? '').toString().trim();
+            final rawProv = (map['province_name'] ?? map['province_title'] ?? map['province'] ?? '').toString().trim();
+
+            if (rawWp.isNotEmpty) {
+              final resolvedWp = LocationResolver.resolveInstitutionName(rawWp, insts.isNotEmpty ? insts : null);
+              final finalWp = resolvedWp.isNotEmpty ? resolvedWp : rawWp;
+              map['hcp_workplace'] = finalWp;
+              map['workplace'] = finalWp;
+              map['workplace_name'] = finalWp;
+              map['address'] = finalWp;
+
+              // Find matching institution object if available for fallback location fields
+              final instMatch = insts.where((i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase() || i.institutionName.toLowerCase() == finalWp.toLowerCase()).firstOrNull;
+
+              final resolvedCity = LocationResolver.resolveCityName(
+                rawCity.isNotEmpty ? rawCity : (instMatch?.cityMunicipality ?? ''),
+                psgc.isNotEmpty ? psgc : null,
+              );
+              if (resolvedCity.isNotEmpty) {
+                map['city_municipality'] = resolvedCity;
+                map['city_title'] = resolvedCity;
+                map['city_name'] = resolvedCity;
+                map['city'] = resolvedCity;
               }
-              cleanWps.add(map);
+
+              final resolvedProv = LocationResolver.resolveProvinceName(
+                rawProv.isNotEmpty ? rawProv : (instMatch?.provinceName ?? ''),
+                psgc.isNotEmpty ? psgc : null,
+              );
+              if (resolvedProv.isNotEmpty) {
+                map['province_name'] = resolvedProv;
+                map['province_title'] = resolvedProv;
+                map['province'] = resolvedProv;
+              }
             }
+            cleanWps.add(map);
           }
-          payload['table_workplaces'] = cleanWps;
         }
+        payload['table_workplaces'] = cleanWps;
+      }
+
+      // Ensure root-level location and institution fields are human-readable
+      if (payload['province_name'] != null) {
+        final res = LocationResolver.resolveProvinceName(payload['province_name'].toString());
+        if (res.isNotEmpty) {
+          payload['province_name'] = res;
+          payload['province'] = res;
+          payload['province_title'] = res;
+        }
+      }
+      if (payload['city_municipality'] != null) {
+        final res = LocationResolver.resolveCityName(payload['city_municipality'].toString());
+        if (res.isNotEmpty) {
+          payload['city_municipality'] = res;
+          payload['city'] = res;
+          payload['city_title'] = res;
+        }
+      }
+      if (payload['region_name'] != null) {
+        final res = LocationResolver.resolveRegionName(payload['region_name'].toString());
+        if (res.isNotEmpty) {
+          payload['region_name'] = res;
+          payload['region'] = res;
+        }
+      }
+      if (payload['institution'] != null) {
+        final res = LocationResolver.resolveInstitutionName(payload['institution'].toString());
+        if (res.isNotEmpty) payload['institution'] = res;
       }
 
       final response = await http.post(
@@ -2601,7 +2653,9 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['data'] ?? [];
         if (dataList.isNotEmpty) {
           await _writeToCache('specializations_cache.json', jsonEncode(dataList));
-          return dataList.map((json) => Specialization.fromJson(json)).toList();
+          final list = dataList.map((json) => Specialization.fromJson(json)).toList();
+          LocationResolver.registerSpecializations(list);
+          return list;
         }
       }
       
@@ -2615,7 +2669,9 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = (body['message'] is List) ? body['message'] : (body['data'] ?? []);
         if (dataList.isNotEmpty) {
           await _writeToCache('specializations_cache.json', jsonEncode(dataList));
-          return dataList.map((json) => Specialization.fromJson(json)).toList();
+          final list = dataList.map((json) => Specialization.fromJson(json)).toList();
+          LocationResolver.registerSpecializations(list);
+          return list;
         }
       }
     } catch (e) {
@@ -2628,7 +2684,9 @@ class ApiService extends ChangeNotifier {
       if (cache != null) {
         final List<dynamic> dataList = jsonDecode(cache);
         if (dataList.isNotEmpty) {
-          return dataList.map((json) => Specialization.fromJson(json)).toList();
+          final list = dataList.map((json) => Specialization.fromJson(json)).toList();
+          LocationResolver.registerSpecializations(list);
+          return list;
         }
       }
     } catch (_) {}
@@ -2636,7 +2694,9 @@ class ApiService extends ChangeNotifier {
     try {
       final String localData = await rootBundle.loadString('assets/specializations.json');
       final List<dynamic> dataList = jsonDecode(localData);
-      return dataList.map((json) => Specialization.fromJson(json)).toList();
+      final list = dataList.map((json) => Specialization.fromJson(json)).toList();
+      LocationResolver.registerSpecializations(list);
+      return list;
     } catch (err) {
       print('Failed to load local fallback specializations: $err');
       return [];
@@ -2650,7 +2710,9 @@ class ApiService extends ChangeNotifier {
       if (cache != null) {
         try {
           final List<dynamic> dataList = jsonDecode(cache);
-          return dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+          final list = dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+          LocationResolver.registerPsgcLocations(list);
+          return list;
         } catch (_) {}
       }
       return [];
@@ -2664,7 +2726,9 @@ class ApiService extends ChangeNotifier {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
         await _writeToCache('psgc_locations_cache.json', jsonEncode(dataList));
-        return dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+        final list = dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+        LocationResolver.registerPsgcLocations(list);
+        return list;
       } else {
         throw Exception('Failed to load PSGC locations: ${response.statusCode}');
       }
@@ -2674,7 +2738,9 @@ class ApiService extends ChangeNotifier {
       if (cache != null) {
         try {
           final List<dynamic> dataList = jsonDecode(cache);
-          return dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+          final list = dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+          LocationResolver.registerPsgcLocations(list);
+          return list;
         } catch (_) {}
       }
       rethrow;

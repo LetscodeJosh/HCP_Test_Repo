@@ -471,48 +471,51 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                 )
                               else
                                 ...displayWorkplaces.map((w) {
-                                  final isPref = w.preferred || w.isPrimary;
-                                  return Padding(
-                                    padding: const EdgeInsets.all(12.0),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
+                                        final locStr = [
+                                          if (w.city != null && w.city!.isNotEmpty) LocationResolver.resolveCityName(w.city!),
+                                          if (w.province != null && w.province!.isNotEmpty) LocationResolver.resolveProvinceName(w.province!),
+                                        ].join(', ');
+                                        return Padding(
+                                          padding: const EdgeInsets.all(12.0),
                                           child: Row(
                                             children: [
-                                              if (isPref) ...[
-                                                const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
-                                                const SizedBox(width: 4),
-                                              ],
                                               Expanded(
-                                                child: Text(
-                                                  w.workplace,
-                                                  style: TextStyle(
-                                                    color: isPref ? const Color(0xFFFCD34D) : Colors.white,
-                                                    fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
-                                                    fontSize: 13,
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
+                                                child: Row(
+                                                  children: [
+                                                    if (isPref) ...[
+                                                      const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 16),
+                                                      const SizedBox(width: 4),
+                                                    ],
+                                                    Expanded(
+                                                      child: Text(
+                                                        LocationResolver.resolveInstitutionName(w.workplace),
+                                                        style: TextStyle(
+                                                          color: isPref ? const Color(0xFFFCD34D) : Colors.white,
+                                                          fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                                                          fontSize: 13,
+                                                        ),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    if (isPref && !apiService.isMedRep) ...[
+                                                      const SizedBox(width: 4),
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                                        decoration: BoxDecoration(
+                                                          color: const Color(0xFFF59E0B).withOpacity(0.2),
+                                                          borderRadius: BorderRadius.circular(4),
+                                                          border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                                        ),
+                                                        child: const Text('Preferred', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 9, fontWeight: FontWeight.bold)),
+                                                      ),
+                                                    ],
+                                                  ],
                                                 ),
                                               ),
-                                              if (isPref && !apiService.isMedRep) ...[
-                                                const SizedBox(width: 4),
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(0xFFF59E0B).withOpacity(0.2),
-                                                    borderRadius: BorderRadius.circular(4),
-                                                    border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                                  ),
-                                                  child: const Text('Preferred', style: TextStyle(color: Color(0xFFF59E0B), fontSize: 9, fontWeight: FontWeight.bold)),
-                                                ),
-                                              ],
+                                              Expanded(child: Text(locStr, style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
                                             ],
                                           ),
-                                        ),
-                                        Expanded(child: Text('${w.city ?? ""}${w.province != null ? ", " + w.province! : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                      ],
-                                    ),
-                                  );
+                                        );
                                 }),
                             ],
                           ),

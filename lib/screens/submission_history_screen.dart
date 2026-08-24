@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/submission.dart';
+import '../models/lookup_models.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
 import 'hcp_wizard_screen.dart';
@@ -675,8 +676,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(s.specialtyName ?? s.hcpSpecialty ?? 'General Practice', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                          Text(s.subSpecialtyName ?? s.subSpecialty ?? '-', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                          Text(LocationResolver.resolveSpecialtyName(s.specialtyName ?? s.hcpSpecialty).isNotEmpty ? LocationResolver.resolveSpecialtyName(s.specialtyName ?? s.hcpSpecialty) : 'General Practice', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          Text(LocationResolver.resolveSpecialtyName(s.subSpecialtyName ?? s.subSpecialty).isNotEmpty ? LocationResolver.resolveSpecialtyName(s.subSpecialtyName ?? s.subSpecialty) : '-', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                         ],
                       ),
                     )),
@@ -717,8 +718,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(w.workplaceName ?? w.hcpWorkplace ?? 'Institution', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                          Text('${w.cityMunicipality ?? w.cityTitle ?? ''} ${w.provinceName ?? w.provinceTitle ?? ''}'.trim(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                          Text(LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace).isNotEmpty ? LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace) : 'Institution', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                          Text('${LocationResolver.resolveCityName(w.cityMunicipality ?? w.cityTitle)} ${LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle)}'.trim(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
                         ],
                       ),
                     )),
@@ -944,10 +945,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                ...specAdded.map((s) => Padding(
-                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}${s['sub_specialty'] != null ? ', Sub: ${s['sub_specialty']}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                )),
+                ...specAdded.map((s) {
+                  final rawSpec = (s['specialty_name'] ?? s['hcp_specialty'] ?? '').toString();
+                  final specName = LocationResolver.resolveSpecialtyName(rawSpec);
+                  final rawSub = (s['sub_specialty_name'] ?? s['sub_specialty'] ?? '').toString();
+                  final subName = (rawSub != '-' && rawSub.isNotEmpty) ? LocationResolver.resolveSpecialtyName(rawSub) : '';
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                    child: Text('Specialty: ${specName.isNotEmpty ? specName : rawSpec}${subName.isNotEmpty ? ', Sub: $subName' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  );
+                }),
               ] else if (!isExistingDoc && submission.specialties.isNotEmpty) ...[
                 Row(
                   children: const [
@@ -957,10 +964,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                ...submission.specialties.map((s) => Padding(
-                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('Specialty: ${s.specialtyName ?? s.hcpSpecialty ?? 'SPEC-00003'}${s.subSpecialty != null ? ', Sub: ${s.subSpecialty}' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                )),
+                ...submission.specialties.map((s) {
+                  final specName = LocationResolver.resolveSpecialtyName(s.specialtyName ?? s.hcpSpecialty);
+                  final subName = LocationResolver.resolveSpecialtyName(s.subSpecialtyName ?? s.subSpecialty);
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                    child: Text('Specialty: ${specName.isNotEmpty ? specName : "General Practice"}${subName.isNotEmpty ? ', Sub: $subName' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  );
+                }),
               ],
               if (specRemoved.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -972,10 +983,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                ...specRemoved.map((s) => Padding(
-                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('Specialty: ${s['specialty_name'] ?? s['hcp_specialty'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
-                )),
+                ...specRemoved.map((s) {
+                  final rawSpec = (s['specialty_name'] ?? s['hcp_specialty'] ?? '').toString();
+                  final specName = LocationResolver.resolveSpecialtyName(rawSpec);
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                    child: Text('Specialty: ${specName.isNotEmpty ? specName : rawSpec}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+                  );
+                }),
               ],
               const SizedBox(height: 16),
             ],
@@ -993,10 +1008,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                ...wpAdded.map((w) => Padding(
-                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                )),
+                ...wpAdded.map((w) {
+                  final rawWp = (w['workplace_name'] ?? w['hcp_workplace'] ?? '').toString();
+                  final wpName = LocationResolver.resolveInstitutionName(rawWp);
+                  final rawProv = (w['province_name'] ?? w['province_title'] ?? '').toString();
+                  final provName = LocationResolver.resolveProvinceName(rawProv);
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                    child: Text('${wpName.isNotEmpty ? wpName : rawWp}${provName.isNotEmpty ? " ($provName)" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  );
+                }),
               ] else if (!isExistingDoc && submission.workplaces.isNotEmpty) ...[
                 Row(
                   children: const [
@@ -1006,10 +1027,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                ...submission.workplaces.map((w) => Padding(
-                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('${w.workplaceName ?? w.hcpWorkplace ?? 'INST-00001'}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                )),
+                ...submission.workplaces.map((w) {
+                  final wpName = LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace);
+                  final provName = LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle);
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                    child: Text('${wpName.isNotEmpty ? wpName : "Institution"}${provName.isNotEmpty ? " ($provName)" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  );
+                }),
               ],
               if (wpRemoved.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -1021,10 +1046,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                ...wpRemoved.map((w) => Padding(
-                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? ''}', style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
-                )),
+                ...wpRemoved.map((w) {
+                  final rawWp = (w['workplace_name'] ?? w['hcp_workplace'] ?? '').toString();
+                  final wpName = LocationResolver.resolveInstitutionName(rawWp);
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
+                    child: Text(wpName.isNotEmpty ? wpName : rawWp, style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 13)),
+                  );
+                }),
               ],
               const SizedBox(height: 16),
             ],

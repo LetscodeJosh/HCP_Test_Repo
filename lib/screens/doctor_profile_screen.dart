@@ -465,9 +465,14 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                           fontWeight: isPref ? FontWeight.bold : FontWeight.w600,
                         ),
                       ),
-                      if (w.address != null && w.address!.isNotEmpty)
+                      final locInfo = [
+                        if (w.address != null && w.address!.isNotEmpty && w.address != w.workplace) w.address!,
+                        if (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) w.cityMunicipality!,
+                        if (w.provinceName != null && w.provinceName!.isNotEmpty) w.provinceName!,
+                      ].join(', ');
+                      if (locInfo.isNotEmpty)
                         Text(
-                          w.address!,
+                          locInfo,
                           style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
                         ),
                     ],

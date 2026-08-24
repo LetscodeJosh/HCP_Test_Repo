@@ -1,3 +1,5 @@
+import 'lookup_models.dart';
+
 class HcpProfileSubmission {
   final String? name;
   final String hcpName; // Link -> HCP
@@ -126,11 +128,11 @@ class HcpProfileSubmission {
       contacts: (json['table_contact_info'] as List?)
               ?.map((e) => SubmissionContact.fromJson(e))
               .toList() ?? [],
-      regionName: json['region_name'],
-      provinceName: json['province_name'],
-      cityMunicipality: json['city_municipality'],
+      regionName: LocationResolver.resolveRegionName(json['region_name']?.toString()),
+      provinceName: LocationResolver.resolveProvinceName(json['province_name']?.toString()),
+      cityMunicipality: LocationResolver.resolveCityName(json['city_municipality']?.toString()),
       barangayName: json['barangay_name'],
-      institution: json['institution'],
+      institution: LocationResolver.resolveInstitutionName(json['institution']?.toString()),
       accountOrProgram: json['account_or_program'],
       territory: json['territory'],
       salesPerson: json['sales_person'],
@@ -173,11 +175,11 @@ class HcpProfileSubmission {
       'table_specialties': specialties.map((e) => e.toJson()).toList(),
       'table_workplaces': workplaces.map((e) => e.toJson()).toList(),
       'table_contact_info': contacts.map((e) => e.toJson()).toList(),
-      if (regionName != null) 'region_name': regionName,
-      if (provinceName != null) 'province_name': provinceName,
-      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
+      if (regionName != null) 'region_name': LocationResolver.resolveRegionName(regionName),
+      if (provinceName != null) 'province_name': LocationResolver.resolveProvinceName(provinceName),
+      if (cityMunicipality != null) 'city_municipality': LocationResolver.resolveCityName(cityMunicipality),
       if (barangayName != null) 'barangay_name': barangayName,
-      if (institution != null) 'institution': institution,
+      if (institution != null) 'institution': LocationResolver.resolveInstitutionName(institution),
       if (accountOrProgram != null) 'account_or_program': accountOrProgram,
       if (territory != null) 'territory': territory,
       if (salesPerson != null) 'sales_person': salesPerson,
@@ -202,9 +204,9 @@ class HcpProfileSubmission {
 
 class SubmissionSpecialty {
   final bool preferred;
-  final String? hcpSpecialty; // Link -> Specialization
+  final String? hcpSpecialty; // Link -> Specialization or title
   final String? specialtyName;
-  final String? subSpecialty; // Link -> Specialization
+  final String? subSpecialty; // Link -> Specialization or title
   final String? subSpecialtyName;
 
   SubmissionSpecialty({
@@ -216,30 +218,52 @@ class SubmissionSpecialty {
   });
 
   factory SubmissionSpecialty.fromJson(Map<String, dynamic> json) {
+    final rawSpec = (json['specialty_name'] ?? json['specialty'] ?? json['hcp_specialty'] ?? '').toString().trim();
+    final rawSub = (json['sub_specialty_name'] ?? json['sub_specialty'] ?? '').toString().trim();
+    final hcpSpec = (json['hcp_specialty'] ?? json['specialty'] ?? '').toString().trim();
+    final subSpec = (json['sub_specialty'] ?? '').toString().trim();
+
+    final resolvedSpecName = LocationResolver.resolveSpecialtyName(rawSpec.isNotEmpty ? rawSpec : hcpSpec);
+    final resolvedSubName = (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-')
+        ? LocationResolver.resolveSpecialtyName(rawSub)
+        : ((subSpec.isNotEmpty && subSpec != 'None' && subSpec != '-') ? LocationResolver.resolveSpecialtyName(subSpec) : null);
+
+    final finalSpec = resolvedSpecName.isNotEmpty ? resolvedSpecName : (rawSpec.isNotEmpty ? rawSpec : (hcpSpec.isNotEmpty ? hcpSpec : null));
+    final finalSub = (resolvedSubName != null && resolvedSubName.isNotEmpty && resolvedSubName != '-')
+        ? resolvedSubName
+        : ((subSpec.isNotEmpty && subSpec != 'None' && subSpec != '-') ? LocationResolver.resolveSpecialtyName(subSpec) : null);
+
     return SubmissionSpecialty(
       preferred: json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true,
-      hcpSpecialty: json['hcp_specialty'] ?? json['specialty'] ?? json['specialty_name'],
-      specialtyName: json['specialty_name'] ?? json['specialty'],
-      subSpecialty: json['sub_specialty'] ?? json['sub_specialty_name'],
-      subSpecialtyName: json['sub_specialty_name'] ?? json['sub_specialty'],
+      hcpSpecialty: finalSpec,
+      specialtyName: finalSpec,
+      subSpecialty: finalSub,
+      subSpecialtyName: finalSub,
     );
   }
 
   Map<String, dynamic> toJson() {
+    final resolvedSpecName = LocationResolver.resolveSpecialtyName(specialtyName ?? hcpSpecialty);
+    final resolvedSubName = LocationResolver.resolveSpecialtyName(subSpecialtyName ?? subSpecialty);
+
+    final finalSpec = resolvedSpecName.isNotEmpty ? resolvedSpecName : (specialtyName ?? hcpSpecialty ?? '');
+    final finalSub = (resolvedSubName.isNotEmpty && resolvedSubName != '-') ? resolvedSubName : (subSpecialtyName ?? subSpecialty);
+
     return {
       'preferred': preferred ? 1 : 0,
       'is_primary': preferred ? 1 : 0,
-      if (hcpSpecialty != null) 'hcp_specialty': hcpSpecialty,
-      if (specialtyName != null) 'specialty_name': specialtyName,
-      if (subSpecialty != null) 'sub_specialty': subSpecialty,
-      if (subSpecialtyName != null) 'sub_specialty_name': subSpecialtyName,
+      if (finalSpec.isNotEmpty) 'hcp_specialty': finalSpec,
+      if (finalSpec.isNotEmpty) 'specialty': finalSpec,
+      if (finalSpec.isNotEmpty) 'specialty_name': finalSpec,
+      if (finalSub != null && finalSub.isNotEmpty && finalSub != '-') 'sub_specialty': finalSub,
+      if (finalSub != null && finalSub.isNotEmpty && finalSub != '-') 'sub_specialty_name': finalSub,
     };
   }
 }
 
 class SubmissionWorkplace {
   final bool preferred;
-  final String? hcpWorkplace; // Link -> Institution
+  final String? hcpWorkplace; // Link -> Institution or title
   final String? workplaceName;
   final String? cityMunicipality;
   final String? cityTitle;
@@ -257,29 +281,57 @@ class SubmissionWorkplace {
   });
 
   factory SubmissionWorkplace.fromJson(Map<String, dynamic> json) {
+    final rawWp = (json['workplace_name'] ?? json['address'] ?? json['workplace'] ?? json['hcp_workplace'] ?? '').toString().trim();
+    final rawCity = (json['city_municipality'] ?? json['city_title'] ?? json['city_name'] ?? json['city'] ?? '').toString().trim();
+    final rawProv = (json['province_name'] ?? json['province_title'] ?? json['province'] ?? '').toString().trim();
+    final hcpWp = (json['hcp_workplace'] ?? json['workplace'] ?? '').toString().trim();
+
+    final resolvedWp = LocationResolver.resolveInstitutionName(rawWp.isNotEmpty ? rawWp : hcpWp);
+    final resolvedCity = LocationResolver.resolveCityName(rawCity);
+    final resolvedProv = LocationResolver.resolveProvinceName(rawProv);
+
+    final finalWp = resolvedWp.isNotEmpty ? resolvedWp : (rawWp.isNotEmpty ? rawWp : (hcpWp.isNotEmpty ? hcpWp : null));
+    final finalCity = resolvedCity.isNotEmpty ? resolvedCity : (rawCity.isNotEmpty ? rawCity : null);
+    final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (rawProv.isNotEmpty ? rawProv : null);
+
     return SubmissionWorkplace(
-      preferred: json['preferred'] == 1 || json['preferred'] == true,
-      hcpWorkplace: json['hcp_workplace'] ?? json['workplace'],
-      workplaceName: json['workplace_name'] ?? json['address'] ?? json['workplace'],
-      cityMunicipality: json['city_municipality'] ?? json['city'],
-      cityTitle: json['city_title'] ?? json['city'],
-      provinceName: json['province_name'] ?? json['province'],
-      provinceTitle: json['province_title'] ?? json['province'],
+      preferred: json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true,
+      hcpWorkplace: finalWp,
+      workplaceName: finalWp,
+      cityMunicipality: finalCity,
+      cityTitle: finalCity,
+      provinceName: finalProv,
+      provinceTitle: finalProv,
     );
   }
 
   Map<String, dynamic> toJson() {
+    final resolvedWp = LocationResolver.resolveInstitutionName(workplaceName ?? hcpWorkplace);
+    final resolvedCity = LocationResolver.resolveCityName(cityTitle ?? cityMunicipality);
+    final resolvedProv = LocationResolver.resolveProvinceName(provinceTitle ?? provinceName);
+
+    final finalWp = resolvedWp.isNotEmpty ? resolvedWp : (workplaceName ?? hcpWorkplace ?? '');
+    final finalCity = resolvedCity.isNotEmpty ? resolvedCity : (cityTitle ?? cityMunicipality ?? '');
+    final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (provinceTitle ?? provinceName ?? '');
+
     return {
       'preferred': preferred ? 1 : 0,
-      if (hcpWorkplace != null) 'hcp_workplace': hcpWorkplace,
-      if (workplaceName != null) 'workplace_name': workplaceName,
-      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
-      if (cityTitle != null) 'city_title': cityTitle,
-      if (provinceName != null) 'province_name': provinceName,
-      if (provinceTitle != null) 'province_title': provinceTitle,
+      'is_primary': preferred ? 1 : 0,
+      if (finalWp.isNotEmpty) 'hcp_workplace': finalWp,
+      if (finalWp.isNotEmpty) 'workplace': finalWp,
+      if (finalWp.isNotEmpty) 'workplace_name': finalWp,
+      if (finalWp.isNotEmpty) 'address': finalWp,
+      if (finalCity.isNotEmpty) 'city_municipality': finalCity,
+      if (finalCity.isNotEmpty) 'city_title': finalCity,
+      if (finalCity.isNotEmpty) 'city_name': finalCity,
+      if (finalCity.isNotEmpty) 'city': finalCity,
+      if (finalProv.isNotEmpty) 'province_name': finalProv,
+      if (finalProv.isNotEmpty) 'province_title': finalProv,
+      if (finalProv.isNotEmpty) 'province': finalProv,
     };
   }
 }
+
 
 class SubmissionContact {
   final bool preferred;

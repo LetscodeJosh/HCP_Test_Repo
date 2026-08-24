@@ -130,15 +130,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       if (fullDoctor.specialties.isNotEmpty) {
         for (int i = 0; i < fullDoctor.specialties.length; i++) {
           final spec = fullDoctor.specialties[i];
-          final specTitle = specLookup[spec.hcpSpecialty] ?? spec.hcpSpecialty;
-          final subSpecTitle = spec.subSpecialty != null ? (specLookup[spec.subSpecialty!] ?? spec.subSpecialty!) : null;
+          final specTitle = LocationResolver.resolveSpecialtyName(spec.hcpSpecialty, _specializations);
+          final subSpecTitle = spec.subSpecialty != null ? LocationResolver.resolveSpecialtyName(spec.subSpecialty!, _specializations) : null;
           final isPref = spec.isPrimary;
           _selectedSpecialties.add(SubmissionSpecialty(
             preferred: isPref,
-            hcpSpecialty: spec.hcpSpecialty,
+            hcpSpecialty: specTitle.isNotEmpty ? specTitle : spec.hcpSpecialty,
             specialtyName: specTitle.isNotEmpty ? specTitle : 'Family Medicine',
-            subSpecialty: spec.subSpecialty,
-            subSpecialtyName: subSpecTitle ?? 'Sports Medicine',
+            subSpecialty: subSpecTitle ?? spec.subSpecialty,
+            subSpecialtyName: subSpecTitle,
           ));
         }
       } else {
@@ -154,14 +154,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       if (fullDoctor.workplaces.isNotEmpty) {
         for (int i = 0; i < fullDoctor.workplaces.length; i++) {
           final work = fullDoctor.workplaces[i];
-          final instTitle = instLookup[work.workplace] ?? work.address ?? work.workplace;
+          final instTitle = LocationResolver.resolveInstitutionName(work.workplace, _institutions);
           final isPref = work.isPrimary;
+          final resolvedCity = LocationResolver.resolveCityName(work.cityMunicipality ?? fullDoctor.cityMunicipality);
+          final resolvedProv = LocationResolver.resolveProvinceName(work.provinceName ?? fullDoctor.provinceName);
           _selectedWorkplaces.add(SubmissionWorkplace(
             preferred: isPref,
-            hcpWorkplace: work.workplace,
+            hcpWorkplace: instTitle.isNotEmpty ? instTitle : work.workplace,
             workplaceName: instTitle.isNotEmpty ? instTitle : 'Manila Doctors Hospital',
-            cityTitle: (fullDoctor.cityMunicipality != null && fullDoctor.cityMunicipality!.isNotEmpty) ? fullDoctor.cityMunicipality! : 'Ermita',
-            provinceTitle: (fullDoctor.provinceName != null && fullDoctor.provinceName!.isNotEmpty) ? fullDoctor.provinceName! : 'Metro Manila-Manila',
+            cityTitle: resolvedCity.isNotEmpty ? resolvedCity : 'Ermita',
+            cityMunicipality: resolvedCity.isNotEmpty ? resolvedCity : 'Ermita',
+            provinceTitle: resolvedProv.isNotEmpty ? resolvedProv : 'Metro Manila-Manila',
+            provinceName: resolvedProv.isNotEmpty ? resolvedProv : 'Metro Manila-Manila',
           ));
         }
       } else {
@@ -170,7 +174,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           hcpWorkplace: 'Manila Doctors Hospital',
           workplaceName: 'Manila Doctors Hospital',
           cityTitle: 'Ermita',
+          cityMunicipality: 'Ermita',
           provinceTitle: 'Metro Manila-Manila',
+          provinceName: 'Metro Manila-Manila',
         ));
       }
 
@@ -774,28 +780,34 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       if (specAdded.isNotEmpty) {
         sb.write('<h4>Specializations</h4><b>✓ Added</b><div style="margin-left:20px; margin-bottom:10px;">');
         for (var s in specAdded) {
-          sb.write('${s['specialty_name'] ?? s['hcp_specialty']}<br>');
+          final specName = LocationResolver.resolveSpecialtyName(s['specialty_name'] ?? s['hcp_specialty'], _specializations);
+          final subName = LocationResolver.resolveSpecialtyName(s['sub_specialty_name'] ?? s['sub_specialty'], _specializations);
+          sb.write('$specName${subName.isNotEmpty ? " (Sub: $subName)" : ""}<br>');
         }
         sb.write('</div>');
       }
       if (specRemoved.isNotEmpty) {
         sb.write('<h4>Specializations</h4><b>✗ Removed</b><div style="margin-left:20px; margin-bottom:10px; color:#EF4444;">');
         for (var s in specRemoved) {
-          sb.write('${s['specialty_name'] ?? s['hcp_specialty']}<br>');
+          final specName = LocationResolver.resolveSpecialtyName(s['specialty_name'] ?? s['hcp_specialty'], _specializations);
+          sb.write('$specName<br>');
         }
         sb.write('</div>');
       }
       if (wpAdded.isNotEmpty) {
         sb.write('<h4>Workplaces</h4><b>✓ Added</b><div style="margin-left:20px; margin-bottom:10px;">');
         for (var w in wpAdded) {
-          sb.write('${w['workplace_name'] ?? w['hcp_workplace']}<br>');
+          final wpName = LocationResolver.resolveInstitutionName(w['workplace_name'] ?? w['hcp_workplace'], _institutions);
+          final provName = LocationResolver.resolveProvinceName(w['province_name'] ?? w['province_title']);
+          sb.write('$wpName${provName.isNotEmpty ? " ($provName)" : ""}<br>');
         }
         sb.write('</div>');
       }
       if (wpRemoved.isNotEmpty) {
         sb.write('<h4>Workplaces</h4><b>✗ Removed</b><div style="margin-left:20px; margin-bottom:10px; color:#EF4444;">');
         for (var w in wpRemoved) {
-          sb.write('${w['workplace_name'] ?? w['hcp_workplace']}<br>');
+          final wpName = LocationResolver.resolveInstitutionName(w['workplace_name'] ?? w['hcp_workplace'], _institutions);
+          sb.write('$wpName<br>');
         }
         sb.write('</div>');
       }
@@ -844,7 +856,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             hcpType: _selectedHcpType ?? 'HCP-TYPE-01',
             hcpPractice: _selectedPractice,
             specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpSpecialty(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred)).toList(),
-            workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpWorkplace(workplace: e.hcpWorkplace!, provinceName: e.provinceName, cityMunicipality: e.cityMunicipality, address: e.workplaceName, isPrimary: e.preferred)).toList(),
+            workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpWorkplace(workplace: e.hcpWorkplace!, provinceName: LocationResolver.resolveProvinceName(e.provinceName), cityMunicipality: LocationResolver.resolveCityName(e.cityMunicipality), address: LocationResolver.resolveInstitutionName(e.workplaceName ?? e.hcpWorkplace), isPrimary: e.preferred)).toList(),
             contacts: _contacts.where((e) => (e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)).map((e) => HcpContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: e.preferred)).toList(),
             profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
           );
@@ -1429,13 +1441,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
                 onPressed: () {
                   if (selectedSpec != null) {
+                    final specTitle = currentSpecObj.specialty.isNotEmpty ? currentSpecObj.specialty : LocationResolver.resolveSpecialtyName(selectedSpec, _specializations);
+                    final subSpecTitle = currentSubSpecObj?.specialty ?? (selectedSubSpec != null ? LocationResolver.resolveSpecialtyName(selectedSubSpec!, _specializations) : null);
                     setState(() {
                       _selectedSpecialties.add(SubmissionSpecialty(
                         preferred: isPreferred,
-                        hcpSpecialty: selectedSpec!,
-                        specialtyName: currentSpecObj.specialty,
-                        subSpecialty: selectedSubSpec,
-                        subSpecialtyName: currentSubSpecObj?.specialty ?? selectedSubSpec,
+                        hcpSpecialty: specTitle.isNotEmpty ? specTitle : selectedSpec!,
+                        specialtyName: specTitle.isNotEmpty ? specTitle : selectedSpec!,
+                        subSpecialty: subSpecTitle ?? selectedSubSpec,
+                        subSpecialtyName: subSpecTitle ?? selectedSubSpec,
                       ));
                     });
                     Navigator.pop(ctx);
@@ -1536,15 +1550,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 onPressed: () {
                   if (selectedInst != null) {
                     final match = _institutions.firstWhere((i) => i.name == selectedInst, orElse: () => Institution(name: selectedInst!, institutionName: selectedInst!));
+                    final instTitle = match.institutionName.isNotEmpty ? match.institutionName : LocationResolver.resolveInstitutionName(selectedInst, _institutions);
+                    final resolvedCity = LocationResolver.resolveCityName(match.cityMunicipality);
+                    final resolvedProv = LocationResolver.resolveProvinceName(match.provinceName);
                     setState(() {
                       _selectedWorkplaces.add(SubmissionWorkplace(
                         preferred: isPreferred,
-                        hcpWorkplace: selectedInst!,
-                        workplaceName: match.institutionName,
-                        cityMunicipality: match.cityMunicipality,
-                        cityTitle: match.cityMunicipality,
-                        provinceName: match.provinceName,
-                        provinceTitle: match.provinceName,
+                        hcpWorkplace: instTitle.isNotEmpty ? instTitle : selectedInst!,
+                        workplaceName: instTitle.isNotEmpty ? instTitle : selectedInst!,
+                        cityMunicipality: resolvedCity,
+                        cityTitle: resolvedCity,
+                        provinceName: resolvedProv,
+                        provinceTitle: resolvedProv,
                       ));
                     });
                     Navigator.pop(ctx);
@@ -1788,13 +1805,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 onPressed: () {
                   if (selSpec != null) {
                     final specLookup = {for (var sp in _specializations) sp.name: sp.specialty};
+                    final specName = specLookup[selSpec] ?? LocationResolver.resolveSpecialtyName(selSpec, _specializations);
+                    final subSpecName = selSub != null ? (specLookup[selSub] ?? LocationResolver.resolveSpecialtyName(selSub, _specializations)) : null;
                     setState(() {
                       _selectedSpecialties[index] = SubmissionSpecialty(
                         preferred: isPreferred,
-                        hcpSpecialty: selSpec,
-                        specialtyName: specLookup[selSpec] ?? selSpec,
-                        subSpecialty: selSub,
-                        subSpecialtyName: selSub != null ? (specLookup[selSub] ?? selSub) : null,
+                        hcpSpecialty: specName.isNotEmpty ? specName : selSpec,
+                        specialtyName: specName.isNotEmpty ? specName : selSpec,
+                        subSpecialty: subSpecName ?? selSub,
+                        subSpecialtyName: subSpecName ?? selSub,
                       );
                     });
                   }
@@ -1910,15 +1929,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 onPressed: () {
                   if (selectedInst != null) {
                     final instObj = _institutions.firstWhere((i) => i.name == selectedInst, orElse: () => _institutions.first);
+                    final instTitle = addrCtrl.text.isNotEmpty ? addrCtrl.text : (instObj.institutionName.isNotEmpty ? instObj.institutionName : LocationResolver.resolveInstitutionName(selectedInst, _institutions));
+                    final resolvedCity = LocationResolver.resolveCityName(instObj.cityMunicipality);
+                    final resolvedProv = LocationResolver.resolveProvinceName(instObj.provinceName);
                     setState(() {
                       _selectedWorkplaces[index] = SubmissionWorkplace(
                         preferred: isPreferred,
-                        hcpWorkplace: selectedInst,
-                        workplaceName: addrCtrl.text.isNotEmpty ? addrCtrl.text : instObj.institutionName,
-                        cityMunicipality: instObj.cityMunicipality,
-                        cityTitle: instObj.cityMunicipality,
-                        provinceName: instObj.provinceName,
-                        provinceTitle: instObj.provinceName,
+                        hcpWorkplace: instTitle.isNotEmpty ? instTitle : selectedInst,
+                        workplaceName: instTitle.isNotEmpty ? instTitle : selectedInst,
+                        cityMunicipality: resolvedCity,
+                        cityTitle: resolvedCity,
+                        provinceName: resolvedProv,
+                        provinceTitle: resolvedProv,
                       );
                     });
                   }
@@ -3165,7 +3187,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                                     Expanded(
                                                       child: Row(
                                                         children: [
-                                                          Expanded(child: Text(specObj.specialty, style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12), overflow: TextOverflow.ellipsis)),
+                                                          Expanded(
+                                                            child: Text(
+                                                              LocationResolver.resolveSpecialtyName(specObj.specialty.isNotEmpty ? specObj.specialty : s.hcpSpecialty, _specializations),
+                                                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
+                                                              overflow: TextOverflow.ellipsis,
+                                                            ),
+                                                          ),
                                                           if (s.isPrimary) ...[
                                                             const SizedBox(width: 4),
                                                             Container(
@@ -3182,7 +3210,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                                       ),
                                                     ),
                                                     const SizedBox(width: 6),
-                                                    Text(subObj?.specialty ?? '-', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                                    Text(
+                                                      LocationResolver.resolveSpecialtyName(subObj?.specialty ?? s.subSpecialty ?? '-', _specializations).isNotEmpty
+                                                          ? LocationResolver.resolveSpecialtyName(subObj?.specialty ?? s.subSpecialty ?? '-', _specializations)
+                                                          : '-',
+                                                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                                    ),
                                                     const SizedBox(width: 4),
                                                     GestureDetector(
                                                       onTap: () {
@@ -4065,11 +4098,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             final idx = entry.key;
                             final s = entry.value;
 
-                            final specLookup = {for (var sp in _specializations) sp.name: sp.specialty};
                             final rawSpec = (s.specialtyName != null && s.specialtyName!.isNotEmpty) ? s.specialtyName! : (s.hcpSpecialty ?? '');
-                            final specName = specLookup[rawSpec] ?? rawSpec;
+                            final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
                             final rawSub = (s.subSpecialtyName != null && s.subSpecialtyName!.isNotEmpty && s.subSpecialtyName != '-') ? s.subSpecialtyName! : (s.subSpecialty ?? '-');
-                            final subName = specLookup[rawSub] ?? rawSub;
+                            final subName = (rawSub != '-' && rawSub.isNotEmpty) ? LocationResolver.resolveSpecialtyName(rawSub, _specializations) : '-';
 
                             return InkWell(
                               onTap: () => _showEditSpecialtyDialog(idx),
@@ -4250,6 +4282,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           ..._selectedWorkplaces.asMap().entries.map((entry) {
                             final idx = entry.key;
                             final w = entry.value;
+                            final wpName = LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace, _institutions);
+                            final cityName = LocationResolver.resolveCityName(w.cityTitle ?? w.cityMunicipality);
+                            final provName = LocationResolver.resolveProvinceName(w.provinceTitle ?? w.provinceName);
+
                             return InkWell(
                               onTap: () => _showEditWorkplaceDialog(idx),
                               child: Padding(
@@ -4285,7 +4321,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                         children: [
                                           Expanded(
                                             child: Text(
-                                              w.workplaceName ?? 'Manila Doctors Hospital',
+                                              wpName.isNotEmpty ? wpName : 'Manila Doctors Hospital',
                                               style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
                                               overflow: TextOverflow.ellipsis,
                                             ),
@@ -4306,9 +4342,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                       ),
                                     ),
                                     const SizedBox(width: 6),
-                                    Text(w.cityTitle ?? 'Ermita', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                    Text(cityName.isNotEmpty ? cityName : 'Ermita', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
                                     const SizedBox(width: 8),
-                                    Text(w.provinceTitle ?? 'Metro Manila-Manila', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                    Text(provName.isNotEmpty ? provName : 'Metro Manila-Manila', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
                                     const SizedBox(width: 6),
                                     GestureDetector(
                                       onTap: () => _showEditWorkplaceDialog(idx),
@@ -4746,7 +4782,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   // --- CHANGES STEP ---
   Widget _buildChangesStep() {
     final apiService = Provider.of<ApiService>(context, listen: false);
-    final specLookup = {for (var s in _specializations) s.name: s.specialty};
 
     final currentDoctor = _selectedDoctor ?? widget.doctor;
     final bool isExistingDoctor = currentDoctor != null && (currentDoctor.name?.isNotEmpty ?? false);
@@ -5075,12 +5110,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               const SizedBox(height: 4),
               ...specAdded.map((s) {
                 final rawSpec = (s['specialty_name'] != null && s['specialty_name'].toString().isNotEmpty) ? s['specialty_name'].toString() : (s['hcp_specialty']?.toString() ?? '');
-                final specName = specLookup[rawSpec] ?? rawSpec;
-                final rawSub = (s['sub_specialty'] != null && s['sub_specialty'].toString().isNotEmpty && s['sub_specialty'] != '-') ? s['sub_specialty'].toString() : '';
-                final subName = specLookup[rawSub] ?? rawSub;
+                final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
+                final rawSub = (s['sub_specialty_name'] != null && s['sub_specialty_name'].toString().isNotEmpty && s['sub_specialty_name'] != '-')
+                    ? s['sub_specialty_name'].toString()
+                    : ((s['sub_specialty'] != null && s['sub_specialty'].toString().isNotEmpty && s['sub_specialty'] != '-') ? s['sub_specialty'].toString() : '');
+                final subName = LocationResolver.resolveSpecialtyName(rawSub, _specializations);
                 return Padding(
                   padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('Specialty: ${s['hcp_specialty'] ?? specName}${subName.isNotEmpty ? ", Sub: ${s['sub_specialty'] ?? subName}" : ""}', style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
+                  child: Text('Specialty: $specName${subName.isNotEmpty ? ", Sub: $subName" : ""}', style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
                 );
               }),
             ],
@@ -5095,7 +5132,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ),
               const SizedBox(height: 4),
               ...specRemoved.map((s) {
-                final specName = specLookup[s['hcp_specialty']] ?? s['hcp_specialty'] ?? '';
+                final rawSpec = (s['specialty_name'] != null && s['specialty_name'].toString().isNotEmpty) ? s['specialty_name'].toString() : (s['hcp_specialty']?.toString() ?? '');
+                final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
                 return Padding(
                   padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
                   child: Text('Specialty: $specName', style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
@@ -5118,9 +5156,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ),
               const SizedBox(height: 4),
               ...wpAdded.map((w) {
+                final rawWp = (w['workplace_name'] ?? w['hcp_workplace'] ?? '').toString();
+                final wpName = LocationResolver.resolveInstitutionName(rawWp, _institutions);
+                final rawProv = (w['province_name'] ?? w['province_title'] ?? '').toString();
+                final provName = LocationResolver.resolveProvinceName(rawProv);
                 return Padding(
                   padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? "INST-00005"}', style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
+                  child: Text('${wpName.isNotEmpty ? wpName : "Manila Doctors Hospital"}${provName.isNotEmpty ? " ($provName)" : ""}', style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
                 );
               }),
             ],
@@ -5135,9 +5177,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ),
               const SizedBox(height: 4),
               ...wpRemoved.map((w) {
+                final rawWp = (w['workplace_name'] ?? w['hcp_workplace'] ?? '').toString();
+                final wpName = LocationResolver.resolveInstitutionName(rawWp, _institutions);
                 return Padding(
                   padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('${w['workplace_name'] ?? w['hcp_workplace'] ?? ""}', style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
+                  child: Text(wpName.isNotEmpty ? wpName : rawWp, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13)),
                 );
               }),
             ],
