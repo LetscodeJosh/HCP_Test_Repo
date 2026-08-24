@@ -173,7 +173,10 @@ class HcpAccountSpecialization {
        this.preferred = preferred ?? isPrimary;
 
   factory HcpAccountSpecialization.fromJson(Map<String, dynamic> json) {
-    final pref = json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true;
+    final pref = json['preferred'] == 1 || json['preferred'] == true ||
+        json['is_preferred'] == 1 || json['is_preferred'] == true ||
+        json['is_primary'] == 1 || json['is_primary'] == true ||
+        json['primary'] == 1 || json['primary'] == true;
     final rawSpec = json['specialty_name'] ?? json['specialty'] ?? json['hcp_specialty'] ?? '';
     final specName = LocationResolver.resolveSpecialtyName(rawSpec.toString());
     final rawSub = json['sub_specialty_name'] ?? json['sub_specialty'];
@@ -192,7 +195,9 @@ class HcpAccountSpecialization {
       'specialty': hcpSpecialty, // for backwards compatibility with legacy schemas
       if (subSpecialty != null && subSpecialty!.isNotEmpty && subSpecialty != '-') 'sub_specialty': subSpecialty,
       'is_primary': (isPrimary || preferred) ? 1 : 0,
+      'primary': (isPrimary || preferred) ? 1 : 0,
       'preferred': (isPrimary || preferred) ? 1 : 0,
+      'is_preferred': (isPrimary || preferred) ? 1 : 0,
     };
   }
 }
@@ -226,7 +231,10 @@ class HcpAccountWorkplace {
        this.preferred = preferred ?? isPrimary;
 
   factory HcpAccountWorkplace.fromJson(Map<String, dynamic> json) {
-    final pref = json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true;
+    final pref = json['preferred'] == 1 || json['preferred'] == true ||
+        json['is_preferred'] == 1 || json['is_preferred'] == true ||
+        json['is_primary'] == 1 || json['is_primary'] == true ||
+        json['primary'] == 1 || json['primary'] == true;
     final rawWp = json['workplace_name'] ?? json['workplace'] ?? json['hcp_workplace'] ?? '';
     final wpName = LocationResolver.resolveInstitutionName(rawWp.toString());
     final rawCity = json['city_municipality'] ?? json['city'] ?? json['city_title'];
@@ -249,7 +257,9 @@ class HcpAccountWorkplace {
       if (provinceName != null) 'province_name': provinceName,
       if (address != null) 'address': address,
       'is_primary': (isPrimary || preferred) ? 1 : 0,
-      'preferred': preferred ? 1 : 0,
+      'primary': (isPrimary || preferred) ? 1 : 0,
+      'preferred': (isPrimary || preferred) ? 1 : 0,
+      'is_preferred': (isPrimary || preferred) ? 1 : 0,
     };
   }
 }
@@ -276,7 +286,10 @@ class HcpAccountContact {
        this.preferred = preferred ?? isPrimary;
 
   factory HcpAccountContact.fromJson(Map<String, dynamic> json) {
-    final pref = json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true;
+    final pref = json['preferred'] == 1 || json['preferred'] == true ||
+        json['is_preferred'] == 1 || json['is_preferred'] == true ||
+        json['is_primary'] == 1 || json['is_primary'] == true ||
+        json['primary'] == 1 || json['primary'] == true;
     String? num = json['contact_number'] ?? json['mobile_number'] ?? json['phone_number'];
     String? email = json['email_address'] ?? json['email'];
 
@@ -302,7 +315,9 @@ class HcpAccountContact {
       if (contactNumber != null) 'contact_number': contactNumber,
       if (emailAddress != null) 'email_address': emailAddress,
       'is_primary': (isPrimary || preferred) ? 1 : 0,
+      'primary': (isPrimary || preferred) ? 1 : 0,
       'preferred': (isPrimary || preferred) ? 1 : 0,
+      'is_preferred': (isPrimary || preferred) ? 1 : 0,
     };
   }
 }

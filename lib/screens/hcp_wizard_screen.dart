@@ -128,11 +128,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _selectedPractice = fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Dispensing';
 
       if (fullDoctor.specialties.isNotEmpty) {
+        final hasAnyPref = fullDoctor.specialties.any((s) => s.isPrimary);
         for (int i = 0; i < fullDoctor.specialties.length; i++) {
           final spec = fullDoctor.specialties[i];
           final specTitle = LocationResolver.resolveSpecialtyName(spec.hcpSpecialty, _specializations);
           final subSpecTitle = spec.subSpecialty != null ? LocationResolver.resolveSpecialtyName(spec.subSpecialty!, _specializations) : null;
-          final isPref = spec.isPrimary;
+          final isPref = hasAnyPref ? spec.isPrimary : (i == 0);
           _selectedSpecialties.add(SubmissionSpecialty(
             preferred: isPref,
             hcpSpecialty: specTitle.isNotEmpty ? specTitle : spec.hcpSpecialty,
@@ -152,10 +153,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
 
       if (fullDoctor.workplaces.isNotEmpty) {
+        final hasAnyPref = fullDoctor.workplaces.any((w) => w.isPrimary);
         for (int i = 0; i < fullDoctor.workplaces.length; i++) {
           final work = fullDoctor.workplaces[i];
           final instTitle = LocationResolver.resolveInstitutionName(work.workplace, _institutions);
-          final isPref = work.isPrimary;
+          final isPref = hasAnyPref ? work.isPrimary : (i == 0);
           final resolvedCity = LocationResolver.resolveCityName(work.cityMunicipality ?? fullDoctor.cityMunicipality);
           final resolvedProv = LocationResolver.resolveProvinceName(work.provinceName ?? fullDoctor.provinceName);
           _selectedWorkplaces.add(SubmissionWorkplace(
@@ -181,9 +183,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
 
       if (fullDoctor.contacts.isNotEmpty) {
+        final hasAnyPref = fullDoctor.contacts.any((c) => c.isPrimary);
         for (int i = 0; i < fullDoctor.contacts.length; i++) {
           final contact = fullDoctor.contacts[i];
-          final isPref = contact.isPrimary;
+          final isPref = hasAnyPref ? contact.isPrimary : (i == 0);
           _contacts.add(SubmissionContact(
             preferred: isPref,
             contactNumber: contact.contactValue.isNotEmpty ? contact.contactValue : '123435',
@@ -920,9 +923,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ? _territoryManagerController.text.trim()
               : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
           userId: apiService.loggedInEmail,
-          specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred, preferred: e.preferred)).toList(),
-          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpAccountWorkplace(hcpWorkplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName, isPrimary: e.preferred, preferred: e.preferred)).toList(),
-          contacts: _contacts.where((e) => (e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: e.preferred, preferred: e.preferred)).toList(),
+          specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null && (e.preferred)).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: true, preferred: true)).toList(),
+          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null && (e.preferred)).map((e) => HcpAccountWorkplace(hcpWorkplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName, isPrimary: true, preferred: true)).toList(),
+          contacts: _contacts.where((e) => ((e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)) && (e.preferred)).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: true, preferred: true)).toList(),
         );
       }
 
@@ -1444,8 +1447,21 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     final specTitle = currentSpecObj.specialty.isNotEmpty ? currentSpecObj.specialty : LocationResolver.resolveSpecialtyName(selectedSpec, _specializations);
                     final subSpecTitle = currentSubSpecObj?.specialty ?? (selectedSubSpec != null ? LocationResolver.resolveSpecialtyName(selectedSubSpec!, _specializations) : null);
                     setState(() {
+                      final shouldBePref = isPreferred || _selectedSpecialties.isEmpty;
+                      if (shouldBePref) {
+                        for (int i = 0; i < _selectedSpecialties.length; i++) {
+                          final old = _selectedSpecialties[i];
+                          _selectedSpecialties[i] = SubmissionSpecialty(
+                            preferred: false,
+                            hcpSpecialty: old.hcpSpecialty,
+                            specialtyName: old.specialtyName,
+                            subSpecialty: old.subSpecialty,
+                            subSpecialtyName: old.subSpecialtyName,
+                          );
+                        }
+                      }
                       _selectedSpecialties.add(SubmissionSpecialty(
-                        preferred: isPreferred,
+                        preferred: shouldBePref,
                         hcpSpecialty: specTitle.isNotEmpty ? specTitle : selectedSpec!,
                         specialtyName: specTitle.isNotEmpty ? specTitle : selectedSpec!,
                         subSpecialty: subSpecTitle ?? selectedSubSpec,
@@ -1554,8 +1570,23 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     final resolvedCity = LocationResolver.resolveCityName(match.cityMunicipality);
                     final resolvedProv = LocationResolver.resolveProvinceName(match.provinceName);
                     setState(() {
+                      final shouldBePref = isPreferred || _selectedWorkplaces.isEmpty;
+                      if (shouldBePref) {
+                        for (int i = 0; i < _selectedWorkplaces.length; i++) {
+                          final old = _selectedWorkplaces[i];
+                          _selectedWorkplaces[i] = SubmissionWorkplace(
+                            preferred: false,
+                            hcpWorkplace: old.hcpWorkplace,
+                            workplaceName: old.workplaceName,
+                            cityMunicipality: old.cityMunicipality,
+                            cityTitle: old.cityTitle,
+                            provinceName: old.provinceName,
+                            provinceTitle: old.provinceTitle,
+                          );
+                        }
+                      }
                       _selectedWorkplaces.add(SubmissionWorkplace(
-                        preferred: isPreferred,
+                        preferred: shouldBePref,
                         hcpWorkplace: instTitle.isNotEmpty ? instTitle : selectedInst!,
                         workplaceName: instTitle.isNotEmpty ? instTitle : selectedInst!,
                         cityMunicipality: resolvedCity,
@@ -1633,8 +1664,19 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               onPressed: () {
                 if (phone.isNotEmpty || email.isNotEmpty) {
                   setState(() {
+                    final shouldBePref = isPreferred || _contacts.isEmpty;
+                    if (shouldBePref) {
+                      for (int i = 0; i < _contacts.length; i++) {
+                        final old = _contacts[i];
+                        _contacts[i] = SubmissionContact(
+                          preferred: false,
+                          contactNumber: old.contactNumber,
+                          emailAddress: old.emailAddress,
+                        );
+                      }
+                    }
                     _contacts.add(SubmissionContact(
-                      preferred: isPreferred,
+                      preferred: shouldBePref,
                       contactNumber: phone.isNotEmpty ? phone : null,
                       emailAddress: email.isNotEmpty ? email : null,
                     ));
@@ -1808,6 +1850,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     final specName = specLookup[selSpec] ?? LocationResolver.resolveSpecialtyName(selSpec, _specializations);
                     final subSpecName = selSub != null ? (specLookup[selSub] ?? LocationResolver.resolveSpecialtyName(selSub, _specializations)) : null;
                     setState(() {
+                      if (isPreferred) {
+                        for (int i = 0; i < _selectedSpecialties.length; i++) {
+                          if (i != index) {
+                            final old = _selectedSpecialties[i];
+                            _selectedSpecialties[i] = SubmissionSpecialty(
+                              preferred: false,
+                              hcpSpecialty: old.hcpSpecialty,
+                              specialtyName: old.specialtyName,
+                              subSpecialty: old.subSpecialty,
+                              subSpecialtyName: old.subSpecialtyName,
+                            );
+                          }
+                        }
+                      }
                       _selectedSpecialties[index] = SubmissionSpecialty(
                         preferred: isPreferred,
                         hcpSpecialty: specName.isNotEmpty ? specName : selSpec,
@@ -1933,6 +1989,22 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     final resolvedCity = LocationResolver.resolveCityName(instObj.cityMunicipality);
                     final resolvedProv = LocationResolver.resolveProvinceName(instObj.provinceName);
                     setState(() {
+                      if (isPreferred) {
+                        for (int i = 0; i < _selectedWorkplaces.length; i++) {
+                          if (i != index) {
+                            final old = _selectedWorkplaces[i];
+                            _selectedWorkplaces[i] = SubmissionWorkplace(
+                              preferred: false,
+                              hcpWorkplace: old.hcpWorkplace,
+                              workplaceName: old.workplaceName,
+                              cityMunicipality: old.cityMunicipality,
+                              cityTitle: old.cityTitle,
+                              provinceName: old.provinceName,
+                              provinceTitle: old.provinceTitle,
+                            );
+                          }
+                        }
+                      }
                       _selectedWorkplaces[index] = SubmissionWorkplace(
                         preferred: isPreferred,
                         hcpWorkplace: instTitle.isNotEmpty ? instTitle : selectedInst,
@@ -2022,6 +2094,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 onPressed: () {
                   if (numCtrl.text.isNotEmpty) {
                     setState(() {
+                      if (isPreferred) {
+                        for (int i = 0; i < _contacts.length; i++) {
+                          if (i != index) {
+                            final old = _contacts[i];
+                            _contacts[i] = SubmissionContact(
+                              preferred: false,
+                              contactNumber: old.contactNumber,
+                              emailAddress: old.emailAddress,
+                            );
+                          }
+                        }
+                      }
                       _contacts[index] = SubmissionContact(
                         preferred: isPreferred,
                         contactNumber: numCtrl.text.trim(),
@@ -4112,14 +4196,16 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                     InkWell(
                                       onTap: () {
                                         setState(() {
-                                          final old = _selectedSpecialties[idx];
-                                          _selectedSpecialties[idx] = SubmissionSpecialty(
-                                            preferred: !old.preferred,
-                                            hcpSpecialty: old.hcpSpecialty,
-                                            specialtyName: old.specialtyName,
-                                            subSpecialty: old.subSpecialty,
-                                            subSpecialtyName: old.subSpecialtyName,
-                                          );
+                                          for (int i = 0; i < _selectedSpecialties.length; i++) {
+                                            final item = _selectedSpecialties[i];
+                                            _selectedSpecialties[i] = SubmissionSpecialty(
+                                              preferred: (i == idx),
+                                              hcpSpecialty: item.hcpSpecialty,
+                                              specialtyName: item.specialtyName,
+                                              subSpecialty: item.subSpecialty,
+                                              subSpecialtyName: item.subSpecialtyName,
+                                            );
+                                          }
                                         });
                                       },
                                       child: SizedBox(
@@ -4295,16 +4381,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                     InkWell(
                                       onTap: () {
                                         setState(() {
-                                          final old = _selectedWorkplaces[idx];
-                                          _selectedWorkplaces[idx] = SubmissionWorkplace(
-                                            preferred: !old.preferred,
-                                            hcpWorkplace: old.hcpWorkplace,
-                                            workplaceName: old.workplaceName,
-                                            cityMunicipality: old.cityMunicipality,
-                                            cityTitle: old.cityTitle,
-                                            provinceName: old.provinceName,
-                                            provinceTitle: old.provinceTitle,
-                                          );
+                                          for (int i = 0; i < _selectedWorkplaces.length; i++) {
+                                            final item = _selectedWorkplaces[i];
+                                            _selectedWorkplaces[i] = SubmissionWorkplace(
+                                              preferred: (i == idx),
+                                              hcpWorkplace: item.hcpWorkplace,
+                                              workplaceName: item.workplaceName,
+                                              cityMunicipality: item.cityMunicipality,
+                                              cityTitle: item.cityTitle,
+                                              provinceName: item.provinceName,
+                                              provinceTitle: item.provinceTitle,
+                                            );
+                                          }
                                         });
                                       },
                                       child: SizedBox(
@@ -4422,12 +4510,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                     InkWell(
                                       onTap: () {
                                         setState(() {
-                                          final old = _contacts[idx];
-                                          _contacts[idx] = SubmissionContact(
-                                            preferred: !old.preferred,
-                                            contactNumber: old.contactNumber,
-                                            emailAddress: old.emailAddress,
-                                          );
+                                          for (int i = 0; i < _contacts.length; i++) {
+                                            final item = _contacts[i];
+                                            _contacts[i] = SubmissionContact(
+                                              preferred: (i == idx),
+                                              contactNumber: item.contactNumber,
+                                              emailAddress: item.emailAddress,
+                                            );
+                                          }
                                         });
                                       },
                                       child: SizedBox(

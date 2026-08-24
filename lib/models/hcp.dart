@@ -168,7 +168,10 @@ class HcpSpecialty {
     return HcpSpecialty(
       hcpSpecialty: specName.isNotEmpty ? specName : rawSpec.toString(),
       subSpecialty: subName ?? (rawSub != null ? rawSub.toString() : null),
-      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true,
+      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true ||
+          json['primary'] == 1 || json['primary'] == true ||
+          json['preferred'] == 1 || json['preferred'] == true ||
+          json['is_preferred'] == 1 || json['is_preferred'] == true,
     );
   }
 
@@ -177,7 +180,9 @@ class HcpSpecialty {
       'hcp_specialty': hcpSpecialty,
       if (subSpecialty != null) 'sub_specialty': subSpecialty,
       'is_primary': isPrimary ? 1 : 0,
+      'primary': isPrimary ? 1 : 0,
       'preferred': isPrimary ? 1 : 0,
+      'is_preferred': isPrimary ? 1 : 0,
     };
   }
 }
@@ -207,7 +212,10 @@ class HcpWorkplace {
       provinceName: rawProv != null ? LocationResolver.resolveProvinceName(rawProv.toString()) : null,
       cityMunicipality: rawCity != null ? LocationResolver.resolveCityName(rawCity.toString()) : null,
       address: json['address'] ?? json['workplace_name'],
-      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true,
+      isPrimary: json['is_primary'] == 1 || json['is_primary'] == true ||
+          json['primary'] == 1 || json['primary'] == true ||
+          json['preferred'] == 1 || json['preferred'] == true ||
+          json['is_preferred'] == 1 || json['is_preferred'] == true,
     );
   }
 
@@ -218,7 +226,9 @@ class HcpWorkplace {
       if (cityMunicipality != null) 'city_municipality': cityMunicipality,
       if (address != null) 'address': address,
       'is_primary': isPrimary ? 1 : 0,
+      'primary': isPrimary ? 1 : 0,
       'preferred': isPrimary ? 1 : 0,
+      'is_preferred': isPrimary ? 1 : 0,
     };
   }
 }
@@ -255,7 +265,10 @@ class HcpContact {
       }
     }
 
-    final pref = json['is_primary'] == 1 || json['is_primary'] == true || json['preferred'] == 1 || json['preferred'] == true;
+    final pref = json['is_primary'] == 1 || json['is_primary'] == true ||
+        json['primary'] == 1 || json['primary'] == true ||
+        json['preferred'] == 1 || json['preferred'] == true ||
+        json['is_preferred'] == 1 || json['is_preferred'] == true;
 
     return HcpContact(
       contactNumber: num,
@@ -269,7 +282,9 @@ class HcpContact {
       if (contactNumber != null) 'contact_number': contactNumber,
       if (emailAddress != null) 'email_address': emailAddress,
       'is_primary': isPrimary ? 1 : 0,
+      'primary': isPrimary ? 1 : 0,
       'preferred': isPrimary ? 1 : 0,
+      'is_preferred': isPrimary ? 1 : 0,
     };
   }
 }

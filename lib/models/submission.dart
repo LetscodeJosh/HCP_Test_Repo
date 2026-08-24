@@ -234,7 +234,10 @@ class SubmissionSpecialty {
         : ((subSpec.isNotEmpty && subSpec != 'None' && subSpec != '-') ? LocationResolver.resolveSpecialtyName(subSpec) : null);
 
     return SubmissionSpecialty(
-      preferred: json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true,
+      preferred: json['preferred'] == 1 || json['preferred'] == true ||
+          json['is_preferred'] == 1 || json['is_preferred'] == true ||
+          json['is_primary'] == 1 || json['is_primary'] == true ||
+          json['primary'] == 1 || json['primary'] == true,
       hcpSpecialty: finalSpec,
       specialtyName: finalSpec,
       subSpecialty: finalSub,
@@ -251,7 +254,9 @@ class SubmissionSpecialty {
 
     return {
       'preferred': preferred ? 1 : 0,
+      'is_preferred': preferred ? 1 : 0,
       'is_primary': preferred ? 1 : 0,
+      'primary': preferred ? 1 : 0,
       if (finalSpec.isNotEmpty) 'hcp_specialty': finalSpec,
       if (finalSpec.isNotEmpty) 'specialty': finalSpec,
       if (finalSpec.isNotEmpty) 'specialty_name': finalSpec,
@@ -295,7 +300,10 @@ class SubmissionWorkplace {
     final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (rawProv.isNotEmpty ? rawProv : null);
 
     return SubmissionWorkplace(
-      preferred: json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true,
+      preferred: json['preferred'] == 1 || json['preferred'] == true ||
+          json['is_preferred'] == 1 || json['is_preferred'] == true ||
+          json['is_primary'] == 1 || json['is_primary'] == true ||
+          json['primary'] == 1 || json['primary'] == true,
       hcpWorkplace: finalWp,
       workplaceName: finalWp,
       cityMunicipality: finalCity,
@@ -316,7 +324,9 @@ class SubmissionWorkplace {
 
     return {
       'preferred': preferred ? 1 : 0,
+      'is_preferred': preferred ? 1 : 0,
       'is_primary': preferred ? 1 : 0,
+      'primary': preferred ? 1 : 0,
       if (finalWp.isNotEmpty) 'hcp_workplace': finalWp,
       if (finalWp.isNotEmpty) 'workplace': finalWp,
       if (finalWp.isNotEmpty) 'workplace_name': finalWp,
@@ -346,7 +356,10 @@ class SubmissionContact {
 
   factory SubmissionContact.fromJson(Map<String, dynamic> json) {
     return SubmissionContact(
-      preferred: json['preferred'] == 1 || json['preferred'] == true || json['is_primary'] == 1 || json['is_primary'] == true,
+      preferred: json['preferred'] == 1 || json['preferred'] == true ||
+          json['is_preferred'] == 1 || json['is_preferred'] == true ||
+          json['is_primary'] == 1 || json['is_primary'] == true ||
+          json['primary'] == 1 || json['primary'] == true,
       contactNumber: json['contact_number'] ?? json['contact_value'] ?? json['mobile_number'] ?? json['phone_number'],
       emailAddress: json['email_address'] ?? json['contact_type'] ?? json['email'],
     );
@@ -355,7 +368,9 @@ class SubmissionContact {
   Map<String, dynamic> toJson() {
     return {
       'preferred': preferred ? 1 : 0,
+      'is_preferred': preferred ? 1 : 0,
       'is_primary': preferred ? 1 : 0,
+      'primary': preferred ? 1 : 0,
       if (contactNumber != null) 'contact_number': contactNumber,
       if (emailAddress != null) 'email_address': emailAddress,
     };

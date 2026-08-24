@@ -2054,13 +2054,22 @@ class ApiService extends ChangeNotifier {
         }
       }
 
-      // Ensure table_specialties fields store human-readable names across all specialty fields
+      // Ensure table_specialties fields store human-readable names across all specialty fields & preserve preferred flag
       if (payload['table_specialties'] is List && (payload['table_specialties'] as List).isNotEmpty) {
         final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
         final List<Map<String, dynamic>> cleanSpecs = [];
         for (var item in (payload['table_specialties'] as List)) {
           if (item is Map<String, dynamic>) {
             final map = Map<String, dynamic>.from(item);
+            final isPref = (map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true ||
+                map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true);
+            map['preferred'] = isPref ? 1 : 0;
+            map['is_preferred'] = isPref ? 1 : 0;
+            map['is_primary'] = isPref ? 1 : 0;
+            map['primary'] = isPref ? 1 : 0;
+
             final rawSpec = (map['specialty_name'] ?? map['specialty'] ?? map['hcp_specialty'] ?? '').toString().trim();
             if (rawSpec.isNotEmpty) {
               final resolvedSpec = LocationResolver.resolveSpecialtyName(rawSpec, specs.isNotEmpty ? specs : null);
@@ -2085,7 +2094,7 @@ class ApiService extends ChangeNotifier {
         payload['table_specialties'] = cleanSpecs;
       }
 
-      // Ensure table_workplaces fields store human-readable workplace and province names
+      // Ensure table_workplaces fields store human-readable workplace and province names & preserve preferred flag
       if (payload['table_workplaces'] is List && (payload['table_workplaces'] as List).isNotEmpty) {
         final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
         final psgc = await fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
@@ -2093,6 +2102,15 @@ class ApiService extends ChangeNotifier {
         for (var item in (payload['table_workplaces'] as List)) {
           if (item is Map<String, dynamic>) {
             final map = Map<String, dynamic>.from(item);
+            final isPref = (map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true ||
+                map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true);
+            map['preferred'] = isPref ? 1 : 0;
+            map['is_preferred'] = isPref ? 1 : 0;
+            map['is_primary'] = isPref ? 1 : 0;
+            map['primary'] = isPref ? 1 : 0;
+
             final rawWp = (map['workplace_name'] ?? map['workplace'] ?? map['hcp_workplace'] ?? map['address'] ?? '').toString().trim();
             final rawCity = (map['city_municipality'] ?? map['city_title'] ?? map['city_name'] ?? map['city'] ?? '').toString().trim();
             final rawProv = (map['province_name'] ?? map['province_title'] ?? map['province'] ?? '').toString().trim();
@@ -2105,7 +2123,6 @@ class ApiService extends ChangeNotifier {
               map['workplace_name'] = finalWp;
               map['address'] = finalWp;
 
-              // Find matching institution object if available for fallback location fields
               final instMatch = insts.where((i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase() || i.institutionName.toLowerCase() == finalWp.toLowerCase()).firstOrNull;
 
               final resolvedCity = LocationResolver.resolveCityName(
@@ -2133,6 +2150,26 @@ class ApiService extends ChangeNotifier {
           }
         }
         payload['table_workplaces'] = cleanWps;
+      }
+
+      // Ensure table_contact_info fields preserve preferred flags
+      if (payload['table_contact_info'] is List && (payload['table_contact_info'] as List).isNotEmpty) {
+        final List<Map<String, dynamic>> cleanContacts = [];
+        for (var item in (payload['table_contact_info'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final isPref = (map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true ||
+                map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true);
+            map['preferred'] = isPref ? 1 : 0;
+            map['is_preferred'] = isPref ? 1 : 0;
+            map['is_primary'] = isPref ? 1 : 0;
+            map['primary'] = isPref ? 1 : 0;
+            cleanContacts.add(map);
+          }
+        }
+        payload['table_contact_info'] = cleanContacts;
       }
 
       // Ensure root-level location and institution fields are human-readable
@@ -2169,6 +2206,7 @@ class ApiService extends ChangeNotifier {
         headers: _headers,
         body: jsonEncode(payload),
       );
+
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final createdData = body['data'];
@@ -2252,7 +2290,23 @@ class ApiService extends ChangeNotifier {
 
         return HcpProfileSubmission.fromJson(createdData);
       } else {
-        throw Exception('Failed to create submission: ${response.body}');
+        // Fallback to frappe.client.insert
+        final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
+        final rpcResp = await http.post(
+          rpcUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'HCP Profile Submission',
+              ...payload,
+            }
+          }),
+        );
+        if (rpcResp.statusCode == 200) {
+          final body = jsonDecode(rpcResp.body);
+          return HcpProfileSubmission.fromJson(body['message'] ?? body['data']);
+        }
+        throw Exception('Failed to create submission: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
       print('Create submission error: $e');
@@ -2295,6 +2349,16 @@ class ApiService extends ChangeNotifier {
       final validTo = HcpAccount.calculateMonthValidTo();
       final validityPeriod = HcpAccount.calculateMonthLabel();
 
+      // Only store PREFERRED data in HCP Account doctype
+      final prefSpecs = specialties.where((s) => s.preferred || s.isPrimary).toList();
+      final effectiveSpecs = prefSpecs.isNotEmpty ? prefSpecs : (specialties.isNotEmpty ? [specialties.first] : <HcpAccountSpecialization>[]);
+
+      final prefWps = workplaces.where((w) => w.preferred || w.isPrimary).toList();
+      final effectiveWps = prefWps.isNotEmpty ? prefWps : (workplaces.isNotEmpty ? [workplaces.first] : <HcpAccountWorkplace>[]);
+
+      final prefContacts = contacts.where((c) => c.preferred || c.isPrimary).toList();
+      final effectiveContacts = prefContacts.isNotEmpty ? prefContacts : (contacts.isNotEmpty ? [contacts.first] : <HcpAccountContact>[]);
+
       final accountData = HcpAccount(
         name: existingAccountName,
         accountName: program,
@@ -2303,9 +2367,9 @@ class ApiService extends ChangeNotifier {
         userId: userId ?? loggedInEmail ?? 'jptan@profinsights.biz',
         hcp: hcpId,
         hcpName: hcpFullName,
-        specialties: specialties,
-        workplaces: workplaces,
-        contacts: contacts,
+        specialties: effectiveSpecs,
+        workplaces: effectiveWps,
+        contacts: effectiveContacts,
         validFrom: validFrom,
         validTo: validTo,
         startDate: validFrom,
