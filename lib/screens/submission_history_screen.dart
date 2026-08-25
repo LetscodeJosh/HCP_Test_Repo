@@ -34,6 +34,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   @override
   void initState() {
     super.initState();
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    if (apiService.isMedRep) {
+      _onlyMySubmissions = true;
+    }
     _loadSubmissions();
   }
 
@@ -190,7 +194,11 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          final tabTitles = ['Step 1', 'Step 2', 'Step 3', 'Others', 'Changes'];
+          final isNewDoc = currentSub.hcpName.isEmpty ||
+              currentSub.hcpName == 'NEW-HCP' ||
+              (currentSub.changesJson != null && currentSub.changesJson!.contains('"is_new_doctor":true')) ||
+              (currentSub.changesJson != null && currentSub.changesJson!.contains('"is_new_doctor": true'));
+          final tabTitles = ['Step 1', 'Step 2', 'Step 3', 'Others', isNewDoc ? 'New Doctor Information' : 'Changes'];
 
           if (isFetchingFull && submission.name != null) {
             final apiService = Provider.of<ApiService>(context, listen: false);
@@ -607,9 +615,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildReadonlyField('HCP Full Name', submission.hcpFullName ?? submission.hcpName),
+                      _buildReadonlyField('HCP Full Name', (submission.hcpFullName != null && submission.hcpFullName!.isNotEmpty) ? submission.hcpFullName! : (submission.hcpName.isNotEmpty ? submission.hcpName : 'New Doctor')),
                       const SizedBox(height: 10),
-                      _buildReadonlyField('HCP *', submission.hcpName, isMandatory: true),
+                      _buildReadonlyField('HCP Master ID *', submission.hcpName.isNotEmpty ? submission.hcpName : 'Pending Registration (New Doctor)', isMandatory: true),
                     ],
                   ),
                 ),
@@ -839,7 +847,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         final wpRemoved = changesMap != null && changesMap['workplaces'] is Map && changesMap['workplaces']['removed'] is List ? (changesMap['workplaces']['removed'] as List) : [];
         final contactAdded = changesMap != null && changesMap['contact_information'] is Map && changesMap['contact_information']['added'] is List ? (changesMap['contact_information']['added'] as List) : [];
         final contactRemoved = changesMap != null && changesMap['contact_information'] is Map && changesMap['contact_information']['removed'] is List ? (changesMap['contact_information']['removed'] as List) : [];
-        final bool isExistingDoc = submission.hcpName.isNotEmpty;
+        final bool isNewDoc = submission.hcpName.isEmpty ||
+            submission.hcpName == 'NEW-HCP' ||
+            (changesMap != null && changesMap['is_new_doctor'] == true) ||
+            (submission.changesJson != null && submission.changesJson!.contains('"is_new_doctor":true')) ||
+            (submission.changesJson != null && submission.changesJson!.contains('"is_new_doctor": true'));
+        final bool isExistingDoc = !isNewDoc;
         final bool hasRecordedChanges = basicInfoList.isNotEmpty ||
             specAdded.isNotEmpty ||
             specRemoved.isNotEmpty ||
@@ -851,6 +864,232 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         final doctorDisplay = (submission.hcpFullName != null && submission.hcpFullName!.isNotEmpty)
             ? submission.hcpFullName!
             : '${submission.firstName ?? ''} ${submission.lastName ?? ''}'.trim();
+
+        if (isNewDoc) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('New Doctor Information', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: submission.applicationStatus == 'Applied' ? const Color(0xFF059669) : const Color(0xFF3F3F46),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      'Application: ${submission.applicationStatus ?? "Not Applied"}',
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Doctor Profile Card
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF27272A),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFF3F3F46)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF10B981), size: 22),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            doctorDisplay.isNotEmpty ? doctorDisplay : 'New Doctor',
+                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF10B981).withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: const Color(0xFF10B981)),
+                          ),
+                          child: const Text('NEW DOCTOR', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    Text('Classification: ${submission.hcpType ?? "Physician"} • Practice: ${submission.hcpPractice ?? "Both"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    if (submission.birthDate != null && submission.birthDate!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Birth Date: ${submission.birthDate}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    ],
+                    if (submission.accountOrProgram != null && submission.accountOrProgram!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('Assigned Program: ${submission.accountOrProgram}', style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Specializations List
+              if (submission.specialties.isNotEmpty) ...[
+                const Text('Specializations', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF3F3F46)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        color: const Color(0xFF18181B),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Specialty Name', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text('Sub-Specialty', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      ...submission.specialties.map((s) {
+                        final rawSpec = s.specialtyName ?? s.hcpSpecialty;
+                        final specName = LocationResolver.resolveSpecialtyName(rawSpec);
+                        final rawSub = s.subSpecialtyName ?? s.subSpecialty;
+                        final subName = LocationResolver.resolveSpecialtyName(rawSub);
+                        return Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  if (s.preferred)
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: const Color(0xFF10B981).withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                                      child: const Text('Primary', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
+                                  Text(specName.isNotEmpty ? specName : (rawSpec ?? 'Specialty'), style: const TextStyle(color: Colors.white, fontSize: 13)),
+                                ],
+                              ),
+                              Text(subName.isNotEmpty ? subName : 'None', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Workplaces List
+              if (submission.workplaces.isNotEmpty) ...[
+                const Text('Workplaces & Locations', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF3F3F46)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        color: const Color(0xFF18181B),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Workplace / Institution', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text('City & Province', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      ...submission.workplaces.map((w) {
+                        final rawWp = w.workplaceName ?? w.hcpWorkplace;
+                        final wpName = LocationResolver.resolveInstitutionName(rawWp);
+                        final cityName = LocationResolver.resolveCityName(w.cityMunicipality ?? w.cityTitle);
+                        final provName = LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle);
+                        final locStr = [cityName, provName].where((x) => x.isNotEmpty).join(', ');
+                        return Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  if (w.preferred)
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: const Color(0xFF10B981).withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                                      child: const Text('Primary', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
+                                  Text(wpName.isNotEmpty ? wpName : (rawWp ?? 'Institution'), style: const TextStyle(color: Colors.white, fontSize: 13)),
+                                ],
+                              ),
+                              Text(locStr.isNotEmpty ? locStr : 'Location', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Contacts List
+              if (submission.contacts.isNotEmpty) ...[
+                const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF27272A),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF3F3F46)),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        color: const Color(0xFF18181B),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Phone Number', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                            Text('Email Address', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                      ...submission.contacts.map((c) => Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(c.contactNumber ?? 'N/A', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                            Text(c.emailAddress ?? 'None', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                          ],
+                        ),
+                      )),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+            ],
+          );
+        }
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -922,18 +1161,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 ),
               )),
               const SizedBox(height: 16),
-            ] else if (!isExistingDoc) ...[
-              const Text('New Doctor Registration', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text('Doctor: $doctorDisplay (${submission.hcpType ?? 'HCP Type'})', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              ),
-              const SizedBox(height: 16),
             ],
 
             // Specializations Changes
-            if (specAdded.isNotEmpty || specRemoved.isNotEmpty || (!isExistingDoc && submission.specialties.isNotEmpty)) ...[
+            if (specAdded.isNotEmpty || specRemoved.isNotEmpty) ...[
               const Text('Specializations', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               if (specAdded.isNotEmpty) ...[
@@ -953,23 +1184,6 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
                     child: Text('Specialty: ${specName.isNotEmpty ? specName : rawSpec}${subName.isNotEmpty ? ', Sub: $subName' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                  );
-                }),
-              ] else if (!isExistingDoc && submission.specialties.isNotEmpty) ...[
-                Row(
-                  children: const [
-                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                    SizedBox(width: 6),
-                    Text('Specialties Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ...submission.specialties.map((s) {
-                  final specName = LocationResolver.resolveSpecialtyName(s.specialtyName ?? s.hcpSpecialty);
-                  final subName = LocationResolver.resolveSpecialtyName(s.subSpecialtyName ?? s.subSpecialty);
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                    child: Text('Specialty: ${specName.isNotEmpty ? specName : "General Practice"}${subName.isNotEmpty ? ', Sub: $subName' : ''}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   );
                 }),
               ],
@@ -996,7 +1210,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             ],
 
             // Workplaces Changes
-            if (wpAdded.isNotEmpty || wpRemoved.isNotEmpty || (!isExistingDoc && submission.workplaces.isNotEmpty)) ...[
+            if (wpAdded.isNotEmpty || wpRemoved.isNotEmpty) ...[
               const Text('Workplaces', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               if (wpAdded.isNotEmpty) ...[
@@ -1016,23 +1230,6 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   return Padding(
                     padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
                     child: Text('${wpName.isNotEmpty ? wpName : rawWp}${provName.isNotEmpty ? " ($provName)" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                  );
-                }),
-              ] else if (!isExistingDoc && submission.workplaces.isNotEmpty) ...[
-                Row(
-                  children: const [
-                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                    SizedBox(width: 6),
-                    Text('Workplaces Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ...submission.workplaces.map((w) {
-                  final wpName = LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace);
-                  final provName = LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle);
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                    child: Text('${wpName.isNotEmpty ? wpName : "Institution"}${provName.isNotEmpty ? " ($provName)" : ""}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   );
                 }),
               ],
@@ -1059,7 +1256,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             ],
 
             // Contact Information Changes
-            if (contactAdded.isNotEmpty || contactRemoved.isNotEmpty || (!isExistingDoc && submission.contacts.isNotEmpty)) ...[
+            if (contactAdded.isNotEmpty || contactRemoved.isNotEmpty) ...[
               const Text('Contact Information', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               if (contactAdded.isNotEmpty) ...[
@@ -1074,19 +1271,6 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 ...contactAdded.map((c) => Padding(
                   padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
                   child: Text('Contact No.: ${c['contact_number'] ?? "N/A"}, Email: ${c['email_address'] ?? "None"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                )),
-              ] else if (!isExistingDoc && submission.contacts.isNotEmpty) ...[
-                Row(
-                  children: const [
-                    Icon(Icons.check, color: Color(0xFF38BDF8), size: 16),
-                    SizedBox(width: 6),
-                    Text('Contacts Linked', style: TextStyle(color: Color(0xFF38BDF8), fontWeight: FontWeight.bold, fontSize: 13)),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                ...submission.contacts.map((c) => Padding(
-                  padding: const EdgeInsets.only(left: 22.0, bottom: 4.0),
-                  child: Text('Contact No.: ${c.contactNumber ?? "N/A"}, Email: ${c.emailAddress ?? "None"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                 )),
               ],
               if (contactRemoved.isNotEmpty) ...[

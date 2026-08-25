@@ -2524,7 +2524,7 @@ class ApiService extends ChangeNotifier {
     String effectiveHcpId = submission.hcpName;
 
     // 1. If Doctor is new / not in masterlist, create new Doctor in HCP doctype
-    if (effectiveHcpId.isEmpty) {
+    if (effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP') {
       try {
         final newDoctor = Hcp(
           firstName: submission.firstName ?? '',

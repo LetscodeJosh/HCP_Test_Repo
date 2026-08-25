@@ -605,21 +605,22 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                     );
                   },
                 ),
-                _buildActionButton(
-                  icon: Icons.groups_rounded,
-                  label: 'Doctor Listing',
-                  subtitle: apiService.isMedRep ? 'HCP (View Only)' : 'Manage & View HCPs',
-                  color: const Color(0xFF0066FF),
-                  onTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                    );
-                  },
-                ),
+                if (apiService.isAdmin)
+                  _buildActionButton(
+                    icon: Icons.groups_rounded,
+                    label: 'Doctor Listing',
+                    subtitle: 'Manage & View HCPs',
+                    color: const Color(0xFF0066FF),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                      );
+                    },
+                  ),
                 _buildActionButton(
                   icon: Icons.account_box_rounded,
                   label: 'Doctor Account',
-                  subtitle: apiService.isMedRep ? 'Accounts (View Only)' : 'Manage & View Accounts',
+                  subtitle: apiService.isMedRep ? 'My Doctor Accounts' : 'Manage & View Accounts',
                   color: const Color(0xFF8B5CF6),
                   onTap: () {
                     Navigator.of(context).push(
@@ -632,21 +633,19 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               if (isNarrow) {
                 return Column(
                   children: [
-                    buttons[0],
-                    const SizedBox(height: 10),
-                    buttons[1],
-                    const SizedBox(height: 10),
-                    buttons[2],
+                    for (int i = 0; i < buttons.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      buttons[i],
+                    ],
                   ],
                 );
               }
               return Row(
                 children: [
-                  Expanded(child: buttons[0]),
-                  const SizedBox(width: 10),
-                  Expanded(child: buttons[1]),
-                  const SizedBox(width: 10),
-                  Expanded(child: buttons[2]),
+                  for (int i = 0; i < buttons.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 10),
+                    Expanded(child: buttons[i]),
+                  ],
                 ],
               );
             },

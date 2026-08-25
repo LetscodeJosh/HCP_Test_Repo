@@ -195,22 +195,23 @@ class AppDrawer extends StatelessWidget {
                         }
                       },
                     ),
-                    const SizedBox(height: 4),
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.people_alt_rounded,
-                      title: 'Doctor Listing',
-                      subtitle: apiService.isMedRep ? 'View Only' : null,
-                      isSelected: currentItem == DrawerItem.doctorManagement,
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        if (currentItem != DrawerItem.doctorManagement) {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
-                          );
-                        }
-                      },
-                    ),
+                    if (apiService.isAdmin) ...[
+                      const SizedBox(height: 4),
+                      _buildMenuItem(
+                        context,
+                        icon: Icons.people_alt_rounded,
+                        title: 'Doctor Listing',
+                        isSelected: currentItem == DrawerItem.doctorManagement,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          if (currentItem != DrawerItem.doctorManagement) {
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(builder: (_) => const DoctorMasterlistScreen()),
+                            );
+                          }
+                        },
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     _buildMenuItem(
                       context,

@@ -737,31 +737,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
     }
 
+    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false);
+    final bool isNewDoctor = !isExistingDoctor;
+
     final structuredChanges = {
       'submission': '',
-      'hcp': _selectedDoctor?.name ?? '',
+      'hcp': isExistingDoctor ? (_selectedDoctor?.name ?? '') : '',
+      'is_new_doctor': isNewDoctor,
       'generated_on': DateTime.now().toIso8601String(),
       'generated_by': apiService.loggedInEmail ?? 'jptan@profinsights.biz',
       'version': 1,
-      'changes': {
-        'basic_information': basicInfoChanges,
-        'specializations': {
-          'added': specAdded,
-          'removed': specRemoved,
-        },
-        'workplaces': {
-          'added': wpAdded,
-          'removed': wpRemoved,
-        },
-        'contact_information': {
-          'added': contactAdded,
-          'removed': contactRemoved,
-        },
-      }
+      'changes': isNewDoctor
+          ? <String, dynamic>{}
+          : {
+              'basic_information': basicInfoChanges,
+              'specializations': {
+                'added': specAdded,
+                'removed': specRemoved,
+              },
+              'workplaces': {
+                'added': wpAdded,
+                'removed': wpRemoved,
+              },
+              'contact_information': {
+                'added': contactAdded,
+                'removed': contactRemoved,
+              },
+            }
     };
     final changesJsonStr = jsonEncode(structuredChanges);
 
-    // Build HTML Summary matching ERPNext v15 (clean/blank if no changes)
+    // Build HTML Summary matching ERPNext v15
     final sb = StringBuffer();
     final bool hasAnyChanges = basicInfoChanges.isNotEmpty ||
         specAdded.isNotEmpty ||
@@ -771,7 +777,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         contactAdded.isNotEmpty ||
         contactRemoved.isNotEmpty;
 
-    if (hasAnyChanges) {
+    if (isNewDoctor) {
+      sb.write('<h3>New Doctor Information</h3><br><hr><br>');
+      sb.write('<b>Doctor Name:</b> $fullDoctorName<br>');
+      if (_selectedHcpType != null) sb.write('<b>Classification:</b> $_selectedHcpType<br>');
+      if (_selectedPractice != null) sb.write('<b>Practice:</b> $_selectedPractice<br>');
+      if (_birthDateController.text.trim().isNotEmpty) sb.write('<b>Birth Date:</b> ${_birthDateController.text.trim()}<br>');
+      if (_selectedSpecialties.isNotEmpty) {
+        sb.write('<br><h4>Specializations</h4>');
+        for (var s in _selectedSpecialties) {
+          final specName = LocationResolver.resolveSpecialtyName(s.hcpSpecialty, _specializations);
+          final subName = LocationResolver.resolveSpecialtyName(s.subSpecialty, _specializations);
+          sb.write('• $specName${subName.isNotEmpty ? " (Sub: $subName)" : ""}${s.preferred ? " [Preferred]" : ""}<br>');
+        }
+      }
+      if (_selectedWorkplaces.isNotEmpty) {
+        sb.write('<br><h4>Workplaces</h4>');
+        for (var w in _selectedWorkplaces) {
+          final wpName = LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace, _institutions);
+          final provName = LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle);
+          final cityName = LocationResolver.resolveCityName(w.cityMunicipality ?? w.cityTitle);
+          final loc = [cityName, provName].where((x) => x.isNotEmpty).join(', ');
+          sb.write('• $wpName${loc.isNotEmpty ? " ($loc)" : ""}${w.preferred ? " [Preferred]" : ""}<br>');
+        }
+      }
+      if (_contacts.isNotEmpty) {
+        sb.write('<br><h4>Contact Information</h4>');
+        for (var c in _contacts) {
+          sb.write('• Phone: ${c.contactNumber ?? "N/A"}, Email: ${c.emailAddress ?? "None"}${c.preferred ? " [Preferred]" : ""}<br>');
+        }
+      }
+    } else if (hasAnyChanges) {
       sb.write('<h3>Summary of Changes</h3><br><hr><br>');
       if (basicInfoChanges.isNotEmpty) {
         sb.write('<h4>Basic Information</h4>');
@@ -831,25 +867,24 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     }
     final changeSummaryHtmlStr = sb.toString();
 
-    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false);
-
     // Determine approval requirement:
-    // - Adding new doctor not in masterlist: Auto-approved freely into HCP universe (status: "Approved", application_status: "Applied", docstatus: 1)
-    // - Updating existing doctor / changes: Requires Managerial Approval (status: "Pending Approval", application_status: "Not Applied", docstatus: 0)
-    // - Admin account: Unrestricted, can do both without restrictions.
-    final bool isNewDoctor = !isExistingDoctor;
-    final bool requiresApproval = isExistingDoctor && hasAnyChanges && !apiService.isAdmin;
-    final String targetWorkflow = isNewDoctor ? 'Approved' : (requiresApproval ? 'Pending Approval' : 'Approved');
-    final String targetAppStatus = isNewDoctor ? 'Applied' : (requiresApproval ? 'Not Applied' : 'Applied');
-    final int targetDocstatus = isNewDoctor ? 1 : (requiresApproval ? 0 : 1);
+    // - New doctor registration: Requires managerial approval (status: "Pending Approval", application_status: "Not Applied", docstatus: 0)
+    //   Do NOT create directly in HCP master universe DocType until approved!
+    // - Existing doctor update: No approval needed! Applies directly to HCP and HCP Account (status: "Approved", application_status: "Applied", docstatus: 1)
+    // - Admin account: Can submit directly without restrictions.
+    final bool requiresApproval = isNewDoctor && !apiService.isAdmin;
+    final String targetWorkflow = requiresApproval ? 'Pending Approval' : 'Approved';
+    final String targetAppStatus = requiresApproval ? 'Not Applied' : 'Applied';
+    final int targetDocstatus = requiresApproval ? 0 : 1;
 
     try {
-      String effectiveHcpId = isExistingDoctor ? _selectedDoctor!.name! : '';
+      String effectiveHcpId = isExistingDoctor ? (_selectedDoctor?.name ?? '') : '';
 
-      // If New Doctor, register directly into HCP master universe DocType
-      if (!isExistingDoctor) {
+      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account
+      if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
         try {
-          final newDoctor = Hcp(
+          final updatedDoctor = Hcp(
+            name: effectiveHcpId,
             hcpFullName: fullDoctorName,
             firstName: fn,
             middleName: mn.isNotEmpty ? mn : '-',
@@ -863,14 +898,25 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             contacts: _contacts.where((e) => (e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)).map((e) => HcpContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: e.preferred)).toList(),
             profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
           );
-          final createdDoc = await apiService.createDoctor(newDoctor);
-          effectiveHcpId = createdDoc.name ?? '';
-          if (!_allDoctors.any((d) => d.name == createdDoc.name)) {
-            _allDoctors.insert(0, createdDoc);
-          }
+          await apiService.updateDoctor(effectiveHcpId, updatedDoctor);
         } catch (e) {
-          print('Error registering new doctor into master universe: $e');
+          debugPrint('Error updating master doctor record: $e');
         }
+
+        // Also sync HCP Account directly for existing doctor
+        await apiService.syncHcpAccount(
+          hcpId: effectiveHcpId,
+          hcpFullName: fullDoctorName,
+          program: _selectedProgram,
+          territory: _selectedTerritory,
+          salesPerson: _territoryManagerController.text.trim().isNotEmpty
+              ? _territoryManagerController.text.trim()
+              : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
+          userId: apiService.loggedInEmail,
+          specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null && (e.preferred)).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: true, preferred: true)).toList(),
+          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null && (e.preferred)).map((e) => HcpAccountWorkplace(hcpWorkplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName, isPrimary: true, preferred: true)).toList(),
+          contacts: _contacts.where((e) => ((e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)) && (e.preferred)).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: true, preferred: true)).toList(),
+        );
       }
 
       final submission = HcpProfileSubmission(
@@ -912,23 +958,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
       await apiService.createSubmission(submission);
 
-      if (!requiresApproval) {
-        // Auto-sync active HCP Account for this program (for Admin/Manager direct actions)
-        await apiService.syncHcpAccount(
-          hcpId: effectiveHcpId.isNotEmpty ? effectiveHcpId : 'NEW-HCP',
-          hcpFullName: fullDoctorName,
-          program: _selectedProgram,
-          territory: _selectedTerritory,
-          salesPerson: _territoryManagerController.text.trim().isNotEmpty
-              ? _territoryManagerController.text.trim()
-              : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
-          userId: apiService.loggedInEmail,
-          specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null && (e.preferred)).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: true, preferred: true)).toList(),
-          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null && (e.preferred)).map((e) => HcpAccountWorkplace(hcpWorkplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName, isPrimary: true, preferred: true)).toList(),
-          contacts: _contacts.where((e) => ((e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)) && (e.preferred)).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: true, preferred: true)).toList(),
-        );
-      }
-
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -936,12 +965,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             backgroundColor: requiresApproval ? const Color(0xFF0066FF) : const Color(0xFF10B981),
             content: Text(
               requiresApproval
-                  ? (isExistingDoctor
-                      ? 'Doctor profile update submitted (Pending Managerial Approval).'
-                      : 'New doctor submitted to HCP Profile Submission (Pending Managerial Approval).')
-                  : (isExistingDoctor
-                      ? 'Doctor account confirmed for $_selectedProgram!'
-                      : 'New doctor registered directly to HCP universe and $_selectedProgram Account!'),
+                  ? 'New doctor submitted to HCP Profile Submission (Pending Managerial Approval).'
+                  : 'Doctor profile changes applied immediately to HCP Masterlist and $_selectedProgram Account!',
             ),
           ),
         );
@@ -2216,12 +2241,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   List<String> _getTabTitles() {
+    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false);
     return [
       'Step 1',
       if (_consentGiven) 'Step 2',
       if (_consentGiven) 'Step 3',
       if (_consentGiven) 'Others',
-      if (_consentGiven) 'Changes',
+      if (_consentGiven) (isExistingDoctor ? 'Changes' : 'New Doctor Information'),
     ];
   }
 
@@ -2914,7 +2940,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                               lName,
                             ].join(' ');
 
-                            final newDoctorPayload = Hcp(
+                            final createdDoctor = Hcp(
+                              name: '',
                               firstName: fName,
                               middleName: mName.isNotEmpty ? mName : null,
                               lastName: lName,
@@ -2930,36 +2957,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                               profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
                             );
 
-                            Hcp createdDoctor;
-                            try {
-                              createdDoctor = await apiService.createDoctor(newDoctorPayload);
-                            } catch (e) {
-                              debugPrint('Create doctor online exception, fallback to registered object: $e');
-                              final tempId = 'HCP-${DateTime.now().millisecondsSinceEpoch.toString().substring(5)}';
-                              createdDoctor = Hcp(
-                                name: tempId,
-                                firstName: fName,
-                                middleName: mName.isNotEmpty ? mName : null,
-                                lastName: lName,
-                                hcpFullName: computedFullName,
-                                birthDate: newBirthDateCtrl.text.trim().isNotEmpty ? newBirthDateCtrl.text.trim() : null,
-                                hcpPhoto: uploadedPhotoUrl,
-                                hcpType: newHcpType,
-                                hcpPractice: newPractice,
-                                isActive: newIsActive,
-                                specialties: newSpecialtiesList,
-                                workplaces: newWorkplacesList,
-                                contacts: newContactsList,
-                                profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
-                              );
-                            }
-
                             setState(() {
-                              if (!_allDoctors.any((d) => d.name == createdDoctor.name || (d.firstName == createdDoctor.firstName && d.lastName == createdDoctor.lastName))) {
-                                _allDoctors.insert(0, createdDoctor);
-                              }
-                              _selectedDoctor = createdDoctor;
-                              _doctorPhotoUrl = createdDoctor.hcpPhoto;
+                              _selectedDoctor = null; // Marked as new doctor
+                              _doctorPhotoUrl = uploadedPhotoUrl;
                               _doctorPhotoBytes = newDoctorPhotoBytes;
                               _doctorPhotoFile = newDoctorPhotoFile;
                               _prepopulateDoctorData(createdDoctor);
@@ -2969,7 +2969,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 backgroundColor: const Color(0xFF0066FF),
-                                content: Text('Doctor "${createdDoctor.firstName} ${createdDoctor.lastName}" created and selected in profiling wizard.'),
+                                content: Text('New Doctor "$computedFullName" details loaded into profiling wizard.'),
                               ),
                             );
                           },
@@ -5253,7 +5253,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Summary of Changes', style: TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                isExistingDoctor ? 'Summary of Changes' : 'New Doctor Information',
+                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(

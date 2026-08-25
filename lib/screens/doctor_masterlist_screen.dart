@@ -4,10 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/hcp.dart';
 import '../models/lookup_models.dart';
-import '../models/hcp_account.dart';
 import '../models/submission.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
+import 'doctor_account_screen.dart';
 
 class DoctorMasterlistScreen extends StatefulWidget {
   const DoctorMasterlistScreen({Key? key}) : super(key: key);
@@ -1156,6 +1156,64 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   @override
   Widget build(BuildContext context) {
     final apiService = Provider.of<ApiService>(context);
+
+    if (!apiService.isAdmin) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF4F6F9),
+        appBar: AppBar(
+          centerTitle: true,
+          title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+          backgroundColor: const Color(0xFF0B192C),
+          elevation: 0,
+        ),
+        drawer: const AppDrawer(currentItem: DrawerItem.dashboard),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.lock_outline_rounded, color: Color(0xFFEF4444), size: 48),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Access Restricted',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'The global Doctor Masterlist is restricted to System Administrators in ERPNext.\nPlease use "Doctor Account" to view and manage your assigned doctors.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0066FF),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.account_box_rounded, color: Colors.white, size: 18),
+                  label: const Text('Go to Doctor Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9), // Soft Light Background for Darkish Blue & White combination
