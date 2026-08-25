@@ -435,6 +435,11 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
           ),
         ...displayList.map((w) {
           final isPref = w.isPrimary;
+          final locInfo = [
+            if (w.address != null && w.address!.isNotEmpty && w.address != w.workplace) w.address!,
+            if (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) w.cityMunicipality!,
+            if (w.provinceName != null && w.provinceName!.isNotEmpty) w.provinceName!,
+          ].join(', ');
           return Container(
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 8),
@@ -465,11 +470,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                           fontWeight: isPref ? FontWeight.bold : FontWeight.w600,
                         ),
                       ),
-                      final locInfo = [
-                        if (w.address != null && w.address!.isNotEmpty && w.address != w.workplace) w.address!,
-                        if (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) w.cityMunicipality!,
-                        if (w.provinceName != null && w.provinceName!.isNotEmpty) w.provinceName!,
-                      ].join(', ');
                       if (locInfo.isNotEmpty)
                         Text(
                           locInfo,
