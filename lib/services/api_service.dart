@@ -818,7 +818,8 @@ class ApiService extends ChangeNotifier {
       if (_userDesignation.isEmpty) _userDesignation = 'Administrator';
     } 
     // 2. Managerial Designation (GM, DSM, RSM, ASM, Supervisor, Approver)
-    else if (lowerDes.contains('district sales manager') ||
+    else if (lowerEmail == 'admendoza@profinsights.biz' ||
+             lowerDes.contains('district sales manager') ||
              lowerDes.contains('regional sales manager') ||
              lowerDes.contains('area sales manager') ||
              lowerDes.contains('general manager') ||
