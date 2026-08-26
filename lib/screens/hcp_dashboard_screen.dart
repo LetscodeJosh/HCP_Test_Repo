@@ -271,19 +271,24 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   Widget build(BuildContext context) {
     final apiService = Provider.of<ApiService>(context);
 
-    final mySubmissions = _submissions.where((s) {
-      final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
-      final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
-      final sEmail = (s.medrepEmail ?? s.userId ?? '').toLowerCase().trim();
-      final sSales = (s.salesPerson ?? '').toLowerCase().trim();
-      if (sEmail.isNotEmpty && email.isNotEmpty && (sEmail == email || email.contains(sEmail) || sEmail.contains(email))) return true;
-      if (sSales.isNotEmpty && fullName.isNotEmpty && (sSales.contains(fullName) || fullName.contains(sSales))) return true;
-      return false;
-    }).toList();
+    // Scope submissions to program for MedRep and Manager; Admin sees all
+    List<HcpProfileSubmission> progSubmissions = List.from(_submissions);
+    if (!apiService.isAdmin) {
+      final userProg = apiService.selectedProgram.toLowerCase().trim();
+      if (userProg.isNotEmpty && userProg != 'all') {
+        progSubmissions = progSubmissions.where((s) {
+          final subProg = (s.accountOrProgram ?? '').toLowerCase().trim();
+          if (subProg.isEmpty) return true;
+          return subProg.contains(userProg) ||
+              userProg.contains(subProg) ||
+              (userProg.contains('abbott') && subProg.contains('abbott')) ||
+              (userProg.contains('adc') && subProg.contains('abbott')) ||
+              (userProg.contains('corenergy') && subProg.contains('corenergy'));
+        }).toList();
+      }
+    }
 
-    final effectiveSubmissions = (apiService.isMedRep && mySubmissions.isNotEmpty)
-        ? mySubmissions
-        : _submissions;
+    final effectiveSubmissions = progSubmissions;
 
     final approvedSubmissions = effectiveSubmissions.where((s) => s.docstatus == 1 || s.applicationStatus == 'Applied').length;
     final syncRatePercent = effectiveSubmissions.isNotEmpty
