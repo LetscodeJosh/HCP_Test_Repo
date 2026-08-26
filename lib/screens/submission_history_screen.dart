@@ -88,9 +88,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       }
     }
 
-    // 2. Role-based Submissions Ownership Filter (MedRep is strictly locked to own submissions)
-    final bool enforceMySubmissions = apiService.isMedRep || (_onlyMySubmissions && apiService.isAdmin);
-    if (enforceMySubmissions) {
+    // 2. Submissions Scope Filter (Defaults to All Program Submissions; toggleable to My Submissions)
+    if (_onlyMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
       final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
