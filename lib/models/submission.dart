@@ -29,6 +29,7 @@ class HcpProfileSubmission {
   final String? surveyTemplate; // Link -> HCP Survey Template
   final String? surveyTemplateTitle;
   final String? medrepEmail; // Link -> User
+  final String? owner;
   final String? submissionDate;
   final String? surveyResponse; // Link -> HCP Survey Response
   final List<SubmissionAnswer> answers; // Table -> HCP Profile Submission Answer
@@ -71,6 +72,7 @@ class HcpProfileSubmission {
     this.surveyTemplate,
     this.surveyTemplateTitle,
     this.medrepEmail,
+    this.owner,
     this.submissionDate,
     this.surveyResponse,
     this.answers = const [],
@@ -140,6 +142,7 @@ class HcpProfileSubmission {
       surveyTemplate: json['survey_template'],
       surveyTemplateTitle: json['survey_template_title'],
       medrepEmail: json['medrep_email'] ?? json['user_id'],
+      owner: json['owner'] ?? json['user_id'] ?? json['medrep_email'],
       submissionDate: json['submission_date'],
       surveyResponse: json['survey_response'],
       answers: (json['answers'] as List?)

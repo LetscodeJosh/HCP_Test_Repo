@@ -90,7 +90,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
       list = list.where((item) {
-        final sEmail = (item.medrepEmail ?? item.userId ?? '').toLowerCase().trim();
+        final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
         final sSales = (item.salesPerson ?? '').toLowerCase().trim();
         if (sEmail.isNotEmpty && email.isNotEmpty && (sEmail == email || email.contains(sEmail) || sEmail.contains(email))) return true;
         if (sSales.isNotEmpty && fullName.isNotEmpty && (sSales.contains(fullName) || fullName.contains(sSales))) return true;

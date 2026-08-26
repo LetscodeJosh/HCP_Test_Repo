@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../models/lookup_models.dart';
 import '../../services/api_service.dart';
 import '../hcp_dashboard_screen.dart';
 import '../doctor_masterlist_screen.dart';
@@ -547,9 +548,13 @@ class _InstitutionsListModalState extends State<_InstitutionsListModal> {
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (ctx, idx) {
                           final item = filtered[idx];
-                          final name = item.institutionName ?? item.name ?? 'Unnamed Institution';
-                          final location = [item.cityMunicipality, item.provinceName, item.regionName]
-                              .where((s) => s != null && s.toString().isNotEmpty)
+                          final name = LocationResolver.resolveInstitutionName(item.institutionName ?? item.name);
+                          final resolvedCity = LocationResolver.resolveCityName(item.cityMunicipality);
+                          final resolvedProv = LocationResolver.resolveProvinceName(item.provinceName);
+                          final resolvedReg = LocationResolver.resolveRegionName(item.regionName);
+                          final location = [resolvedCity, resolvedProv, resolvedReg]
+                              .where((s) => s.isNotEmpty && s != '-')
+                              .toSet()
                               .join(', ');
 
                           return Container(

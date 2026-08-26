@@ -18,12 +18,16 @@ class Institution {
   });
 
   factory Institution.fromJson(Map<String, dynamic> json) {
+    final rawCity = json['city_municipality'] ?? json['city'] ?? json['city_title'];
+    final rawProv = json['province_name'] ?? json['province'] ?? json['province_title'];
+    final rawReg = json['region_name'] ?? json['region'] ?? json['region_title'];
+    final rawInstName = json['institution_name'] ?? json['institution'] ?? json['name'] ?? '';
     return Institution(
       name: json['name'] ?? '',
-      institutionName: json['institution_name'] ?? '',
-      regionName: json['region_name'],
-      provinceName: json['province_name'],
-      cityMunicipality: json['city_municipality'],
+      institutionName: LocationResolver.resolveInstitutionName(rawInstName.toString()),
+      regionName: rawReg != null ? LocationResolver.resolveRegionName(rawReg.toString()) : null,
+      provinceName: rawProv != null ? LocationResolver.resolveProvinceName(rawProv.toString()) : null,
+      cityMunicipality: rawCity != null ? LocationResolver.resolveCityName(rawCity.toString()) : null,
       barangayName: json['barangay_name'],
       streetAddress: json['street_address'],
     );
