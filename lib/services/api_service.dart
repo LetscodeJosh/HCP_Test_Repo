@@ -786,6 +786,10 @@ class ApiService extends ChangeNotifier {
           }
 
           _applyPositionFromDesignation(designation, userEmail, roleNames);
+
+          // Auto-detect selectedProgram from employee department/branch
+          _autoDetectProgram();
+
           notifyListeners();
         }
       }
@@ -793,6 +797,32 @@ class ApiService extends ChangeNotifier {
       print('Error fetching logged in user info: $e');
       _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
     }
+  }
+
+  /// Auto-detect the user's program from their ERPNext department or branch
+  void _autoDetectProgram() {
+    final dept = (employeeDepartment ?? '').toLowerCase().trim();
+    final branch = (employeeBranch ?? '').toLowerCase().trim();
+    final combined = '$dept $branch';
+
+    if (combined.contains('abbott') || combined.contains('adc')) {
+      selectedProgram = 'Abbott Diabetes Care';
+    } else if (combined.contains('corenergy') || combined.contains('cor energy')) {
+      selectedProgram = 'COREnergy';
+    } else if (combined.contains('nes')) {
+      selectedProgram = 'NES';
+    } else if (combined.contains('nurturemed')) {
+      selectedProgram = 'Nurturemed';
+    } else if (combined.contains('pch')) {
+      selectedProgram = 'PCH 1';
+    } else if (combined.contains('pharmabest')) {
+      selectedProgram = 'Pharmabest';
+    } else if (combined.contains('tstacco')) {
+      selectedProgram = 'TSTACCO';
+    } else if (combined.contains('tstacc1')) {
+      selectedProgram = 'TSTACC1';
+    }
+    // Admin stays on whatever default or last-used program
   }
 
   void _applyPositionFromDesignation(String designation, String email, List<String> roleNames) {
