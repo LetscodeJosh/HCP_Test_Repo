@@ -1408,42 +1408,40 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   });
                 },
               ),
-              if (apiService.isAdmin) ...[
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _onlyMySubmissions = !_onlyMySubmissions;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _onlyMySubmissions ? const Color(0xFF0066FF).withOpacity(0.2) : const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _onlyMySubmissions ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _onlyMySubmissions ? Icons.person_rounded : Icons.groups_rounded,
-                          size: 14,
+              const SizedBox(width: 8),
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _onlyMySubmissions = !_onlyMySubmissions;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: _onlyMySubmissions ? const Color(0xFF0066FF).withOpacity(0.2) : const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: _onlyMySubmissions ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _onlyMySubmissions ? Icons.person_rounded : Icons.groups_rounded,
+                        size: 14,
+                        color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _onlyMySubmissions ? 'My Submissions' : (apiService.isAdmin ? 'All Scope' : 'Program Scope'),
+                        style: TextStyle(
                           color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _onlyMySubmissions ? 'My Submissions' : 'All Scope',
-                          style: TextStyle(
-                            color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
               const Spacer(),
               IconButton(
                 style: IconButton.styleFrom(
