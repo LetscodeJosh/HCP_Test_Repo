@@ -2366,16 +2366,26 @@ class ApiService extends ChangeNotifier {
     List<HcpAccountContact> contacts = const [],
   }) async {
     try {
+      final cleanProgram = LocationResolver.resolveProgramBranch(program);
+
       // Check if HCP Account already exists for this doctor and program
       final searchUrl = Uri.parse(
-        '$baseUrl/api/resource/HCP%20Account?filters=[["hcp","=","$hcpId"],["account_or_program","=","$program"]]&fields=["name"]',
+        '$baseUrl/api/resource/HCP%20Account?filters=[["hcp","=","$hcpId"]]&fields=["name","account_or_program"]&limit_page_length=50',
       );
       final searchResp = await http.get(searchUrl, headers: _headers);
       String? existingAccountName;
       if (searchResp.statusCode == 200) {
         final searchBody = jsonDecode(searchResp.body);
         final List<dynamic> data = searchBody['data'] ?? [];
-        if (data.isNotEmpty) {
+        final targetProg = cleanProgram.toLowerCase().trim();
+        for (var d in data) {
+          final aProg = (d['account_or_program'] ?? '').toString().toLowerCase().trim();
+          if (aProg == targetProg || aProg.contains(targetProg) || targetProg.contains(aProg)) {
+            existingAccountName = d['name'];
+            break;
+          }
+        }
+        if (existingAccountName == null && data.isNotEmpty) {
           existingAccountName = data[0]['name'];
         }
       }
@@ -2386,96 +2396,83 @@ class ApiService extends ChangeNotifier {
 
       final validFrom = HcpAccount.calculateMonthValidFrom();
       final validTo = HcpAccount.calculateMonthValidTo();
-      final validityPeriod = HcpAccount.calculateMonthLabel();
 
-      // Only store PREFERRED data in HCP Account doctype
-      final prefSpecs = specialties.where((s) => s.preferred || s.isPrimary).toList();
-      final effectiveSpecs = prefSpecs.isNotEmpty ? prefSpecs : (specialties.isNotEmpty ? [specialties.first] : <HcpAccountSpecialization>[]);
-
-      final prefWps = workplaces.where((w) => w.preferred || w.isPrimary).toList();
-      final effectiveWps = prefWps.isNotEmpty ? prefWps : (workplaces.isNotEmpty ? [workplaces.first] : <HcpAccountWorkplace>[]);
-
-      final prefContacts = contacts.where((c) => c.preferred || c.isPrimary).toList();
-      final effectiveContacts = prefContacts.isNotEmpty ? prefContacts : (contacts.isNotEmpty ? [contacts.first] : <HcpAccountContact>[]);
-
-      final accountData = HcpAccount(
-        name: existingAccountName,
-        accountName: program,
-        territory: territory,
-        salesPerson: effectiveSalesPerson,
-        userId: userId ?? loggedInEmail ?? 'jptan@profinsights.biz',
-        hcp: hcpId,
-        hcpName: hcpFullName,
-        specialties: effectiveSpecs,
-        workplaces: effectiveWps,
-        contacts: effectiveContacts,
-        validFrom: validFrom,
-        validTo: validTo,
-        startDate: validFrom,
-        endDate: validTo,
-        validityPeriod: validityPeriod,
-        isActive: true,
-        isArchived: false,
-        status: 'Active',
-      );
-
-      final payload = accountData.toJson();
-
-      // Clean specialization links
-      if (payload['specialization'] is List && (payload['specialization'] as List).isNotEmpty) {
-        final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
-        if (specs.isNotEmpty) {
-          final List<Map<String, dynamic>> cleanSpecs = [];
-          for (var item in (payload['specialization'] as List)) {
-            if (item is Map<String, dynamic>) {
-              final map = Map<String, dynamic>.from(item);
-              final rawSpec = (map['hcp_specialty'] ?? map['specialty'] ?? '').toString().trim();
-              if (rawSpec.isNotEmpty) {
-                final match = specs.firstWhere(
-                  (s) => s.name == rawSpec || s.specialty.toLowerCase() == rawSpec.toLowerCase(),
-                  orElse: () => specs.first,
-                );
-                map['hcp_specialty'] = match.name;
-              }
-              final rawSub = (map['sub_specialty'] ?? '').toString().trim();
-              if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
-                final subMatch = specs.firstWhere(
-                  (s) => s.name == rawSub || s.specialty.toLowerCase() == rawSub.toLowerCase(),
-                  orElse: () => specs.first,
-                );
-                map['sub_specialty'] = subMatch.name;
-              } else {
-                map.remove('sub_specialty');
-              }
-              cleanSpecs.add(map);
-            }
-          }
-          payload['specialization'] = cleanSpecs;
+      // Clean specialization child table links
+      final List<Map<String, dynamic>> cleanSpecs = [];
+      for (var s in specialties) {
+        final sId = LocationResolver.resolveSpecialtyId(s.hcpSpecialty);
+        if (sId.isNotEmpty) {
+          final subId = (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-')
+              ? LocationResolver.resolveSpecialtyId(s.subSpecialty)
+              : null;
+          cleanSpecs.add({
+            'hcp_specialty': sId,
+            'specialty': sId,
+            if (subId != null && subId.isNotEmpty) 'sub_specialty': subId,
+            'is_primary': (s.isPrimary || s.preferred) ? 1 : 0,
+            'preferred': (s.isPrimary || s.preferred) ? 1 : 0,
+          });
         }
       }
 
-      // Clean workplace_info links
-      if (payload['workplace_info'] is List && (payload['workplace_info'] as List).isNotEmpty) {
-        final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
-        if (insts.isNotEmpty) {
-          final List<Map<String, dynamic>> cleanWps = [];
-          for (var item in (payload['workplace_info'] as List)) {
-            if (item is Map<String, dynamic>) {
-              final map = Map<String, dynamic>.from(item);
-              final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? '').toString().trim();
-              if (rawWp.isNotEmpty) {
-                final match = insts.firstWhere(
-                  (i) => i.name == rawWp || i.institutionName.toLowerCase() == rawWp.toLowerCase(),
-                  orElse: () => insts.first,
-                );
-                map['hcp_workplace'] = match.name;
-              }
-              cleanWps.add(map);
-            }
-          }
-          payload['workplace_info'] = cleanWps;
+      // Clean workplace child table links
+      final List<Map<String, dynamic>> cleanWps = [];
+      for (var w in workplaces) {
+        final wpId = LocationResolver.resolveInstitutionId(w.hcpWorkplace);
+        if (wpId.isNotEmpty) {
+          final provId = LocationResolver.resolveProvinceId(w.provinceName);
+          final cityId = LocationResolver.resolveCityId(w.cityMunicipality);
+          cleanWps.add({
+            'hcp_workplace': wpId,
+            'workplace': wpId,
+            if (provId.isNotEmpty) 'province_name': provId,
+            if (cityId.isNotEmpty) 'city_municipality': cityId,
+            'is_primary': (w.isPrimary || w.preferred) ? 1 : 0,
+            'preferred': (w.isPrimary || w.preferred) ? 1 : 0,
+          });
         }
       }
+
+      // Clean contact child table
+      final List<Map<String, dynamic>> cleanContacts = [];
+      for (var c in contacts) {
+        final num = (c.contactNumber ?? '').trim();
+        final em = (c.emailAddress ?? '').trim();
+        if (num.isNotEmpty || em.isNotEmpty) {
+          cleanContacts.add({
+            if (num.isNotEmpty) 'contact_number': num,
+            if (em.isNotEmpty) 'email_address': em,
+            'is_primary': (c.isPrimary || c.preferred) ? 1 : 0,
+            'preferred': (c.isPrimary || c.preferred) ? 1 : 0,
+          });
+        }
+      }
+
+      // Extract summary top-level fields for preferred data
+      final primarySpecId = cleanSpecs.isNotEmpty ? cleanSpecs.first['hcp_specialty'] : null;
+      final primarySubSpecId = cleanSpecs.isNotEmpty ? cleanSpecs.first['sub_specialty'] : null;
+      final primaryWpId = cleanWps.isNotEmpty ? cleanWps.first['hcp_workplace'] : null;
+      final primaryContactNum = cleanContacts.isNotEmpty ? cleanContacts.first['contact_number'] : null;
+      final primaryEmail = cleanContacts.isNotEmpty ? cleanContacts.first['email_address'] : null;
+
+      final Map<String, dynamic> payload = {
+        'account_or_program': cleanProgram,
+        'territory': territory,
+        'sales_person': effectiveSalesPerson,
+        'user_id': userId ?? loggedInEmail ?? 'jptan@profinsights.biz',
+        'hcp': hcpId,
+        'hcp_name': hcpFullName,
+        'valid_from': validFrom,
+        'valid_to': validTo,
+        if (primarySpecId != null) 'specialty': primarySpecId,
+        if (primarySubSpecId != null) 'sub_specialty': primarySubSpecId,
+        if (primaryWpId != null) 'workplace_id': primaryWpId,
+        if (primaryContactNum != null) 'contact_number': primaryContactNum,
+        if (primaryEmail != null) 'contact_email': primaryEmail,
+        'specialization': cleanSpecs,
+        'workplace_info': cleanWps,
+        'contact_info': cleanContacts,
+      };
 
       if (existingAccountName != null) {
         final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(existingAccountName)}');
@@ -2512,7 +2509,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Sync HCP Account error (non-fatal): $e');
+      print('Sync HCP Account error: $e');
     }
   }
 

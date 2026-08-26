@@ -1080,4 +1080,30 @@ class LocationResolver {
 
     return trimmed;
   }
+
+  /// Resolve program / branch name to official ERPNext Branch name
+  static String resolveProgramBranch(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return 'Abbott Diabetes Care';
+    final trimmed = raw.trim();
+    final lower = trimmed.toLowerCase();
+    if (lower == 'adc' || lower.contains('abbott diabetes') || lower == 'abbott') {
+      return 'Abbott Diabetes Care';
+    }
+    if (lower.contains('corenergy')) {
+      return 'COREnergy';
+    }
+    if (lower.contains('bayer')) {
+      return 'Bayer Consumer Health - Team 1';
+    }
+    if (lower.contains('fonterra anlene')) {
+      return 'FONTERRA ANLENE';
+    }
+    if (lower.contains('fonterra anmum')) {
+      return 'FONTERRA ANMUM';
+    }
+    if (lower.contains('gsk')) {
+      return 'GSK HCP Profiling';
+    }
+    return trimmed;
+  }
 }

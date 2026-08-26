@@ -913,9 +913,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ? _territoryManagerController.text.trim()
               : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
           userId: apiService.loggedInEmail,
-          specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null && (e.preferred)).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: true, preferred: true)).toList(),
-          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null && (e.preferred)).map((e) => HcpAccountWorkplace(hcpWorkplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName, isPrimary: true, preferred: true)).toList(),
-          contacts: _contacts.where((e) => ((e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)) && (e.preferred)).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: true, preferred: true)).toList(),
+          specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred, preferred: e.preferred)).toList(),
+          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpAccountWorkplace(hcpWorkplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName, isPrimary: e.preferred, preferred: e.preferred)).toList(),
+          contacts: _contacts.where((e) => ((e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty))).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: e.preferred, preferred: e.preferred)).toList(),
         );
       }
 

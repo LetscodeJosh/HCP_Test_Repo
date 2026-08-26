@@ -50,7 +50,12 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
         if (apiService.selectedProgram.isEmpty || apiService.selectedProgram == 'All') return true;
         final prog = apiService.selectedProgram.toLowerCase().trim();
         final accProg = acc.accountName.toLowerCase().trim();
-        return accProg == prog || accProg.contains(prog) || prog.contains(accProg);
+        return accProg == prog ||
+            accProg.contains(prog) ||
+            prog.contains(accProg) ||
+            (prog.contains('abbott') && accProg.contains('abbott')) ||
+            (prog.contains('adc') && accProg.contains('abbott')) ||
+            (prog.contains('corenergy') && accProg.contains('corenergy'));
       }).toList();
 
       setState(() {
