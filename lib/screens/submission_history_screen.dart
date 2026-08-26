@@ -58,35 +58,39 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   List<HcpProfileSubmission> _getFilteredAndSortedSubmissions(ApiService apiService) {
     List<HcpProfileSubmission> list = List.from(_submissions);
 
-    // Program Filter
-    if (_programFilter != 'All') {
-      final prog = _programFilter.toLowerCase().trim();
-      list = list.where((item) {
-        final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
-        if (subProg.isEmpty) return true;
-        return subProg.contains(prog) ||
-            prog.contains(subProg) ||
-            (prog.contains('abbott') && subProg.contains('abbott')) ||
-            (prog.contains('adc') && subProg.contains('abbott')) ||
-            (prog.contains('corenergy') && subProg.contains('corenergy'));
-      }).toList();
-    } else if (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All') {
-      final prog = apiService.selectedProgram.toLowerCase().trim();
-      final matches = list.where((item) {
-        final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
-        if (subProg.isEmpty) return true;
-        return subProg.contains(prog) ||
-            prog.contains(subProg) ||
-            (prog.contains('abbott') && subProg.contains('abbott')) ||
-            (prog.contains('adc') && subProg.contains('abbott')) ||
-            (prog.contains('corenergy') && subProg.contains('corenergy'));
-      }).toList();
-      if (matches.isNotEmpty) {
-        list = matches;
+    // 1. Role-based Program Isolation
+    if (apiService.isAdmin) {
+      if (_programFilter != 'All') {
+        final prog = _programFilter.toLowerCase().trim();
+        list = list.where((item) {
+          final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
+          if (subProg.isEmpty) return true;
+          return subProg.contains(prog) ||
+              prog.contains(subProg) ||
+              (prog.contains('abbott') && subProg.contains('abbott')) ||
+              (prog.contains('adc') && subProg.contains('abbott')) ||
+              (prog.contains('corenergy') && subProg.contains('corenergy'));
+        }).toList();
+      }
+    } else {
+      // Manager & MedRep are strictly scoped to their assigned program
+      final userProg = apiService.selectedProgram.toLowerCase().trim();
+      if (userProg.isNotEmpty && userProg != 'all') {
+        list = list.where((item) {
+          final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
+          if (subProg.isEmpty) return true;
+          return subProg.contains(userProg) ||
+              userProg.contains(subProg) ||
+              (userProg.contains('abbott') && subProg.contains('abbott')) ||
+              (userProg.contains('adc') && subProg.contains('abbott')) ||
+              (userProg.contains('corenergy') && subProg.contains('corenergy'));
+        }).toList();
       }
     }
 
-    if (_onlyMySubmissions) {
+    // 2. Role-based Submissions Ownership Filter (MedRep is strictly locked to own submissions)
+    final bool enforceMySubmissions = apiService.isMedRep || (_onlyMySubmissions && apiService.isAdmin);
+    if (enforceMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
       list = list.where((item) {
@@ -1389,7 +1393,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   });
                 },
               ),
-              if (apiService.isMedRep) ...[
+              if (apiService.isAdmin) ...[
                 const SizedBox(width: 8),
                 InkWell(
                   onTap: () {
@@ -1595,30 +1599,32 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Container(
-                    height: 36,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF334155)),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _programFilter,
-                        dropdownColor: const Color(0xFF0F172A),
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
-                        items: [
-                          const DropdownMenuItem(value: 'All', child: Text('Program: All')),
-                          ...apiService.availablePrograms.map((p) => DropdownMenuItem(value: p, child: Text(p))),
-                        ],
-                        onChanged: (val) {
-                          if (val != null) setState(() => _programFilter = val);
-                        },
+                  if (apiService.isAdmin) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      height: 36,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E293B),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF334155)),
+                      ),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _programFilter,
+                          dropdownColor: const Color(0xFF0F172A),
+                          style: const TextStyle(color: Colors.white, fontSize: 12),
+                          items: [
+                            const DropdownMenuItem(value: 'All', child: Text('Program: All')),
+                            ...apiService.availablePrograms.map((p) => DropdownMenuItem(value: p, child: Text(p))),
+                          ],
+                          onChanged: (val) {
+                            if (val != null) setState(() => _programFilter = val);
+                          },
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

@@ -32,9 +32,17 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
   String _sortBy = 'Name of Doctor';
   bool _isAscending = true;
 
+  String _programFilter = 'All';
+
   @override
   void initState() {
     super.initState();
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    if (!apiService.isAdmin && apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All') {
+      _programFilter = apiService.selectedProgram;
+    } else {
+      _programFilter = 'All';
+    }
     _loadAccounts();
   }
 
@@ -46,20 +54,8 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
       final doctorsList = await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
       final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
 
-      final filtered = items.where((acc) {
-        if (apiService.selectedProgram.isEmpty || apiService.selectedProgram == 'All') return true;
-        final prog = apiService.selectedProgram.toLowerCase().trim();
-        final accProg = acc.accountName.toLowerCase().trim();
-        return accProg == prog ||
-            accProg.contains(prog) ||
-            prog.contains(accProg) ||
-            (prog.contains('abbott') && accProg.contains('abbott')) ||
-            (prog.contains('adc') && accProg.contains('abbott')) ||
-            (prog.contains('corenergy') && accProg.contains('corenergy'));
-      }).toList();
-
       setState(() {
-        _allAccounts = filtered;
+        _allAccounts = items;
         _doctors = doctorsList;
         _hcpTypes = types;
         _applyFilters();
@@ -98,8 +94,35 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
   }
 
   void _applyFilters() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
     setState(() {
       _filteredAccounts = _allAccounts.where((acc) {
+        // 1. Program Isolation by Role
+        if (apiService.isAdmin) {
+          if (_programFilter != 'All') {
+            final p = _programFilter.toLowerCase().trim();
+            final accP = acc.accountName.toLowerCase().trim();
+            final match = accP == p || accP.contains(p) || p.contains(accP) ||
+                (p.contains('abbott') && accP.contains('abbott')) ||
+                (p.contains('adc') && accP.contains('abbott')) ||
+                (p.contains('corenergy') && accP.contains('corenergy'));
+            if (!match) return false;
+          }
+        } else {
+          // Manager and MedRep are strictly locked to their program
+          final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
+              ? apiService.selectedProgram.toLowerCase().trim()
+              : _programFilter.toLowerCase().trim();
+          if (userProg.isNotEmpty && userProg != 'all') {
+            final accP = acc.accountName.toLowerCase().trim();
+            final match = accP == userProg || accP.contains(userProg) || userProg.contains(accP) ||
+                (userProg.contains('abbott') && accP.contains('abbott')) ||
+                (userProg.contains('adc') && accP.contains('abbott')) ||
+                (userProg.contains('corenergy') && accP.contains('corenergy'));
+            if (!match) return false;
+          }
+        }
+
         final doc = _getMatchedDoctor(acc);
         final nameStr = _getDoctorFullName(acc).toLowerCase();
         final idStr = (acc.name ?? acc.hcp ?? '').toLowerCase();
@@ -111,9 +134,10 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
         final matchesIsActive = !_onlyIsActive || doc.isActive;
 
         final isCurrentMonth = acc.isCurrentMonthActive();
-        final matchesCycle = _selectedCycleFilter == 'All' ||
-            (_selectedCycleFilter == 'Current Month' && isCurrentMonth) ||
-            (_selectedCycleFilter == 'Archived / Past' && !isCurrentMonth);
+        final effectiveCycle = (!apiService.isAdmin && _selectedCycleFilter == 'All') ? 'Current Month' : _selectedCycleFilter;
+        final matchesCycle = effectiveCycle == 'All' ||
+            (effectiveCycle == 'Current Month' && isCurrentMonth) ||
+            (effectiveCycle == 'Archived / Past' && !isCurrentMonth);
 
         return matchesId && matchesName && matchesType && matchesPractice && matchesIsActive && matchesCycle;
       }).toList();
@@ -776,6 +800,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
 
   // --- ERPNext Filter Bar (Darkish Blue #0B192C Theme) ---
   Widget _buildFilterAndSortBar() {
+    final apiService = Provider.of<ApiService>(context);
     final currentMonthLabel = HcpAccount.calculateMonthLabel();
     final validFromStr = HcpAccount.calculateMonthValidFrom();
     final validToStr = HcpAccount.calculateMonthValidTo();
@@ -852,8 +877,10 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                 _buildCycleFilterChip('Current Month ($currentMonthLabel)', 'Current Month', Icons.calendar_month_rounded),
                 const SizedBox(width: 8),
                 _buildCycleFilterChip('Archived / Past Months', 'Archived / Past', Icons.archive_outlined),
-                const SizedBox(width: 8),
-                _buildCycleFilterChip('All Accounts', 'All', Icons.people_alt_outlined),
+                if (apiService.isAdmin) ...[
+                  const SizedBox(width: 8),
+                  _buildCycleFilterChip('All Accounts', 'All', Icons.people_alt_outlined),
+                ],
               ],
             ),
           ),
@@ -948,6 +975,41 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
               spacing: 8,
               runSpacing: 8,
               children: [
+                // Program Filter Dropdown (Admin only)
+                if (apiService.isAdmin) ...[
+                  Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _programFilter,
+                        dropdownColor: const Color(0xFF1E293B),
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 18),
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _programFilter = val;
+                              _applyFilters();
+                            });
+                          }
+                        },
+                        items: const [
+                          DropdownMenuItem(value: 'All', child: Text('Program: All')),
+                          DropdownMenuItem(value: 'Abbott Diabetes Care', child: Text('Abbott Diabetes Care')),
+                          DropdownMenuItem(value: 'COREnergy', child: Text('COREnergy')),
+                          DropdownMenuItem(value: 'Bayer', child: Text('Bayer')),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
                 // ID Filter Box
                 SizedBox(
                   width: 120,
