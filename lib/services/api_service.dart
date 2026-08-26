@@ -1865,8 +1865,9 @@ class ApiService extends ChangeNotifier {
     }
 
     const submissionFields = '["name","owner","creation","modified","docstatus","application_status","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
+    final encodedFields = Uri.encodeQueryComponent(submissionFields);
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$submissionFields&limit=500&order_by=creation%20desc',
+      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit=500&order_by=creation%20desc',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1885,7 +1886,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=$submissionFields&limit_page_length=500&order_by=creation%20desc',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=$encodedFields&limit_page_length=500&order_by=creation%20desc',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
