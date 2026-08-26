@@ -870,9 +870,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     // Determine approval requirement:
     // - New doctor registration: Requires managerial approval (status: "Pending Approval", application_status: "Not Applied", docstatus: 0)
     //   Do NOT create directly in HCP master universe DocType until approved!
-    // - Existing doctor update: No approval needed! Applies directly to HCP and HCP Account (status: "Approved", application_status: "Applied", docstatus: 1)
-    // - Admin account: Can submit directly without restrictions.
-    final bool requiresApproval = isNewDoctor && !apiService.isAdmin;
+    // - Existing doctor update: Requires approval if submitted by MedRep/Employee role.
+    // - Admin/Manager accounts: Can submit directly without restrictions.
+    final bool requiresApproval = !apiService.isAdmin && !apiService.isManager;
     final String targetWorkflow = requiresApproval ? 'Pending Approval' : 'Approved';
     final String targetAppStatus = requiresApproval ? 'Not Applied' : 'Applied';
     final int targetDocstatus = requiresApproval ? 0 : 1;
@@ -880,8 +880,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     try {
       String effectiveHcpId = isExistingDoctor ? (_selectedDoctor?.name ?? '') : '';
 
-      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account
-      if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
+      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account (only if it does not require approval)
+      if (isExistingDoctor && effectiveHcpId.isNotEmpty && !requiresApproval) {
         try {
           final updatedDoctor = Hcp(
             name: effectiveHcpId,
