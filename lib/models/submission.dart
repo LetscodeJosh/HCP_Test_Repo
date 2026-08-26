@@ -91,17 +91,30 @@ class HcpProfileSubmission {
     final rawDocstatus = json['docstatus'] is int ? json['docstatus'] as int : int.tryParse('${json['docstatus']}') ?? 0;
     
     // Resolve workflow state accurately according to ERPNext v15
-    String? resolvedWorkflow = json['workflow_state'] ?? json['status'];
-    if (resolvedWorkflow == null || resolvedWorkflow.isEmpty) {
-      if (rawDocstatus == 1) {
-        resolvedWorkflow = 'Approved';
-      } else if (rawDocstatus == 2) {
-        resolvedWorkflow = 'Cancelled';
+    String? rawWorkflow = json['workflow_state'] ?? json['status'];
+    String resolvedWorkflow = 'Pending Approval';
+    if (rawWorkflow != null && rawWorkflow.isNotEmpty) {
+      if (rawWorkflow == 'Approved' || rawWorkflow == 'Pending Approval' || rawWorkflow == 'Cancelled' || rawWorkflow == 'Rejected') {
+        resolvedWorkflow = rawWorkflow;
+      } else if (rawWorkflow == 'Draft') {
+        resolvedWorkflow = (rawDocstatus == 1 || json['application_status'] == 'Applied') ? 'Approved' : 'Pending Approval';
       } else {
-        resolvedWorkflow = (json['application_status'] == 'Applied') ? 'Approved' : 'Pending Approval';
+        resolvedWorkflow = (json['application_status'] == 'Applied' || rawDocstatus == 1) ? 'Approved' : 'Pending Approval';
       }
-    } else if (resolvedWorkflow == 'Draft' && (rawDocstatus == 1 || json['application_status'] == 'Applied')) {
+    } else if (rawDocstatus == 1 || json['application_status'] == 'Applied') {
       resolvedWorkflow = 'Approved';
+    }
+
+    // Resolve full name cleanly if hcp_full_name is missing
+    String? resolvedFullName = json['hcp_full_name'];
+    if (resolvedFullName == null || resolvedFullName.toString().trim().isEmpty) {
+      final fn = (json['first_name'] ?? '').toString().trim();
+      final mn = (json['middle_name'] ?? '').toString().trim();
+      final ln = (json['last_name'] ?? '').toString().trim();
+      final parts = [fn, mn.isNotEmpty && mn != '-' ? mn : null, ln].where((p) => p != null && p.isNotEmpty).toList();
+      if (parts.isNotEmpty) {
+        resolvedFullName = parts.join(' ');
+      }
     }
 
     // Resolve application status (Not Applied, Applying, Applied, Failed)
@@ -110,7 +123,7 @@ class HcpProfileSubmission {
     return HcpProfileSubmission(
       name: json['name'],
       hcpName: json['hcp_name'] ?? '',
-      hcpFullName: json['hcp_full_name'],
+      hcpFullName: resolvedFullName,
       firstName: json['first_name'],
       middleName: json['middle_name'],
       lastName: json['last_name'],
@@ -161,12 +174,19 @@ class HcpProfileSubmission {
   }
 
   Map<String, dynamic> toJson() {
+    final fn = firstName?.trim() ?? '';
+    final mn = (middleName != null && middleName!.trim().isNotEmpty) ? middleName!.trim() : '-';
+    final ln = lastName?.trim() ?? '';
+    final computedFullName = (hcpFullName != null && hcpFullName!.trim().isNotEmpty)
+        ? hcpFullName!.trim()
+        : [fn, mn != '-' ? mn : null, ln].where((p) => p != null && p.isNotEmpty).join(' ');
+
     return {
       if (name != null) 'name': name,
-      'hcp_name': hcpName,
-      if (hcpFullName != null) 'hcp_full_name': hcpFullName,
+      if (hcpName.isNotEmpty) 'hcp_name': hcpName,
+      'hcp_full_name': computedFullName,
       if (firstName != null) 'first_name': firstName,
-      if (middleName != null) 'middle_name': middleName,
+      'middle_name': mn,
       if (lastName != null) 'last_name': lastName,
       if (birthDate != null) 'birth_date': birthDate,
       'consent_privacy_understood': consentPrivacyUnderstood ? 1 : 0,
@@ -212,6 +232,7 @@ class HcpProfileSubmission {
       if (changeSummaryHtml != null) 'change_summary_html': changeSummaryHtml,
       if (changesJson != null) 'changes_json': changesJson,
       'docstatus': docstatus,
+      'profile_action': hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP',
     };
   }
 }

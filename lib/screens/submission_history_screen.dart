@@ -93,11 +93,26 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     if (enforceMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
+      final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+
       list = list.where((item) {
         final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
         final sSales = (item.salesPerson ?? '').toLowerCase().trim();
-        if (sEmail.isNotEmpty && email.isNotEmpty && (sEmail == email || email.contains(sEmail) || sEmail.contains(email))) return true;
-        if (sSales.isNotEmpty && fullName.isNotEmpty && (sSales.contains(fullName) || fullName.contains(sSales))) return true;
+
+        // 1. Direct Email / Owner / User ID match
+        if (sEmail.isNotEmpty && email.isNotEmpty) {
+          if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
+        }
+
+        // 2. Sales Person Name Match (Exact, Substring, or Multi-Token e.g. "Jorge Naag Mengorio" matches "Jorge Mengorio")
+        if (sSales.isNotEmpty && fullName.isNotEmpty) {
+          if (sSales == fullName || sSales.contains(fullName) || fullName.contains(sSales)) return true;
+          final salesTokens = sSales.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+          final matchingTokens = salesTokens.where((t) => userTokens.contains(t)).length;
+          if (matchingTokens >= 2 || (salesTokens.length == 1 && userTokens.contains(salesTokens.first))) {
+            return true;
+          }
+        }
         return false;
       }).toList();
     }

@@ -923,7 +923,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         hcpName: effectiveHcpId,
         hcpFullName: fullDoctorName,
         firstName: fn,
-        middleName: mn,
+        middleName: mn.isNotEmpty ? mn : '-',
         lastName: ln,
         birthDate: _birthDateController.text.trim(),
         hcpType: _selectedHcpType,

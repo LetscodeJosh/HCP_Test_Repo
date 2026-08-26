@@ -1864,8 +1864,9 @@ class ApiService extends ChangeNotifier {
       return [];
     }
 
+    const submissionFields = '["name","owner","creation","modified","docstatus","application_status","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=["*"]&limit=500',
+      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$submissionFields&limit=500&order_by=creation%20desc',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1884,7 +1885,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=["*"]&limit_page_length=500',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=$submissionFields&limit_page_length=500&order_by=creation%20desc',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -2252,45 +2253,15 @@ class ApiService extends ChangeNotifier {
         final createdData = body['data'];
         final createdName = createdData != null ? '${createdData['name']}' : null;
 
-        // After creation (Draft), apply Frappe workflow transitions step-by-step
+        // After creation (Draft), apply Frappe workflow transitions if required
         if (createdName != null && createdName.isNotEmpty) {
           final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
           final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
 
-          // Step 1: Draft → Pending Approval
-          bool reachedPending = false;
-          try {
-            final wfResp = await http.post(
-              wfUrl,
-              headers: _headers,
-              body: jsonEncode({
-                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
-                'action': 'Send for Approval',
-              }),
-            );
-            if (wfResp.statusCode == 200) reachedPending = true;
-          } catch (_) {}
-
-          // Fallback: direct PUT to set Pending Approval if workflow action name differs
-          if (!reachedPending) {
+          // Existing doctor auto-approved: Draft/Pending → Approved
+          if (targetWorkflow == 'Approved') {
             try {
-              final putResp = await http.put(
-                updateUrl,
-                headers: _headers,
-                body: jsonEncode({
-                  'workflow_state': 'Pending Approval',
-                  'status': 'Pending Approval',
-                }),
-              );
-              if (putResp.statusCode == 200) reachedPending = true;
-            } catch (_) {}
-          }
-
-          // Step 2 (existing doctor auto-approved): Pending Approval → Approved
-          if (targetWorkflow == 'Approved' && reachedPending) {
-            bool reachedApproved = false;
-            try {
-              final wfResp = await http.post(
+              await http.post(
                 wfUrl,
                 headers: _headers,
                 body: jsonEncode({
@@ -2298,23 +2269,20 @@ class ApiService extends ChangeNotifier {
                   'action': 'Approve',
                 }),
               );
-              if (wfResp.statusCode == 200) reachedApproved = true;
             } catch (_) {}
-
-            // Fallback: direct PUT to set Approved
-            if (!reachedApproved) {
-              try {
-                await http.put(
-                  updateUrl,
-                  headers: _headers,
-                  body: jsonEncode({
-                    'workflow_state': 'Approved',
-                    'status': 'Approved',
-                    'application_status': 'Applied',
-                    'docstatus': 1,
-                  }),
-                );
-              } catch (_) {}
+          } else {
+            // New doctor registration: Gracefully attempt transition to Pending Approval
+            try {
+              await http.post(
+                wfUrl,
+                headers: _headers,
+                body: jsonEncode({
+                  'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+                  'action': 'Submit for Approval',
+                }),
+              );
+            } catch (e) {
+              print('Non-blocking workflow notice for new doctor registration: $e');
             }
           }
 
@@ -2328,7 +2296,7 @@ class ApiService extends ChangeNotifier {
           } catch (_) {}
         }
 
-        return HcpProfileSubmission.fromJson(createdData);
+        return HcpProfileSubmission.fromJson(createdData ?? payload);
       } else {
         // Fallback to frappe.client.insert
         final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
