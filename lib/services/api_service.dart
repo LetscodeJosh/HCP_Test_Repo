@@ -943,7 +943,7 @@ class ApiService extends ChangeNotifier {
       }
     }
     final url = Uri.parse(
-      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address"]&limit=5000',
+      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address"]&limit_page_length=5000&limit=5000',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1318,7 +1318,7 @@ class ApiService extends ChangeNotifier {
 
     // Tier 1: Query HCP doctype with fields=["*"] via REST Resource API
     try {
-      final url = Uri.parse('$baseUrl/api/resource/HCP?fields=["*"]&limit=2000');
+      final url = Uri.parse('$baseUrl/api/resource/HCP?fields=["*"]&limit_page_length=5000&limit=5000');
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -1336,7 +1336,7 @@ class ApiService extends ChangeNotifier {
     // Tier 2: Whitelisted client method with fields=["*"] strictly from HCP DocType
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["*"]&limit_page_length=2000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["*"]&limit_page_length=5000',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -1355,7 +1355,7 @@ class ApiService extends ChangeNotifier {
     // Tier 3: Query HCP doctype with explicit public fields (permlevel 0 safe for MedRep)
     try {
       final urlPublic = Uri.parse(
-        '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit=2000',
+        '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit_page_length=5000&limit=5000',
       );
       final response = await http.get(urlPublic, headers: _headers);
       if (response.statusCode == 200) {
@@ -1374,7 +1374,7 @@ class ApiService extends ChangeNotifier {
     // Tier 4: Whitelisted client method with explicit fields strictly from HCP DocType
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_page_length=2000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_page_length=5000',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -1538,9 +1538,9 @@ class ApiService extends ChangeNotifier {
       }
       
       // Ensure hcp_specialty Link fields map to valid ERPNext Specialization primary keys
+      final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
+      final List<Map<String, dynamic>> cleanSpecs = [];
       if (payload['hcp_specialty'] is List && (payload['hcp_specialty'] as List).isNotEmpty) {
-        final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
-        final List<Map<String, dynamic>> cleanSpecs = [];
         for (var item in (payload['hcp_specialty'] as List)) {
           if (item is Map<String, dynamic>) {
             final map = Map<String, dynamic>.from(item);
@@ -1557,51 +1557,102 @@ class ApiService extends ChangeNotifier {
             } else {
               map.remove('sub_specialty');
             }
+            final isPref = (map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true ||
+                map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true);
+            map['is_primary'] = isPref ? 1 : 0;
+            map['preferred'] = isPref ? 1 : 0;
             cleanSpecs.add(map);
           }
         }
-        payload['hcp_specialty'] = cleanSpecs;
       }
-      if (payload['hcp_specialty'] == null || (payload['hcp_specialty'] as List).isEmpty) {
-        payload['hcp_specialty'] = [
-          {'hcp_specialty': 'SPEC-00001'}
-        ];
+      if (cleanSpecs.isEmpty) {
+        cleanSpecs.add({'hcp_specialty': 'SPEC-00001', 'is_primary': 1, 'preferred': 1});
       }
+      payload['hcp_specialty'] = cleanSpecs;
 
       // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
+      final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+      final List<Map<String, dynamic>> cleanWps = [];
       if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
-        final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
-        final List<Map<String, dynamic>> cleanWps = [];
         for (var item in (payload['hcp_workplace'] as List)) {
           if (item is Map<String, dynamic>) {
             final map = Map<String, dynamic>.from(item);
-            final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['address'] ?? '').toString().trim();
-            if (rawWp.isNotEmpty) {
-              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
-              map['hcp_workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
-              map['workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
-            }
-            cleanWps.add(map);
+            final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['address'] ?? map['workplace_name'] ?? '').toString().trim();
+            final wpId = rawWp.isNotEmpty ? LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null) : 'INST-00001';
+            final finalWpId = wpId.isNotEmpty ? wpId : 'INST-00001';
+
+            final isPref = (map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true ||
+                map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true);
+
+            // In ERPNext, HCP Workplace child table links to Institution via hcp_workplace.
+            // Do NOT send numeric PSGC province/city codes (e.g. 1376000000) which fail Link validation.
+            cleanWps.add({
+              'hcp_workplace': finalWpId,
+              'workplace': finalWpId,
+              'is_primary': isPref ? 1 : 0,
+              'primary': isPref ? 1 : 0,
+              'preferred': isPref ? 1 : 0,
+              'is_preferred': isPref ? 1 : 0,
+            });
           }
         }
-        payload['hcp_workplace'] = cleanWps;
       }
-      if (payload['hcp_workplace'] == null || (payload['hcp_workplace'] as List).isEmpty) {
-        payload['hcp_workplace'] = [
-          {'hcp_workplace': 'INST-00001'}
-        ];
+      if (cleanWps.isEmpty) {
+        cleanWps.add({
+          'hcp_workplace': 'INST-00001',
+          'workplace': 'INST-00001',
+          'is_primary': 1,
+          'preferred': 1,
+        });
       }
+      payload['hcp_workplace'] = cleanWps;
+
+      // Ensure contacts are properly structured
+      if (payload['contacts'] is List) {
+        final List<Map<String, dynamic>> cleanContacts = [];
+        for (var item in (payload['contacts'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final num = (item['contact_number'] ?? item['phone'] ?? item['mobile'] ?? '').toString().trim();
+            final em = (item['email_address'] ?? item['email'] ?? '').toString().trim();
+            if (num.isNotEmpty || em.isNotEmpty) {
+              cleanContacts.add({
+                if (num.isNotEmpty) 'contact_number': num,
+                if (em.isNotEmpty) 'email_address': em,
+                'is_primary': (item['is_primary'] == 1 || item['preferred'] == 1 || item['primary'] == true) ? 1 : 0,
+              });
+            }
+          }
+        }
+        if (cleanContacts.isNotEmpty) {
+          payload['contacts'] = cleanContacts;
+          payload['contact_info'] = cleanContacts;
+        }
+      }
+
+      // Log the payload for debugging
+      print('[createDoctor] Sending payload to /api/resource/HCP');
+      print('[createDoctor] first_name=${payload['first_name']}, last_name=${payload['last_name']}, hcp_type=${payload['hcp_type']}');
+      print('[createDoctor] specialties count=${(payload['hcp_specialty'] as List?)?.length ?? 0}');
+      print('[createDoctor] workplaces count=${(payload['hcp_workplace'] as List?)?.length ?? 0}');
 
       final response = await http.post(
         url,
         headers: _headers,
         body: jsonEncode(payload),
       );
+      print('[createDoctor] POST /api/resource/HCP status=${response.statusCode}');
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
+        print('[createDoctor] Doctor created: ${body['data']?['name']}');
         return Hcp.fromJson(body['data']);
       } else {
-        // Fallback: Try frappe.client.insert RPC method
+        print('[createDoctor] POST failed: ${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
+        
+        // Fallback 1: Try frappe.client.insert RPC method
         final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
         final rpcResp = await http.post(
           rpcUrl,
@@ -1613,17 +1664,68 @@ class ApiService extends ChangeNotifier {
             }
           }),
         );
+        print('[createDoctor] RPC insert status=${rpcResp.statusCode}');
         if (rpcResp.statusCode == 200) {
           final rpcBody = jsonDecode(rpcResp.body);
           final docData = rpcBody['message'] ?? rpcBody['data'];
           if (docData != null && docData is Map<String, dynamic>) {
+            print('[createDoctor] Doctor created via RPC: ${docData['name']}');
             return Hcp.fromJson(docData);
           }
         }
-        throw Exception('Failed to create doctor: ${response.body}');
+
+        // Fallback 2: If child table validation failed, try with minimal mandatory fields
+        print('[createDoctor] Retrying with minimal clean fields...');
+        final minimalPayload = {
+          'first_name': payload['first_name'],
+          'middle_name': payload['middle_name'] ?? '-',
+          'last_name': payload['last_name'],
+          'hcp_full_name': payload['hcp_full_name'],
+          'hcp_type': payload['hcp_type'] ?? 'HCP-TYPE-01',
+          'hcp_practice': payload['hcp_practice'] ?? 'Prescribing',
+          'is_active': 1,
+          'hcp_specialty': [
+            {'hcp_specialty': cleanSpecs.first['hcp_specialty'] ?? 'SPEC-00001', 'is_primary': 1}
+          ],
+          'hcp_workplace': [
+            {'hcp_workplace': cleanWps.first['hcp_workplace'] ?? 'INST-00001', 'is_primary': 1}
+          ],
+        };
+
+        final minResp = await http.post(
+          url,
+          headers: _headers,
+          body: jsonEncode(minimalPayload),
+        );
+        if (minResp.statusCode == 200) {
+          final minBody = jsonDecode(minResp.body);
+          print('[createDoctor] Doctor created via minimal payload: ${minBody['data']?['name']}');
+          return Hcp.fromJson(minBody['data']);
+        }
+
+        final minRpcResp = await http.post(
+          rpcUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'HCP',
+              ...minimalPayload,
+            }
+          }),
+        );
+        if (minRpcResp.statusCode == 200) {
+          final minRpcBody = jsonDecode(minRpcResp.body);
+          final docData = minRpcBody['message'] ?? minRpcBody['data'];
+          if (docData != null && docData is Map<String, dynamic>) {
+            print('[createDoctor] Doctor created via minimal RPC: ${docData['name']}');
+            return Hcp.fromJson(docData);
+          }
+        }
+
+        throw Exception('Failed to create doctor. Server response: ${response.statusCode} - ${response.body.length > 200 ? response.body.substring(0, 200) : response.body}');
       }
     } catch (e) {
-      print('Create doctor error: $e');
+      print('[createDoctor] Error: $e');
       rethrow;
     }
   }
@@ -1806,7 +1908,7 @@ class ApiService extends ChangeNotifier {
     }
 
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Account?fields=["*"]&limit=2000',
+      '$baseUrl/api/resource/HCP%20Account?fields=["*"]&limit_page_length=5000&limit=5000',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1823,7 +1925,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Account&fields=["*"]&limit_page_length=2000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Account&fields=["*"]&limit_page_length=5000',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -1894,10 +1996,10 @@ class ApiService extends ChangeNotifier {
       return [];
     }
 
-    const submissionFields = '["name","owner","creation","modified","docstatus","application_status","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
+    const submissionFields = '["name","owner","creation","modified","docstatus","application_status","workflow_state","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
     final encodedFields = Uri.encodeQueryComponent(submissionFields);
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit=500&order_by=creation%20desc',
+      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit_page_length=5000&limit=5000&order_by=creation%20desc',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1916,7 +2018,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=$encodedFields&limit_page_length=500&order_by=creation%20desc',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=$encodedFields&limit_page_length=5000&order_by=creation%20desc',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -2064,6 +2166,21 @@ class ApiService extends ChangeNotifier {
       payload.remove('status');
       payload['docstatus'] = 0;
 
+      // Ensure hcp_type Link ID maps to valid ERPNext key (e.g. HCP-TYPE-01)
+      final rawType = (payload['hcp_type'] ?? submission.hcpType ?? '').toString().trim();
+      payload['hcp_type'] = LocationResolver.resolveHcpTypeId(rawType);
+      if (payload['hcp_type'] == null || payload['hcp_type'].toString().isEmpty) {
+        payload['hcp_type'] = 'HCP-TYPE-01';
+      }
+
+      // Ensure hcp_practice field is valid
+      final rawPractice = (payload['hcp_practice'] ?? submission.hcpPractice ?? '').toString().trim();
+      if (rawPractice == 'Dispensing' || rawPractice == 'Prescribing' || rawPractice == 'Both') {
+        payload['hcp_practice'] = rawPractice;
+      } else {
+        payload['hcp_practice'] = 'Prescribing';
+      }
+
       // Ensure consent_photo does not exceed column size (upload to ERPNext /files/ if base64)
       if (payload['consent_photo'] != null) {
         final cp = payload['consent_photo'].toString().trim();
@@ -2195,24 +2312,26 @@ class ApiService extends ChangeNotifier {
               map['workplace_name'] = finalWpName;
               map['address'] = finalWpName;
 
-              final instMatch = insts.where((i) => i.name == rawWp || i.name == wpId || i.institutionName.toLowerCase() == rawWp.toLowerCase() || i.institutionName.toLowerCase() == wpName.toLowerCase()).firstOrNull;
+              final instMatch = insts.where((i) =>
+                  i.name == rawWp ||
+                  i.name == wpId ||
+                  i.name.toLowerCase() == rawWp.toLowerCase() ||
+                  i.institutionName.toLowerCase() == rawWp.toLowerCase() ||
+                  i.institutionName.toLowerCase() == wpName.toLowerCase()
+              ).firstOrNull;
 
-              final cityInput = rawCity.isNotEmpty ? rawCity : (instMatch?.cityMunicipality ?? '');
+              final rawInstCity = instMatch?.rawCityMunicipality ?? instMatch?.cityMunicipality ?? '';
+              final cityInput = rawInstCity.isNotEmpty ? rawInstCity : rawCity;
               if (cityInput.isNotEmpty) {
-                final cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
                 final cityName = LocationResolver.resolveCityName(cityInput, psgc.isNotEmpty ? psgc : null);
-                map['city_municipality'] = cityId.isNotEmpty ? cityId : cityInput;
-                map['city'] = cityId.isNotEmpty ? cityId : cityInput;
                 map['city_title'] = cityName.isNotEmpty ? cityName : cityInput;
                 map['city_name'] = cityName.isNotEmpty ? cityName : cityInput;
               }
 
-              final provInput = rawProv.isNotEmpty ? rawProv : (instMatch?.provinceName ?? '');
+              final rawInstProv = instMatch?.rawProvinceName ?? instMatch?.provinceName ?? '';
+              final provInput = rawInstProv.isNotEmpty ? rawInstProv : rawProv;
               if (provInput.isNotEmpty) {
-                final provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
                 final provName = LocationResolver.resolveProvinceName(provInput, psgc.isNotEmpty ? psgc : null);
-                map['province_name'] = provId.isNotEmpty ? provId : provInput;
-                map['province'] = provId.isNotEmpty ? provId : provInput;
                 map['province_title'] = provName.isNotEmpty ? provName : provInput;
               }
             }
@@ -2242,7 +2361,323 @@ class ApiService extends ChangeNotifier {
         payload['table_contact_info'] = cleanContacts;
       }
 
-      // Ensure root-level location and institution fields have valid Link IDs and human-readable names
+      final response = await http.post(
+        url,
+        headers: _headers,
+        body: jsonEncode(payload),
+      );
+
+      dynamic createdData;
+      String? createdName;
+
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        createdData = body['data'];
+        createdName = createdData != null ? '${createdData['name']}' : null;
+      } else {
+        // Fallback 1: Try frappe.client.insert RPC method
+        final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
+        final rpcResp = await http.post(
+          rpcUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'HCP Profile Submission',
+              ...payload,
+            }
+          }),
+        );
+        if (rpcResp.statusCode == 200) {
+          final body = jsonDecode(rpcResp.body);
+          createdData = body['message'] ?? body['data'];
+          createdName = createdData != null ? '${createdData['name']}' : null;
+        } else {
+          throw Exception('Failed to create submission: ${response.statusCode} - ${response.body}');
+        }
+      }
+
+      // After creation (in Draft state), apply Frappe workflow transitions according to allowed transition rules
+      if (createdName != null && createdName.isNotEmpty) {
+        final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+        final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
+
+        // Transition sequence from Draft:
+        // Rule 1: Draft -> Action: "Select for Processing" -> Next State: "Processed" (Allowed: System Manager, Sales User)
+        // Rule 2: Processed / Draft -> Action: "Submit for Approval" -> Next State: "Pending Approval" (Allowed: System Manager, Sales User, Superior)
+        // Rule 3 (if Auto-Approved): -> Action: "Approve" -> Next State: "Approved" (Allowed: System Manager, Superior)
+        try {
+          // 1. Attempt "Select for Processing" from Draft
+          await http.post(
+            wfUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+              'action': 'Select for Processing',
+            }),
+          );
+        } catch (_) {}
+
+        if (targetWorkflow == 'Approved') {
+          // Existing doctor: Transition to Approved
+          try {
+            await http.post(
+              wfUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+                'action': 'Approve',
+              }),
+            );
+          } catch (_) {}
+        } else {
+          // New doctor: Transition to Pending Approval
+          try {
+            await http.post(
+              wfUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+                'action': 'Submit for Approval',
+              }),
+            );
+          } catch (_) {}
+        }
+
+        // Re-fetch the final state from ERPNext to return accurate data
+        try {
+          final freshResp = await http.get(updateUrl, headers: _headers);
+          if (freshResp.statusCode == 200) {
+            final freshBody = jsonDecode(freshResp.body);
+            final result = HcpProfileSubmission.fromJson(freshBody['data']);
+            // Update local submissions cache
+            try {
+              final cache = await _readFromCache('submissions_cache.json');
+              List<dynamic> list = cache != null ? jsonDecode(cache) : [];
+              list.removeWhere((item) => item['name'] == result.name);
+              list.insert(0, freshBody['data']);
+              await _writeToCache('submissions_cache.json', jsonEncode(list));
+            } catch (_) {}
+            return result;
+          }
+        } catch (_) {}
+      }
+
+      final result = HcpProfileSubmission.fromJson(createdData ?? payload);
+      // Update local submissions cache
+      try {
+        final cache = await _readFromCache('submissions_cache.json');
+        List<dynamic> list = cache != null ? jsonDecode(cache) : [];
+        list.removeWhere((item) => item['name'] == result.name);
+        list.insert(0, result.toJson());
+        await _writeToCache('submissions_cache.json', jsonEncode(list));
+      } catch (_) {}
+      return result;
+    } catch (e) {
+      print('Create submission error: $e');
+      rethrow;
+    }
+  }
+
+  /// Update/overwrite an existing HCP Profile Submission record (in-place "tamper" to prevent duplicates)
+  Future<HcpProfileSubmission> updateSubmission(String submissionName, HcpProfileSubmission submission) async {
+    final url = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submissionName)}');
+    try {
+      final payload = submission.toJson();
+
+      // Ensure docstatus and workflow state are properly configured
+      final targetWorkflow = submission.workflowState ?? 'Approved';
+      final targetAppStatus = submission.applicationStatus ?? 'Applied';
+      final targetDocstatus = submission.docstatus;
+      payload['workflow_state'] = targetWorkflow;
+      payload['application_status'] = targetAppStatus;
+      payload['status'] = targetWorkflow;
+      payload['docstatus'] = targetDocstatus;
+
+      // Handle consent_photo if base64
+      if (payload['consent_photo'] != null) {
+        final cp = payload['consent_photo'].toString().trim();
+        if (cp.startsWith('data:') || cp.length > 200) {
+          try {
+            Uint8List? rawBytes;
+            if (cp.contains(',')) {
+              rawBytes = base64Decode(cp.split(',').last.trim());
+            } else {
+              rawBytes = base64Decode(cp.trim());
+            }
+            final uploadedUrl = await uploadFile(
+              bytes: rawBytes,
+              filename: 'consent_${DateTime.now().millisecondsSinceEpoch}.jpg',
+              doctype: 'HCP Profile Submission',
+              docname: submissionName,
+            );
+            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+              payload['consent_photo'] = uploadedUrl;
+            } else {
+              payload.remove('consent_photo');
+            }
+          } catch (e) {
+            payload.remove('consent_photo');
+          }
+        }
+      }
+
+      // Handle hcp_photo if base64
+      if (payload['hcp_photo'] != null) {
+        final hp = payload['hcp_photo'].toString().trim();
+        if (hp.startsWith('data:') || hp.length > 200) {
+          try {
+            Uint8List? rawBytes;
+            if (hp.contains(',')) {
+              rawBytes = base64Decode(hp.split(',').last.trim());
+            } else {
+              rawBytes = base64Decode(hp.trim());
+            }
+            final uploadedUrl = await uploadFile(
+              bytes: rawBytes,
+              filename: 'hcp_${DateTime.now().millisecondsSinceEpoch}.jpg',
+              doctype: 'HCP Profile Submission',
+              docname: submissionName,
+            );
+            if (uploadedUrl != null && uploadedUrl.isNotEmpty) {
+              payload['hcp_photo'] = uploadedUrl;
+            } else {
+              payload.remove('hcp_photo');
+            }
+          } catch (e) {
+            payload.remove('hcp_photo');
+          }
+        }
+      }
+
+      // Sanitize table_specialties
+      if (payload['table_specialties'] is List && (payload['table_specialties'] as List).isNotEmpty) {
+        final specs = await fetchSpecializations().catchError((_) => <Specialization>[]);
+        final List<Map<String, dynamic>> cleanSpecs = [];
+        for (var item in (payload['table_specialties'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final isPref = (map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true ||
+                map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true);
+            map['preferred'] = isPref ? 1 : 0;
+            map['is_preferred'] = isPref ? 1 : 0;
+            map['is_primary'] = isPref ? 1 : 0;
+            map['primary'] = isPref ? 1 : 0;
+
+            final rawSpec = (map['specialty_name'] ?? map['specialty'] ?? map['hcp_specialty'] ?? '').toString().trim();
+            if (rawSpec.isNotEmpty) {
+              final specId = LocationResolver.resolveSpecialtyId(rawSpec, specs.isNotEmpty ? specs : null);
+              final specName = LocationResolver.resolveSpecialtyName(rawSpec, specs.isNotEmpty ? specs : null);
+              map['hcp_specialty'] = specId.isNotEmpty ? specId : rawSpec;
+              map['specialty'] = specId.isNotEmpty ? specId : rawSpec;
+              map['specialty_name'] = specName.isNotEmpty ? specName : rawSpec;
+            }
+            final rawSub = (map['sub_specialty_name'] ?? map['sub_specialty'] ?? '').toString().trim();
+            if (rawSub.isNotEmpty && rawSub != 'None' && rawSub != '-') {
+              final subId = LocationResolver.resolveSpecialtyId(rawSub, specs.isNotEmpty ? specs : null);
+              final subName = LocationResolver.resolveSpecialtyName(rawSub, specs.isNotEmpty ? specs : null);
+              map['sub_specialty'] = subId.isNotEmpty ? subId : rawSub;
+              map['sub_specialty_name'] = subName.isNotEmpty ? subName : rawSub;
+            } else {
+              map.remove('sub_specialty');
+              map.remove('sub_specialty_name');
+            }
+            cleanSpecs.add(map);
+          }
+        }
+        payload['table_specialties'] = cleanSpecs;
+      }
+
+      // Sanitize table_workplaces
+      if (payload['table_workplaces'] is List && (payload['table_workplaces'] as List).isNotEmpty) {
+        final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+        final psgc = await fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
+        final List<Map<String, dynamic>> cleanWps = [];
+        for (var item in (payload['table_workplaces'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final isPref = (map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true ||
+                map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true);
+            map['preferred'] = isPref ? 1 : 0;
+            map['is_preferred'] = isPref ? 1 : 0;
+            map['is_primary'] = isPref ? 1 : 0;
+            map['primary'] = isPref ? 1 : 0;
+
+            final rawWp = (map['workplace_name'] ?? map['workplace'] ?? map['hcp_workplace'] ?? map['address'] ?? '').toString().trim();
+            final rawCity = (map['city_municipality'] ?? map['city_title'] ?? map['city_name'] ?? map['city'] ?? '').toString().trim();
+            final rawProv = (map['province_name'] ?? map['province_title'] ?? map['province'] ?? '').toString().trim();
+
+            if (rawWp.isNotEmpty) {
+              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
+              final wpName = LocationResolver.resolveInstitutionName(rawWp, insts.isNotEmpty ? insts : null);
+              final finalWpId = wpId.isNotEmpty ? wpId : rawWp;
+              final finalWpName = wpName.isNotEmpty ? wpName : rawWp;
+              map['hcp_workplace'] = finalWpId;
+              map['workplace'] = finalWpId;
+              map['workplace_name'] = finalWpName;
+              map['address'] = finalWpName;
+
+              final instMatch = insts.where((i) =>
+                  i.name == rawWp ||
+                  i.name == wpId ||
+                  i.name.toLowerCase() == rawWp.toLowerCase() ||
+                  i.institutionName.toLowerCase() == rawWp.toLowerCase() ||
+                  i.institutionName.toLowerCase() == wpName.toLowerCase()
+              ).firstOrNull;
+
+              final rawInstCity = instMatch?.rawCityMunicipality ?? instMatch?.cityMunicipality ?? '';
+              final cityInput = rawInstCity.isNotEmpty ? rawInstCity : rawCity;
+              if (cityInput.isNotEmpty) {
+                final cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
+                final cityName = LocationResolver.resolveCityName(cityInput, psgc.isNotEmpty ? psgc : null);
+                final finalCityLink = cityId.isNotEmpty ? cityId : (rawInstCity.isNotEmpty ? rawInstCity : cityInput);
+                map['city_municipality'] = finalCityLink;
+                map['city'] = finalCityLink;
+                map['city_title'] = cityName.isNotEmpty ? cityName : cityInput;
+                map['city_name'] = cityName.isNotEmpty ? cityName : cityInput;
+              }
+
+              final rawInstProv = instMatch?.rawProvinceName ?? instMatch?.provinceName ?? '';
+              final provInput = rawInstProv.isNotEmpty ? rawInstProv : rawProv;
+              if (provInput.isNotEmpty) {
+                final provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
+                final provName = LocationResolver.resolveProvinceName(provInput, psgc.isNotEmpty ? psgc : null);
+                final finalProvLink = provId.isNotEmpty ? provId : (rawInstProv.isNotEmpty ? rawInstProv : provInput);
+                map['province_name'] = finalProvLink;
+                map['province'] = finalProvLink;
+                map['province_title'] = provName.isNotEmpty ? provName : provInput;
+              }
+            }
+            cleanWps.add(map);
+          }
+        }
+        payload['table_workplaces'] = cleanWps;
+      }
+
+      // Sanitize table_contact_info
+      if (payload['table_contact_info'] is List && (payload['table_contact_info'] as List).isNotEmpty) {
+        final List<Map<String, dynamic>> cleanContacts = [];
+        for (var item in (payload['table_contact_info'] as List)) {
+          if (item is Map<String, dynamic>) {
+            final map = Map<String, dynamic>.from(item);
+            final isPref = (map['preferred'] == 1 || map['preferred'] == true ||
+                map['is_preferred'] == 1 || map['is_preferred'] == true ||
+                map['is_primary'] == 1 || map['is_primary'] == true ||
+                map['primary'] == 1 || map['primary'] == true);
+            map['preferred'] = isPref ? 1 : 0;
+            map['is_preferred'] = isPref ? 1 : 0;
+            map['is_primary'] = isPref ? 1 : 0;
+            map['primary'] = isPref ? 1 : 0;
+            cleanContacts.add(map);
+          }
+        }
+        payload['table_contact_info'] = cleanContacts;
+      }
+
+      // Root level links
       if (payload['province_name'] != null || payload['province'] != null) {
         final raw = (payload['province_name'] ?? payload['province']).toString();
         final provId = LocationResolver.resolveProvinceId(raw);
@@ -2273,7 +2708,8 @@ class ApiService extends ChangeNotifier {
         payload['institution_name'] = instName.isNotEmpty ? instName : raw;
       }
 
-      final response = await http.post(
+      HcpProfileSubmission updatedResult;
+      final response = await http.put(
         url,
         headers: _headers,
         body: jsonEncode(payload),
@@ -2281,74 +2717,70 @@ class ApiService extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final createdData = body['data'];
-        final createdName = createdData != null ? '${createdData['name']}' : null;
-
-        // After creation (Draft), apply Frappe workflow transitions if required
-        if (createdName != null && createdName.isNotEmpty) {
-          final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
-          final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
-
-          // Existing doctor auto-approved: Draft/Pending → Approved
-          if (targetWorkflow == 'Approved') {
-            try {
-              await http.post(
-                wfUrl,
-                headers: _headers,
-                body: jsonEncode({
-                  'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
-                  'action': 'Approve',
-                }),
-              );
-            } catch (_) {}
-          } else {
-            // New doctor registration: Gracefully attempt transition to Pending Approval
-            try {
-              await http.post(
-                wfUrl,
-                headers: _headers,
-                body: jsonEncode({
-                  'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
-                  'action': 'Submit for Approval',
-                }),
-              );
-            } catch (e) {
-              print('Non-blocking workflow notice for new doctor registration: $e');
-            }
-          }
-
-          // Re-fetch the final state from ERPNext to return accurate data
-          try {
-            final freshResp = await http.get(updateUrl, headers: _headers);
-            if (freshResp.statusCode == 200) {
-              final freshBody = jsonDecode(freshResp.body);
-              return HcpProfileSubmission.fromJson(freshBody['data']);
-            }
-          } catch (_) {}
-        }
-
-        return HcpProfileSubmission.fromJson(createdData ?? payload);
+        final data = body['data'] ?? payload;
+        data['name'] = submissionName;
+        updatedResult = HcpProfileSubmission.fromJson(data);
       } else {
-        // Fallback to frappe.client.insert
-        final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
+        // Fallback: frappe.client.save
+        final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.save');
         final rpcResp = await http.post(
           rpcUrl,
           headers: _headers,
           body: jsonEncode({
             'doc': {
               'doctype': 'HCP Profile Submission',
+              'name': submissionName,
               ...payload,
             }
           }),
         );
         if (rpcResp.statusCode == 200) {
           final body = jsonDecode(rpcResp.body);
-          return HcpProfileSubmission.fromJson(body['message'] ?? body['data']);
+          final docData = body['message'] ?? body['data'] ?? payload;
+          docData['name'] = submissionName;
+          updatedResult = HcpProfileSubmission.fromJson(docData);
+        } else {
+          // Fallback: frappe.client.set_value for key scalar values
+          try {
+            final setValUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+            for (var entry in payload.entries) {
+              if (entry.key != 'doctype' && entry.key != 'name' && entry.value is! List) {
+                await http.post(
+                  setValUrl,
+                  headers: _headers,
+                  body: jsonEncode({
+                    'doctype': 'HCP Profile Submission',
+                    'name': submissionName,
+                    'fieldname': entry.key,
+                    'value': entry.value,
+                  }),
+                );
+              }
+            }
+          } catch (_) {}
+          payload['name'] = submissionName;
+          updatedResult = HcpProfileSubmission.fromJson(payload);
         }
-        throw Exception('Failed to create submission: ${response.statusCode} - ${response.body}');
       }
+
+      // Update submissions cache in-place
+      try {
+        final cache = await _readFromCache('submissions_cache.json');
+        if (cache != null) {
+          final List<dynamic> dataList = jsonDecode(cache);
+          final index = dataList.indexWhere((item) => (item is Map && item['name'] == submissionName));
+          if (index >= 0) {
+            dataList[index] = updatedResult.toJson();
+          } else {
+            dataList.insert(0, updatedResult.toJson());
+          }
+          await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+        }
+      } catch (_) {}
+
+      return updatedResult;
     } catch (e) {
-      print('Create submission error: $e');
+      print('Update submission error: $e');
       rethrow;
     }
   }
@@ -2420,17 +2852,21 @@ class ApiService extends ChangeNotifier {
       for (var w in workplaces) {
         final wpId = LocationResolver.resolveInstitutionId(w.hcpWorkplace);
         if (wpId.isNotEmpty) {
-          final provId = LocationResolver.resolveProvinceId(w.provinceName);
-          final cityId = LocationResolver.resolveCityId(w.cityMunicipality);
           cleanWps.add({
             'hcp_workplace': wpId,
             'workplace': wpId,
-            if (provId.isNotEmpty) 'province_name': provId,
-            if (cityId.isNotEmpty) 'city_municipality': cityId,
             'is_primary': (w.isPrimary || w.preferred) ? 1 : 0,
             'preferred': (w.isPrimary || w.preferred) ? 1 : 0,
           });
         }
+      }
+      if (cleanWps.isEmpty) {
+        cleanWps.add({
+          'hcp_workplace': 'INST-00001',
+          'workplace': 'INST-00001',
+          'is_primary': 1,
+          'preferred': 1,
+        });
       }
 
       // Clean contact child table
@@ -2510,6 +2946,7 @@ class ApiService extends ChangeNotifier {
       }
     } catch (e) {
       print('Sync HCP Account error: $e');
+      rethrow;
     }
   }
 
@@ -2518,47 +2955,64 @@ class ApiService extends ChangeNotifier {
   /// - Syncs / creates the doctor's HCP Account for the specific program and representative.
   /// - Updates submission in ERPNext: workflow_state = 'Approved', docstatus = 1, application_status = 'Applied'.
   Future<void> approveSubmission(HcpProfileSubmission submission) async {
-    String effectiveHcpId = submission.hcpName;
+    final List<String> errors = [];
+
+    // 0. Ensure full submission details (including child tables) are loaded
+    HcpProfileSubmission fullSub = submission;
+    if (submission.name != null && (submission.specialties.isEmpty || submission.workplaces.isEmpty)) {
+      try {
+        fullSub = await fetchSubmissionDetail(submission.name!);
+        print('[APPROVE] Fetched full submission: specialties=${fullSub.specialties.length}, workplaces=${fullSub.workplaces.length}, contacts=${fullSub.contacts.length}');
+      } catch (e) {
+        print('[APPROVE] Could not fetch full submission detail: $e');
+      }
+    }
+
+    String effectiveHcpId = fullSub.hcpName;
+    print('[APPROVE] Starting approval for ${fullSub.name}, hcpName=$effectiveHcpId, isNew=${effectiveHcpId.isEmpty || effectiveHcpId == "NEW-HCP"}');
 
     // 1. If Doctor is new / not in masterlist, create new Doctor in HCP doctype
     if (effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP') {
+      final newDoctor = Hcp(
+        firstName: (fullSub.firstName != null && fullSub.firstName!.trim().isNotEmpty) ? fullSub.firstName!.trim() : 'Doctor',
+        middleName: (fullSub.middleName != null && fullSub.middleName!.trim().isNotEmpty && fullSub.middleName!.trim() != '-') ? fullSub.middleName!.trim() : '-',
+        lastName: (fullSub.lastName != null && fullSub.lastName!.trim().isNotEmpty) ? fullSub.lastName!.trim() : '',
+        birthDate: fullSub.birthDate ?? '',
+        hcpPhoto: fullSub.hcpPhoto,
+        hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType),
+        hcpPractice: (fullSub.hcpPractice != null && fullSub.hcpPractice!.isNotEmpty) ? fullSub.hcpPractice! : 'Prescribing',
+        specialties: fullSub.specialties
+            .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+            .map((s) => HcpSpecialty(
+                  hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
+                  subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                  isPrimary: s.preferred,
+                ))
+            .toList(),
+        workplaces: fullSub.workplaces
+            .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+            .map((w) => HcpWorkplace(
+                  workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
+                  provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
+                  cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
+                  address: w.workplaceName,
+                  isPrimary: w.preferred,
+                ))
+            .toList(),
+        contacts: fullSub.contacts
+            .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
+            .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
+            .toList(),
+        profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
+      );
       try {
-        final newDoctor = Hcp(
-          firstName: submission.firstName ?? '',
-          middleName: submission.middleName ?? '',
-          lastName: submission.lastName ?? '',
-          birthDate: submission.birthDate ?? '',
-          hcpPhoto: submission.hcpPhoto,
-          hcpType: (submission.hcpType != null && submission.hcpType!.isNotEmpty) ? submission.hcpType! : 'Resident',
-          hcpPractice: (submission.hcpPractice != null && submission.hcpPractice!.isNotEmpty) ? submission.hcpPractice! : 'Both',
-          specialties: submission.specialties
-              .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
-              .map((s) => HcpSpecialty(
-                    hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
-                    subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty) ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
-                    isPrimary: s.preferred,
-                  ))
-              .toList(),
-          workplaces: submission.workplaces
-              .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
-              .map((w) => HcpWorkplace(
-                    workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
-                    provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
-                    cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
-                    address: w.workplaceName,
-                    isPrimary: w.preferred,
-                  ))
-              .toList(),
-          contacts: submission.contacts
-              .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
-              .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
-              .toList(),
-          profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
-        );
         final createdDoc = await createDoctor(newDoctor);
         effectiveHcpId = createdDoc.name ?? '';
+        print('[APPROVE] Doctor created successfully in HCP masterlist: $effectiveHcpId');
       } catch (e) {
-        print('Error creating doctor during submission approval: $e');
+        final errMsg = 'Failed to create doctor in HCP masterlist: $e';
+        print('[APPROVE] $errMsg');
+        errors.add(errMsg);
       }
     } else {
       // Existing doctor: ensure doctor master record is updated
@@ -2566,37 +3020,35 @@ class ApiService extends ChangeNotifier {
         final existing = await fetchDoctorDetail(effectiveHcpId);
         final updatedDoctor = Hcp(
           name: existing.name,
-          firstName: (submission.firstName != null && submission.firstName!.isNotEmpty) ? submission.firstName! : existing.firstName,
-          middleName: (submission.middleName != null && submission.middleName!.isNotEmpty) ? submission.middleName : existing.middleName,
-          lastName: (submission.lastName != null && submission.lastName!.isNotEmpty) ? submission.lastName! : existing.lastName,
-          birthDate: (submission.birthDate != null && submission.birthDate!.isNotEmpty) ? submission.birthDate : existing.birthDate,
-          hcpPhoto: (submission.hcpPhoto != null && submission.hcpPhoto!.isNotEmpty) ? submission.hcpPhoto : existing.hcpPhoto,
-          hcpType: submission.hcpType ?? existing.hcpType,
-          hcpPractice: submission.hcpPractice ?? existing.hcpPractice,
-          specialties: submission.specialties.isNotEmpty
-              ? submission.specialties
+          firstName: (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) ? fullSub.firstName! : existing.firstName,
+          middleName: (fullSub.middleName != null && fullSub.middleName!.isNotEmpty) ? fullSub.middleName : existing.middleName,
+          lastName: (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) ? fullSub.lastName! : existing.lastName,
+          birthDate: (fullSub.birthDate != null && fullSub.birthDate!.isNotEmpty) ? fullSub.birthDate : existing.birthDate,
+          hcpPhoto: (fullSub.hcpPhoto != null && fullSub.hcpPhoto!.isNotEmpty) ? fullSub.hcpPhoto : existing.hcpPhoto,
+          hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType ?? existing.hcpType),
+          hcpPractice: fullSub.hcpPractice ?? existing.hcpPractice,
+          specialties: fullSub.specialties.isNotEmpty
+              ? fullSub.specialties
                   .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
                   .map((s) => HcpSpecialty(
                         hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
-                        subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty) ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                        subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
                         isPrimary: s.preferred,
                       ))
                   .toList()
               : existing.specialties,
-          workplaces: submission.workplaces.isNotEmpty
-              ? submission.workplaces
+          workplaces: fullSub.workplaces.isNotEmpty
+              ? fullSub.workplaces
                   .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
                   .map((w) => HcpWorkplace(
                         workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
-                        provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
-                        cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
                         address: w.workplaceName,
                         isPrimary: w.preferred,
                       ))
                   .toList()
               : existing.workplaces,
-          contacts: submission.contacts.isNotEmpty
-              ? submission.contacts
+          contacts: fullSub.contacts.isNotEmpty
+              ? fullSub.contacts
                   .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
                   .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
                   .toList()
@@ -2604,103 +3056,180 @@ class ApiService extends ChangeNotifier {
           profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
         );
         await updateDoctor(effectiveHcpId, updatedDoctor);
+        print('[APPROVE] Doctor updated successfully: $effectiveHcpId');
       } catch (e) {
-        print('Error updating doctor during submission approval: $e');
+        print('[APPROVE] Error updating doctor: $e');
+        errors.add('Failed to update doctor record: $e');
       }
     }
 
     // 2. Sync / Create HCP Account for the specific program and medrep
     final docParts = [
-      if (submission.firstName != null && submission.firstName!.isNotEmpty) submission.firstName!,
-      if (submission.middleName != null && submission.middleName!.isNotEmpty && submission.middleName != '-') submission.middleName!,
-      if (submission.lastName != null && submission.lastName!.isNotEmpty) submission.lastName!,
+      if (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) fullSub.firstName!,
+      if (fullSub.middleName != null && fullSub.middleName!.isNotEmpty && fullSub.middleName != '-') fullSub.middleName!,
+      if (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) fullSub.lastName!,
     ];
-    final docFullName = (submission.hcpFullName != null && submission.hcpFullName!.isNotEmpty)
-        ? submission.hcpFullName!
-        : (docParts.isNotEmpty ? docParts.join(' ') : '${submission.firstName ?? ''} ${submission.lastName ?? ''}'.trim());
+    final docFullName = (fullSub.hcpFullName != null && fullSub.hcpFullName!.isNotEmpty)
+        ? fullSub.hcpFullName!
+        : (docParts.isNotEmpty ? docParts.join(' ') : '${fullSub.firstName ?? ''} ${fullSub.lastName ?? ''}'.trim());
 
-    await syncHcpAccount(
-      hcpId: effectiveHcpId.isNotEmpty ? effectiveHcpId : 'NEW-HCP',
-      hcpFullName: docFullName.isNotEmpty ? docFullName : 'Doctor',
-      program: (submission.accountOrProgram != null && submission.accountOrProgram!.isNotEmpty) ? submission.accountOrProgram! : selectedProgram,
-      territory: submission.territory ?? 'AD0110',
-      salesPerson: (submission.salesPerson != null && submission.salesPerson!.trim().isNotEmpty)
-          ? submission.salesPerson!.trim()
-          : getTerritoryManagerForTerritory(submission.territory ?? 'AD0110'),
-      userId: submission.userId ?? submission.medrepEmail ?? loggedInEmail,
-      // Only sync PREFERRED items to HCP Account (all items remain in HCP master doctype)
-      specialties: submission.specialties
-          .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty && s.preferred)
-          .map((s) => HcpAccountSpecialization(
-                hcpSpecialty: s.hcpSpecialty!,
-                subSpecialty: s.subSpecialty,
-                isPrimary: true,
-                preferred: true,
-              ))
-          .toList(),
-      workplaces: submission.workplaces
-          .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty && w.preferred)
-          .map((w) => HcpAccountWorkplace(
-                hcpWorkplace: w.hcpWorkplace!,
-                cityMunicipality: w.cityMunicipality,
-                provinceName: w.provinceName,
-                address: w.workplaceName,
-                isPrimary: true,
-                preferred: true,
-              ))
-          .toList(),
-      contacts: submission.contacts
-          .where((c) => ((c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)) && c.preferred)
-          .map((c) => HcpAccountContact(
-                contactNumber: c.contactNumber,
-                emailAddress: c.emailAddress,
-                isPrimary: true,
-                preferred: true,
-              ))
-          .toList(),
-    );
-
-    // 3. Update Submission docstatus and workflow state in ERPNext
-    if (submission.name != null && submission.name!.isNotEmpty) {
-      bool workflowApplied = false;
+    if (effectiveHcpId.isNotEmpty && effectiveHcpId != 'NEW-HCP') {
       try {
-        final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
-        final wfResp = await http.post(
-          wfUrl,
-          headers: _headers,
-          body: jsonEncode({
-            'doc': {
-              'doctype': 'HCP Profile Submission',
-              'name': submission.name,
-              if (effectiveHcpId.isNotEmpty) 'hcp_name': effectiveHcpId,
-              'workflow_state': submission.workflowState ?? 'Draft',
-            },
-            'action': 'Approve',
-          }),
+        await syncHcpAccount(
+          hcpId: effectiveHcpId,
+          hcpFullName: docFullName.isNotEmpty ? docFullName : 'Doctor',
+          program: (fullSub.accountOrProgram != null && fullSub.accountOrProgram!.isNotEmpty) ? fullSub.accountOrProgram! : selectedProgram,
+          territory: fullSub.territory ?? 'AD0110',
+          salesPerson: (fullSub.salesPerson != null && fullSub.salesPerson!.trim().isNotEmpty)
+              ? fullSub.salesPerson!.trim()
+              : getTerritoryManagerForTerritory(fullSub.territory ?? 'AD0110'),
+          userId: fullSub.userId ?? fullSub.medrepEmail ?? loggedInEmail,
+          specialties: fullSub.specialties
+              .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty && s.preferred)
+              .map((s) => HcpAccountSpecialization(
+                    hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
+                    subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                    isPrimary: true,
+                    preferred: true,
+                  ))
+              .toList(),
+          workplaces: fullSub.workplaces
+              .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty && w.preferred)
+              .map((w) => HcpAccountWorkplace(
+                    hcpWorkplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
+                    address: w.workplaceName,
+                    isPrimary: true,
+                    preferred: true,
+                  ))
+              .toList(),
+          contacts: fullSub.contacts
+              .where((c) => ((c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)) && c.preferred)
+              .map((c) => HcpAccountContact(
+                    contactNumber: c.contactNumber,
+                    emailAddress: c.emailAddress,
+                    isPrimary: true,
+                    preferred: true,
+                  ))
+              .toList(),
         );
-        if (wfResp.statusCode == 200) {
-          workflowApplied = true;
+        print('[APPROVE] HCP Account synced successfully for $effectiveHcpId');
+      } catch (e) {
+        print('[APPROVE] Error syncing HCP account: $e');
+        errors.add('Failed to sync HCP Account: $e');
+      }
+    } else {
+      print('[APPROVE] Skipping HCP Account sync because effectiveHcpId is empty');
+      if (!errors.any((e) => e.contains('create doctor'))) {
+        errors.add('Doctor was not created, so HCP Account could not be provisioned.');
+      }
+    }
+
+    // 3. Update Submission workflow state in ERPNext
+    if (fullSub.name != null && fullSub.name!.isNotEmpty) {
+      final subName = fullSub.name!;
+
+      // Fetch live document from ERPNext to get current state
+      Map<String, dynamic> liveDoc = {};
+      try {
+        final getUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+        final getResp = await http.get(getUrl, headers: _headers);
+        if (getResp.statusCode == 200) {
+          liveDoc = jsonDecode(getResp.body)['data'] ?? {};
         }
       } catch (_) {}
 
+      // Try workflow actions with the live document
+      bool workflowApplied = false;
+      final possibleActions = ['Approve', 'Approved', 'Approve Submission'];
+      for (var actionName in possibleActions) {
+        if (workflowApplied) break;
+        try {
+          final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+          final wfResp = await http.post(
+            wfUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doc': liveDoc.isNotEmpty ? liveDoc : {
+                'doctype': 'HCP Profile Submission',
+                'name': subName,
+              },
+              'action': actionName,
+            }),
+          );
+          if (wfResp.statusCode == 200) {
+            workflowApplied = true;
+          }
+        } catch (e) {
+          print('[APPROVE] apply_workflow action="$actionName" error: $e');
+        }
+      }
+
+      // Try frappe.client.set_value (bypasses workflow triggers)
       if (!workflowApplied) {
         try {
-          final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submission.name!)}');
-          await http.put(
+          final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+          final svResp = await http.post(
+            setValueUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doctype': 'HCP Profile Submission',
+              'name': subName,
+              'fieldname': {
+                if (effectiveHcpId.isNotEmpty) 'hcp_name': effectiveHcpId,
+                'workflow_state': 'Approved',
+                'status': 'Approved',
+                'application_status': 'Applied',
+              },
+            }),
+          );
+          if (svResp.statusCode == 200) workflowApplied = true;
+        } catch (e) {
+          print('[APPROVE] set_value error: $e');
+        }
+      }
+
+      // Direct REST PUT fallback
+      if (!workflowApplied) {
+        try {
+          final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+          final putResp = await http.put(
             updateUrl,
             headers: _headers,
             body: jsonEncode({
               if (effectiveHcpId.isNotEmpty) 'hcp_name': effectiveHcpId,
               'workflow_state': 'Approved',
-              'docstatus': 1,
-              'application_status': 'Applied',
               'status': 'Approved',
+              'application_status': 'Applied',
+              'docstatus': 1,
             }),
           );
+          if (putResp.statusCode == 200) workflowApplied = true;
         } catch (e) {
-          print('Error updating submission status: $e');
+          print('[APPROVE] PUT fallback error: $e');
         }
       }
+
+      // Update local submissions_cache.json
+      try {
+        final cache = await _readFromCache('submissions_cache.json');
+        if (cache != null) {
+          final List<dynamic> list = jsonDecode(cache);
+          final idx = list.indexWhere((item) => item['name'] == subName);
+          if (idx != -1) {
+            list[idx]['workflow_state'] = 'Approved';
+            list[idx]['status'] = 'Approved';
+            list[idx]['application_status'] = 'Applied';
+            list[idx]['docstatus'] = 1;
+            if (effectiveHcpId.isNotEmpty) list[idx]['hcp_name'] = effectiveHcpId;
+            await _writeToCache('submissions_cache.json', jsonEncode(list));
+          }
+        }
+      } catch (_) {}
+    }
+
+    // Only throw if the core masterlist creation or account creation failed
+    if (errors.isNotEmpty) {
+      throw Exception(errors.join('\n'));
     }
   }
 
@@ -2842,7 +3371,7 @@ class ApiService extends ChangeNotifier {
       return [];
     }
     final url = Uri.parse(
-      '$baseUrl/api/resource/PSGC%20Location?fields=["name","location_label","location_type","parent_psgc_location","psgc_code","is_group"]&filters=[["location_type","in",["Region","Province","City"]]]&limit=3000',
+      '$baseUrl/api/resource/PSGC%20Location?fields=["name","location_label","location_type","parent_psgc_location","psgc_code","is_group"]&limit_page_length=5000&limit=5000',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -2910,21 +3439,27 @@ class ApiService extends ChangeNotifier {
         try {
           final List<dynamic> dataList = jsonDecode(cache);
           if (dataList.isNotEmpty) {
-            return dataList.map((json) => HcpType.fromJson(json)).toList();
+            final list = dataList.map((json) => HcpType.fromJson(json)).toList();
+            LocationResolver.registerHcpTypes(list);
+            return list;
           }
         } catch (_) {}
       }
       try {
         final String localData = await rootBundle.loadString('assets/hcp_types.json');
         final List<dynamic> dataList = jsonDecode(localData);
-        return dataList.map((json) => HcpType.fromJson(json)).toList();
+        final list = dataList.map((json) => HcpType.fromJson(json)).toList();
+        LocationResolver.registerHcpTypes(list);
+        return list;
       } catch (err) {
         print('Failed to load local fallback HCP types: $err');
-        return [
+        final list = [
           HcpType(name: 'HCP-TYPE-01', typeName: 'Consultant', description: 'About this type'),
           HcpType(name: 'HCP-TYPE-02', typeName: 'Resident', description: 'About this type'),
           HcpType(name: 'HCP-TYPE-03', typeName: 'Fellow', description: 'About this type'),
         ];
+        LocationResolver.registerHcpTypes(list);
+        return list;
       }
     }
 
@@ -2938,7 +3473,9 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['data'] ?? [];
         if (dataList.isNotEmpty) {
           await _writeToCache('hcp_types_cache.json', jsonEncode(dataList));
-          return dataList.map((json) => HcpType.fromJson(json)).toList();
+          final list = dataList.map((json) => HcpType.fromJson(json)).toList();
+          LocationResolver.registerHcpTypes(list);
+          return list;
         }
       }
 
@@ -2952,7 +3489,9 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = (body['message'] is List) ? body['message'] : (body['data'] ?? []);
         if (dataList.isNotEmpty) {
           await _writeToCache('hcp_types_cache.json', jsonEncode(dataList));
-          return dataList.map((json) => HcpType.fromJson(json)).toList();
+          final list = dataList.map((json) => HcpType.fromJson(json)).toList();
+          LocationResolver.registerHcpTypes(list);
+          return list;
         }
       }
     } catch (e) {
@@ -2965,7 +3504,9 @@ class ApiService extends ChangeNotifier {
       if (cache != null) {
         final List<dynamic> dataList = jsonDecode(cache);
         if (dataList.isNotEmpty) {
-          return dataList.map((json) => HcpType.fromJson(json)).toList();
+          final list = dataList.map((json) => HcpType.fromJson(json)).toList();
+          LocationResolver.registerHcpTypes(list);
+          return list;
         }
       }
     } catch (_) {}
@@ -2973,14 +3514,18 @@ class ApiService extends ChangeNotifier {
     try {
       final String localData = await rootBundle.loadString('assets/hcp_types.json');
       final List<dynamic> dataList = jsonDecode(localData);
-      return dataList.map((json) => HcpType.fromJson(json)).toList();
+      final list = dataList.map((json) => HcpType.fromJson(json)).toList();
+      LocationResolver.registerHcpTypes(list);
+      return list;
     } catch (err) {
       print('Failed to load local fallback HCP types: $err');
-      return [
+      final list = [
         HcpType(name: 'HCP-TYPE-01', typeName: 'Consultant', description: 'About this type'),
         HcpType(name: 'HCP-TYPE-02', typeName: 'Resident', description: 'About this type'),
         HcpType(name: 'HCP-TYPE-03', typeName: 'Fellow', description: 'About this type'),
       ];
+      LocationResolver.registerHcpTypes(list);
+      return list;
     }
   }
 

@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/submission.dart';
 import '../models/lookup_models.dart';
+import '../models/hcp.dart';
+import '../models/hcp_account.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
 import 'hcp_wizard_screen.dart';
@@ -55,36 +57,92 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
   }
 
+  bool _matchesProgram(HcpProfileSubmission item, String progFilter) {
+    if (progFilter.isEmpty || progFilter.toLowerCase() == 'all') return true;
+    final prog = progFilter.toLowerCase().trim();
+    final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
+    if (subProg.isEmpty) return true;
+    return subProg.contains(prog) ||
+        prog.contains(subProg) ||
+        (prog.contains('abbott') && subProg.contains('abbott')) ||
+        (prog.contains('adc') && subProg.contains('abbott')) ||
+        (prog.contains('corenergy') && subProg.contains('corenergy'));
+  }
+
+  int _getProgramTotalCount(ApiService apiService) {
+    if (apiService.isAdmin) {
+      if (_programFilter == 'All') {
+        return _submissions.length;
+      }
+      return _submissions.where((s) => _matchesProgram(s, _programFilter)).length;
+    } else {
+      final userProg = apiService.selectedProgram.toLowerCase().trim();
+      if (userProg.isEmpty || userProg == 'all') {
+        return _submissions.length;
+      }
+      return _submissions.where((s) => _matchesProgram(s, userProg)).length;
+    }
+  }
+
+  String _formatSubmissionDate12Hr(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty || dateStr == 'N/A' || dateStr == 'No date') {
+      return 'No date';
+    }
+    final raw = dateStr.trim();
+    if (raw.toUpperCase().contains('AM') || raw.toUpperCase().contains('PM')) {
+      return raw;
+    }
+    try {
+      DateTime? dt = DateTime.tryParse(raw);
+      if (dt == null && raw.contains(' ')) {
+        final parts = raw.split(' ');
+        if (parts.length >= 2) {
+          final datePart = parts[0];
+          final timePart = parts[1];
+          dt = DateTime.tryParse('${datePart}T$timePart');
+          if (dt == null && datePart.contains('-')) {
+            final dp = datePart.split('-');
+            if (dp.length == 3) {
+              if (dp[0].length == 4) {
+                // yyyy-MM-dd
+                dt = DateTime.tryParse('${dp[0]}-${dp[1].padLeft(2, '0')}-${dp[2].padLeft(2, '0')}T$timePart');
+              } else if (dp[2].length == 4) {
+                // MM-dd-yyyy
+                dt = DateTime.tryParse('${dp[2]}-${dp[0].padLeft(2, '0')}-${dp[1].padLeft(2, '0')}T$timePart');
+              }
+            }
+          }
+        }
+      }
+      if (dt != null) {
+        final local = dt.toLocal();
+        final int hour12 = local.hour == 0 ? 12 : (local.hour > 12 ? local.hour - 12 : local.hour);
+        final String period = local.hour >= 12 ? 'PM' : 'AM';
+        final String month = local.month.toString().padLeft(2, '0');
+        final String day = local.day.toString().padLeft(2, '0');
+        final String year = local.year.toString();
+        final String hour = hour12.toString().padLeft(2, '0');
+        final String minute = local.minute.toString().padLeft(2, '0');
+        final String second = local.second.toString().padLeft(2, '0');
+        return '$month-$day-$year $hour:$minute:$second $period';
+      }
+    } catch (_) {}
+    return raw;
+  }
+
   List<HcpProfileSubmission> _getFilteredAndSortedSubmissions(ApiService apiService) {
     List<HcpProfileSubmission> list = List.from(_submissions);
 
     // 1. Role-based Program Isolation
     if (apiService.isAdmin) {
       if (_programFilter != 'All') {
-        final prog = _programFilter.toLowerCase().trim();
-        list = list.where((item) {
-          final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
-          if (subProg.isEmpty) return true;
-          return subProg.contains(prog) ||
-              prog.contains(subProg) ||
-              (prog.contains('abbott') && subProg.contains('abbott')) ||
-              (prog.contains('adc') && subProg.contains('abbott')) ||
-              (prog.contains('corenergy') && subProg.contains('corenergy'));
-        }).toList();
+        list = list.where((item) => _matchesProgram(item, _programFilter)).toList();
       }
     } else {
       // Manager & MedRep are strictly scoped to their assigned program
       final userProg = apiService.selectedProgram.toLowerCase().trim();
       if (userProg.isNotEmpty && userProg != 'all') {
-        list = list.where((item) {
-          final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
-          if (subProg.isEmpty) return true;
-          return subProg.contains(userProg) ||
-              userProg.contains(subProg) ||
-              (userProg.contains('abbott') && subProg.contains('abbott')) ||
-              (userProg.contains('adc') && subProg.contains('abbott')) ||
-              (userProg.contains('corenergy') && subProg.contains('corenergy'));
-        }).toList();
+        list = list.where((item) => _matchesProgram(item, userProg)).toList();
       }
     }
 
@@ -268,34 +326,39 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
                 // Dark Workflow Tab Bar
                 Container(
+                  width: double.infinity,
                   color: const Color(0xFF09090B),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: List.generate(tabTitles.length, (idx) {
-                        final isSelected = activeDetailTab == idx;
-                        return GestureDetector(
-                          onTap: () => setModalState(() => activeDetailTab = idx),
-                          child: Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: isSelected ? const Color(0xFF27272A) : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              border: isSelected ? Border.all(color: const Color(0xFF3F3F46)) : null,
-                            ),
-                            child: Text(
-                              tabTitles[idx],
-                              style: TextStyle(
-                                color: isSelected ? Colors.white : const Color(0xFFA1A1AA),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                fontSize: 13,
+                  child: Center(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(tabTitles.length, (idx) {
+                          final isSelected = activeDetailTab == idx;
+                          return GestureDetector(
+                            onTap: () => setModalState(() => activeDetailTab = idx),
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: isSelected ? const Color(0xFF27272A) : Colors.transparent,
+                                borderRadius: BorderRadius.circular(8),
+                                border: isSelected ? Border.all(color: const Color(0xFF3F3F46)) : null,
+                              ),
+                              child: Text(
+                                tabTitles[idx],
+                                style: TextStyle(
+                                  color: isSelected ? Colors.white : const Color(0xFFA1A1AA),
+                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                  fontSize: 13,
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      }),
+                          );
+                        }),
+                      ),
                     ),
                   ),
                 ),
@@ -403,6 +466,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                     ),
                                   );
                                   await apiService.approveSubmission(currentSub);
+                                  await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
+                                  await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
+                                  await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
                                   if (mounted) {
                                     Navigator.pop(context); // Close loading indicator
                                     Navigator.pop(ctx); // Close detail modal
@@ -666,7 +732,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(child: _buildReadonlyField('Type *', submission.hcpType ?? 'Resident', isMandatory: true)),
+                Expanded(child: _buildReadonlyField('Type *', LocationResolver.resolveHcpTypeName(submission.hcpType), isMandatory: true)),
                 const SizedBox(width: 8),
                 Expanded(child: _buildReadonlyField('Practice *', submission.hcpPractice ?? 'Dispensing', isMandatory: true)),
               ],
@@ -831,9 +897,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildReadonlyField('Submission Date', submission.submissionDate ?? 'N/A'),
+            _buildReadonlyField('Submission Date (12-Hour)', _formatSubmissionDate12Hr(submission.submissionDate)),
             const SizedBox(height: 6),
-            const Text('Asia/Manila', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
+            const Text('Asia/Manila (12-Hour Format)', style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12)),
             const SizedBox(height: 16),
             _buildReadonlyField('Territory Code', submission.territory ?? 'AD0110'),
             const SizedBox(height: 12),
@@ -940,7 +1006,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    Text('Classification: ${submission.hcpType ?? "Physician"} • Practice: ${submission.hcpPractice ?? "Both"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                    Text('Classification: ${LocationResolver.resolveHcpTypeName(submission.hcpType)} • Practice: ${submission.hcpPractice ?? "Both"}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                     if (submission.birthDate != null && submission.birthDate!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text('Birth Date: ${submission.birthDate}', style: const TextStyle(color: Colors.white70, fontSize: 13)),
@@ -1757,9 +1823,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                               ),
                               Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
                               SizedBox(
-                                width: 45,
+                                width: 55,
                                 child: Text(
-                                  '${filteredList.length} of ${_submissions.length}',
+                                  '${filteredList.length} of ${_getProgramTotalCount(apiService)}',
                                   style: const TextStyle(color: Colors.white70, fontSize: 11),
                                   textAlign: TextAlign.right,
                                 ),
@@ -1778,7 +1844,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           children: [
                             const Text('SUBMISSIONS', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                             Text(
-                              'Showing ${filteredList.length} of ${_submissions.length}',
+                              apiService.isMedRep && _onlyMySubmissions
+                                  ? 'Showing ${filteredList.length} (My Submissions) · Total: ${_getProgramTotalCount(apiService)}'
+                                  : 'Showing ${filteredList.length} of ${_getProgramTotalCount(apiService)}',
                               style: const TextStyle(color: Colors.white70, fontSize: 11),
                             ),
                           ],
@@ -1847,7 +1915,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                       const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFF64748B)),
                                                       const SizedBox(width: 4),
                                                       Text(
-                                                        item.submissionDate ?? 'No date',
+                                                        _formatSubmissionDate12Hr(item.submissionDate),
                                                         style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
                                                       ),
                                                     ],
@@ -1862,7 +1930,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                           borderRadius: BorderRadius.circular(6),
                                                         ),
                                                         child: Text(
-                                                          item.hcpType ?? 'HCP',
+                                                          LocationResolver.resolveHcpTypeName(item.hcpType),
                                                           style: const TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.w500),
                                                         ),
                                                       ),
@@ -1911,7 +1979,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                 Expanded(
                                                   flex: 2,
                                                   child: Text(
-                                                    item.hcpType ?? 'HCP',
+                                                    LocationResolver.resolveHcpTypeName(item.hcpType),
                                                     style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
@@ -1919,7 +1987,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                 Expanded(
                                                   flex: 3,
                                                   child: Text(
-                                                    item.submissionDate ?? 'No date',
+                                                    _formatSubmissionDate12Hr(item.submissionDate),
                                                     style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
                                                     overflow: TextOverflow.ellipsis,
                                                   ),

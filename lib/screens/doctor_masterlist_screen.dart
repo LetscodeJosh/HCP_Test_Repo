@@ -338,7 +338,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         final typePracticeWidget = Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildReadonlyField('Type *', fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident', isMandatory: true),
+                            _buildReadonlyField('Type *', LocationResolver.resolveHcpTypeName(fullDoctor.hcpType, _hcpTypes), isMandatory: true),
                             const SizedBox(height: 12),
                             _buildReadonlyField('Practice *', fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Prescribing', isMandatory: true),
                           ],
@@ -412,11 +412,11 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                 ...displayWorkplaces.map((w) {
                                   final isPref = w.isPrimary;
                                   final wpName = LocationResolver.resolveInstitutionName(w.workplace, _institutions);
-                                  final locParts = [
-                                    if (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) LocationResolver.resolveCityName(w.cityMunicipality!),
-                                    if (w.provinceName != null && w.provinceName!.isNotEmpty) LocationResolver.resolveProvinceName(w.provinceName!),
-                                    if (w.address != null && w.address!.isNotEmpty && w.address != w.workplace && w.address != w.cityMunicipality && w.address != w.provinceName) w.address!,
-                                  ].join(', ');
+                                  final locParts = LocationResolver.formatLocation(
+                                    streetAddress: (w.address != null && w.address!.isNotEmpty && w.address != w.workplace && w.address != w.cityMunicipality && w.address != w.provinceName) ? w.address : null,
+                                    cityMunicipality: w.cityMunicipality,
+                                    provinceName: w.provinceName,
+                                  );
                                   return Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     child: Row(

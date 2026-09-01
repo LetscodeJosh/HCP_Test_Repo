@@ -134,13 +134,13 @@ class HcpProfileSubmission {
       hcpPhoto: json['hcp_photo'],
       hcpType: json['hcp_type'],
       hcpPractice: json['hcp_practice'],
-      specialties: (json['table_specialties'] as List?)
+      specialties: (json['table_specialties'] as List? ?? json['specialties'] as List? ?? json['hcp_specialty'] as List?)
               ?.map((e) => SubmissionSpecialty.fromJson(e))
               .toList() ?? [],
-      workplaces: (json['table_workplaces'] as List?)
+      workplaces: (json['table_workplaces'] as List? ?? json['workplaces'] as List? ?? json['hcp_workplace'] as List?)
               ?.map((e) => SubmissionWorkplace.fromJson(e))
               .toList() ?? [],
-      contacts: (json['table_contact_info'] as List?)
+      contacts: (json['table_contact_info'] as List? ?? json['contacts'] as List? ?? json['hcp_contact_info'] as List?)
               ?.map((e) => SubmissionContact.fromJson(e))
               .toList() ?? [],
       regionName: LocationResolver.resolveRegionName(json['region_name']?.toString()),

@@ -31,6 +31,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
   // Step 2: Doctor Info & Selection State
   Hcp? _selectedDoctor;
+  bool _isCreatingNewDoctor = false;
   String? _doctorPhotoUrl;
   Uint8List? _doctorPhotoBytes;
   XFile? _doctorPhotoFile;
@@ -71,6 +72,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   void initState() {
     super.initState();
     _selectedDoctor = widget.doctor;
+    _isCreatingNewDoctor = false;
     _territoryManagerController = TextEditingController(text: 'Jorge Mengorio');
     _hcpFullNameController = TextEditingController(
       text: widget.doctor != null ? '${widget.doctor!.firstName} ${widget.doctor!.middleName != null && widget.doctor!.middleName != '-' ? widget.doctor!.middleName! + ' ' : ''}${widget.doctor!.lastName}' : '',
@@ -87,6 +89,59 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     }
 
     _loadLookups();
+  }
+
+  void _syncFullName() {
+    final fn = _firstNameController.text.trim();
+    final mn = _middleNameController.text.trim();
+    final ln = _lastNameController.text.trim();
+    final parts = [
+      if (fn.isNotEmpty) fn,
+      if (mn.isNotEmpty && mn != '-') mn,
+      if (ln.isNotEmpty) ln,
+    ];
+    _hcpFullNameController.text = parts.join(' ');
+  }
+
+  void _setupForNewDoctor() {
+    setState(() {
+      _selectedDoctor = null;
+      _isCreatingNewDoctor = true;
+      _doctorPhotoUrl = null;
+      _doctorPhotoBytes = null;
+      _doctorPhotoFile = null;
+
+      _hcpFullNameController.text = '';
+      _firstNameController.text = '';
+      _middleNameController.text = '';
+      _lastNameController.text = '';
+      _birthDateController.text = '';
+      _selectedHcpType = _hcpTypes.isNotEmpty ? _hcpTypes.first.name : 'HCP-TYPE-01';
+      _selectedPractice = 'Dispensing';
+
+      _selectedSpecialties.clear();
+      _selectedWorkplaces.clear();
+      _contacts.clear();
+    });
+  }
+
+  void _resetToSearch() {
+    setState(() {
+      _selectedDoctor = null;
+      _isCreatingNewDoctor = false;
+      _doctorPhotoUrl = null;
+      _doctorPhotoBytes = null;
+      _doctorPhotoFile = null;
+
+      _hcpFullNameController.text = '';
+      _firstNameController.text = '';
+      _middleNameController.text = '';
+      _lastNameController.text = '';
+      _birthDateController.text = '';
+      _selectedSpecialties.clear();
+      _selectedWorkplaces.clear();
+      _contacts.clear();
+    });
   }
 
   Future<void> _prepopulateDoctorData(Hcp doctor) async {
@@ -124,7 +179,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _middleNameController.text = (fullDoctor.middleName != null && fullDoctor.middleName != '-') ? fullDoctor.middleName! : '';
       _lastNameController.text = fullDoctor.lastName;
       _birthDateController.text = fullDoctor.birthDate ?? '';
-      _selectedHcpType = fullDoctor.hcpType.isNotEmpty ? fullDoctor.hcpType : 'Resident';
+      _selectedHcpType = fullDoctor.hcpType.isNotEmpty
+          ? LocationResolver.resolveHcpTypeId(fullDoctor.hcpType, _hcpTypes)
+          : (_hcpTypes.isNotEmpty ? _hcpTypes.first.name : 'HCP-TYPE-01');
       _selectedPractice = fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Dispensing';
 
       if (fullDoctor.specialties.isNotEmpty) {
@@ -158,27 +215,36 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           final work = fullDoctor.workplaces[i];
           final instTitle = LocationResolver.resolveInstitutionName(work.workplace, _institutions);
           final isPref = hasAnyPref ? work.isPrimary : (i == 0);
-          final resolvedCity = LocationResolver.resolveCityName(work.cityMunicipality ?? fullDoctor.cityMunicipality);
-          final resolvedProv = LocationResolver.resolveProvinceName(work.provinceName ?? fullDoctor.provinceName);
+          final instMatch = _institutions.firstWhere(
+            (inst) => inst.name == work.workplace || inst.institutionName == instTitle || inst.name.toLowerCase() == work.workplace.toLowerCase(),
+            orElse: () => Institution(name: work.workplace, institutionName: instTitle.isNotEmpty ? instTitle : work.workplace),
+          );
+          final resolvedCity = LocationResolver.resolveCityName(work.cityMunicipality ?? fullDoctor.cityMunicipality ?? instMatch.cityMunicipality);
+          final resolvedProv = LocationResolver.resolveProvinceName(work.provinceName ?? fullDoctor.provinceName ?? instMatch.provinceName);
+          final finalCity = resolvedCity.isNotEmpty ? resolvedCity : (instMatch.cityMunicipality ?? 'Manila City');
+          final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (instMatch.provinceName ?? 'Metro Manila-Manila');
           _selectedWorkplaces.add(SubmissionWorkplace(
             preferred: isPref,
             hcpWorkplace: instTitle.isNotEmpty ? instTitle : work.workplace,
-            workplaceName: instTitle.isNotEmpty ? instTitle : 'Manila Doctors Hospital',
-            cityTitle: resolvedCity.isNotEmpty ? resolvedCity : 'Ermita',
-            cityMunicipality: resolvedCity.isNotEmpty ? resolvedCity : 'Ermita',
-            provinceTitle: resolvedProv.isNotEmpty ? resolvedProv : 'Metro Manila-Manila',
-            provinceName: resolvedProv.isNotEmpty ? resolvedProv : 'Metro Manila-Manila',
+            workplaceName: instTitle.isNotEmpty ? instTitle : (instMatch.institutionName.isNotEmpty ? instMatch.institutionName : work.workplace),
+            cityTitle: finalCity,
+            cityMunicipality: finalCity,
+            provinceTitle: finalProv,
+            provinceName: finalProv,
           ));
         }
       } else {
+        final firstInst = _institutions.isNotEmpty ? _institutions.first : null;
+        final defCity = LocationResolver.resolveCityName(firstInst?.cityMunicipality);
+        final defProv = LocationResolver.resolveProvinceName(firstInst?.provinceName);
         _selectedWorkplaces.add(SubmissionWorkplace(
           preferred: true,
-          hcpWorkplace: 'Manila Doctors Hospital',
-          workplaceName: 'Manila Doctors Hospital',
-          cityTitle: 'Ermita',
-          cityMunicipality: 'Ermita',
-          provinceTitle: 'Metro Manila-Manila',
-          provinceName: 'Metro Manila-Manila',
+          hcpWorkplace: firstInst?.institutionName ?? 'Philippine General Hospital',
+          workplaceName: firstInst?.institutionName ?? 'Philippine General Hospital',
+          cityTitle: defCity.isNotEmpty ? defCity : 'Manila City',
+          cityMunicipality: defCity.isNotEmpty ? defCity : 'Manila City',
+          provinceTitle: defProv.isNotEmpty ? defProv : 'Metro Manila-Manila',
+          provinceName: defProv.isNotEmpty ? defProv : 'Metro Manila-Manila',
         ));
       }
 
@@ -240,14 +306,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         _territories = territories;
         _programs = programs;
 
-        if (_programs.isNotEmpty && !_programs.contains(_selectedProgram)) {
-          _selectedProgram = _programs.first;
+        // Automatically populate program based on user's affiliation / role
+        final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
+            ? apiService.selectedProgram
+            : (_programs.isNotEmpty ? _programs.first : 'Abbott Diabetes Care');
+        _selectedProgram = userProg;
+
+        // Automatically populate territory based on program
+        if (_selectedProgram.toLowerCase().contains('corenergy')) {
+          _selectedTerritory = _territories.firstWhere((t) => t.toLowerCase().contains('core'), orElse: () => 'CORE01');
+        } else {
+          _selectedTerritory = _territories.firstWhere((t) => t.startsWith('AD') || t.startsWith('NCR'), orElse: () => (_territories.isNotEmpty ? _territories.first : 'AD0110'));
         }
 
-        if (_territories.isNotEmpty && !_territories.contains(_selectedTerritory)) {
-          _selectedTerritory = _territories.first;
-        }
-
+        // Automatically populate territory manager
         _territoryManagerController.text = apiService.getTerritoryManagerForTerritory(_selectedTerritory);
 
         if (_hcpTypes.isNotEmpty && (_selectedHcpType == null || _selectedHcpType!.isEmpty)) {
@@ -737,7 +809,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
     }
 
-    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false);
+    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false) && !_isCreatingNewDoctor;
     final bool isNewDoctor = !isExistingDoctor;
 
     final structuredChanges = {
@@ -868,20 +940,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     final changeSummaryHtmlStr = sb.toString();
 
     // Determine approval requirement:
-    // - New doctor registration: Requires managerial approval (status: "Pending Approval", application_status: "Not Applied", docstatus: 0)
-    //   Do NOT create directly in HCP master universe DocType until approved!
-    // - Existing doctor update: Requires approval if submitted by MedRep/Employee role.
-    // - Admin/Manager accounts: Can submit directly without restrictions.
-    final bool requiresApproval = !apiService.isAdmin && !apiService.isManager;
+    // - Existing doctor updates: NO approval required (auto-approved / applied immediately).
+    //   Previous submission in doctype will be overwritten ("tampered") in-place to prevent duplicate submission rows.
+    // - New doctor registration: Requires managerial approval if submitted by MedRep.
+    final bool requiresApproval = isExistingDoctor ? false : (!apiService.isAdmin && !apiService.isManager);
     final String targetWorkflow = requiresApproval ? 'Pending Approval' : 'Approved';
     final String targetAppStatus = requiresApproval ? 'Not Applied' : 'Applied';
     final int targetDocstatus = requiresApproval ? 0 : 1;
 
     try {
+      final actualSubmissionTime = DateTime.now();
       String effectiveHcpId = isExistingDoctor ? (_selectedDoctor?.name ?? '') : '';
 
-      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account (only if it does not require approval)
-      if (isExistingDoctor && effectiveHcpId.isNotEmpty && !requiresApproval) {
+      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account immediately
+      if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
         try {
           final updatedDoctor = Hcp(
             name: effectiveHcpId,
@@ -894,9 +966,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             hcpType: _selectedHcpType ?? 'HCP-TYPE-01',
             hcpPractice: _selectedPractice,
             specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpSpecialty(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred)).toList(),
-            workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpWorkplace(workplace: e.hcpWorkplace!, provinceName: LocationResolver.resolveProvinceName(e.provinceName), cityMunicipality: LocationResolver.resolveCityName(e.cityMunicipality), address: LocationResolver.resolveInstitutionName(e.workplaceName ?? e.hcpWorkplace), isPrimary: e.preferred)).toList(),
+            workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) {
+              final instId = LocationResolver.resolveInstitutionId(e.hcpWorkplace, _institutions);
+              final provId = LocationResolver.resolveProvinceId(e.provinceName);
+              final cityId = LocationResolver.resolveCityId(e.cityMunicipality);
+              return HcpWorkplace(
+                workplace: instId.isNotEmpty ? instId : e.hcpWorkplace!,
+                provinceName: provId.isNotEmpty ? provId : e.provinceName,
+                cityMunicipality: cityId.isNotEmpty ? cityId : e.cityMunicipality,
+                address: LocationResolver.resolveInstitutionName(e.workplaceName ?? e.hcpWorkplace, _institutions),
+                isPrimary: e.preferred,
+              );
+            }).toList(),
             contacts: _contacts.where((e) => (e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)).map((e) => HcpContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: e.preferred)).toList(),
-            profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
+            profileLastUpdated: actualSubmissionTime.toIso8601String().split('.').first,
           );
           await apiService.updateDoctor(effectiveHcpId, updatedDoctor);
         } catch (e) {
@@ -914,7 +997,19 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
           userId: apiService.loggedInEmail,
           specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred, preferred: e.preferred)).toList(),
-          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) => HcpAccountWorkplace(hcpWorkplace: e.hcpWorkplace!, cityMunicipality: e.cityMunicipality, provinceName: e.provinceName, address: e.workplaceName, isPrimary: e.preferred, preferred: e.preferred)).toList(),
+          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) {
+            final instId = LocationResolver.resolveInstitutionId(e.hcpWorkplace, _institutions);
+            final provId = LocationResolver.resolveProvinceId(e.provinceName);
+            final cityId = LocationResolver.resolveCityId(e.cityMunicipality);
+            return HcpAccountWorkplace(
+              hcpWorkplace: instId.isNotEmpty ? instId : e.hcpWorkplace!,
+              cityMunicipality: cityId.isNotEmpty ? cityId : e.cityMunicipality,
+              provinceName: provId.isNotEmpty ? provId : e.provinceName,
+              address: LocationResolver.resolveInstitutionName(e.workplaceName ?? e.hcpWorkplace, _institutions),
+              isPrimary: e.preferred,
+              preferred: e.preferred,
+            );
+          }).toList(),
           contacts: _contacts.where((e) => ((e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty))).map((e) => HcpAccountContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: e.preferred, preferred: e.preferred)).toList(),
         );
       }
@@ -945,10 +1040,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         surveyTemplateTitle: _activeSurvey?.templateName,
         answers: answersList,
         medrepEmail: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
-        submissionDate: _submissionDate.toString().split('.').first,
-        validFrom: HcpAccount.calculateMonthValidFrom(_submissionDate),
-        validTo: HcpAccount.calculateMonthValidTo(_submissionDate),
-        validityPeriod: HcpAccount.calculateMonthLabel(_submissionDate),
+        submissionDate: actualSubmissionTime.toIso8601String().split('.').first,
+        validFrom: HcpAccount.calculateMonthValidFrom(actualSubmissionTime),
+        validTo: HcpAccount.calculateMonthValidTo(actualSubmissionTime),
+        validityPeriod: HcpAccount.calculateMonthLabel(actualSubmissionTime),
         workflowState: targetWorkflow,
         applicationStatus: targetAppStatus,
         changeSummaryHtml: changeSummaryHtmlStr,
@@ -956,17 +1051,77 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         docstatus: targetDocstatus,
       );
 
-      await apiService.createSubmission(submission);
+      if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
+        // Find existing submission to tamper/overwrite in-place
+        final allSubs = await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
+        HcpProfileSubmission? existingSub;
+        for (var s in allSubs) {
+          if (s.hcpName == effectiveHcpId ||
+              (s.hcpFullName != null && s.hcpFullName!.trim().toLowerCase() == fullDoctorName.trim().toLowerCase()) ||
+              ((s.firstName?.trim().toLowerCase() == fn.toLowerCase()) && (s.lastName?.trim().toLowerCase() == ln.toLowerCase()))) {
+            existingSub = s;
+            break;
+          }
+        }
+
+        if (existingSub != null && existingSub.name != null && existingSub.name!.isNotEmpty) {
+          final submissionToUpdate = HcpProfileSubmission(
+            name: existingSub.name,
+            hcpName: effectiveHcpId,
+            hcpFullName: fullDoctorName,
+            firstName: fn,
+            middleName: mn.isNotEmpty ? mn : '-',
+            lastName: ln,
+            birthDate: _birthDateController.text.trim(),
+            hcpType: _selectedHcpType,
+            hcpPractice: _selectedPractice,
+            consentPrivacyUnderstood: _consentGiven,
+            consentSignature: sigUri.isNotEmpty ? sigUri : existingSub.consentSignature,
+            consentPhoto: uploadedConsentPhotoUrl ?? existingSub.consentPhoto,
+            hcpPhoto: uploadedDoctorPhotoUrl ?? existingSub.hcpPhoto,
+            specialties: _selectedSpecialties,
+            workplaces: _selectedWorkplaces,
+            contacts: _contacts,
+            accountOrProgram: _selectedProgram,
+            territory: _selectedTerritory,
+            salesPerson: _territoryManagerController.text.trim().isNotEmpty
+                ? _territoryManagerController.text.trim()
+                : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
+            userId: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
+            surveyTemplate: _activeSurvey?.name ?? existingSub.surveyTemplate,
+            surveyTemplateTitle: _activeSurvey?.templateName ?? existingSub.surveyTemplateTitle,
+            answers: answersList.isNotEmpty ? answersList : existingSub.answers,
+            medrepEmail: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
+            submissionDate: actualSubmissionTime.toIso8601String().split('.').first,
+            validFrom: HcpAccount.calculateMonthValidFrom(actualSubmissionTime),
+            validTo: HcpAccount.calculateMonthValidTo(actualSubmissionTime),
+            validityPeriod: HcpAccount.calculateMonthLabel(actualSubmissionTime),
+            workflowState: 'Approved',
+            applicationStatus: 'Applied',
+            changeSummaryHtml: changeSummaryHtmlStr,
+            changesJson: changesJsonStr,
+            docstatus: 1,
+          );
+          await apiService.updateSubmission(existingSub.name!, submissionToUpdate);
+        } else {
+          await apiService.createSubmission(submission);
+        }
+      } else {
+        // Brand new doctor registration
+        await apiService.createSubmission(submission);
+      }
 
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: requiresApproval ? const Color(0xFF0066FF) : const Color(0xFF10B981),
+            backgroundColor: const Color(0xFF10B981),
             content: Text(
-              requiresApproval
-                  ? 'New doctor submitted to HCP Profile Submission (Pending Managerial Approval).'
-                  : 'Doctor profile changes applied immediately to HCP Masterlist and $_selectedProgram Account!',
+              isExistingDoctor
+                  ? 'Doctor profile changes applied and HCP Profile Submission updated!'
+                  : (requiresApproval
+                      ? 'New doctor submitted to HCP Profile Submission (Pending Managerial Approval).'
+                      : 'Doctor profile registered immediately to HCP Masterlist and $_selectedProgram Account!'),
             ),
           ),
         );
@@ -1232,13 +1387,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           if (q.isEmpty) {
                             filtered = List.from(list);
                           } else {
-                            filtered = list.where((i) =>
-                              i.institutionName.toLowerCase().contains(q) ||
-                              (i.cityMunicipality?.toLowerCase().contains(q) ?? false) ||
-                              (i.provinceName?.toLowerCase().contains(q) ?? false) ||
-                              (i.streetAddress?.toLowerCase().contains(q) ?? false) ||
-                              i.name.toLowerCase().contains(q)
-                            ).toList();
+                            filtered = list.where((i) {
+                              final locStr = LocationResolver.formatLocation(
+                                streetAddress: i.streetAddress,
+                                cityMunicipality: i.cityMunicipality,
+                                provinceName: i.provinceName,
+                                regionName: i.regionName,
+                              ).toLowerCase();
+                              return i.institutionName.toLowerCase().contains(q) ||
+                                locStr.contains(q) ||
+                                (i.cityMunicipality?.toLowerCase().contains(q) ?? false) ||
+                                (i.provinceName?.toLowerCase().contains(q) ?? false) ||
+                                (i.streetAddress?.toLowerCase().contains(q) ?? false) ||
+                                i.name.toLowerCase().contains(q);
+                            }).toList();
                           }
                         });
                       },
@@ -1264,11 +1426,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             itemBuilder: (ctx, idx) {
                               final item = filtered[idx];
                               final isSelected = item.name == currentSelectedName || item.institutionName == currentSelectedName;
-                              final locationParts = [
-                                if (item.streetAddress != null && item.streetAddress!.isNotEmpty) item.streetAddress!,
-                                if (item.cityMunicipality != null && item.cityMunicipality!.isNotEmpty) item.cityMunicipality!,
-                                if (item.provinceName != null && item.provinceName!.isNotEmpty) item.provinceName!,
-                              ];
+                              final locStr = LocationResolver.formatLocation(
+                                streetAddress: item.streetAddress,
+                                cityMunicipality: item.cityMunicipality,
+                                provinceName: item.provinceName,
+                                regionName: item.regionName,
+                              );
                               return ListTile(
                                 dense: true,
                                 tileColor: isSelected ? const Color(0xFFEFF6FF) : null,
@@ -1280,8 +1443,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                     fontSize: 13,
                                   ),
                                 ),
-                                subtitle: locationParts.isNotEmpty
-                                    ? Text(locationParts.join(', '), style: const TextStyle(color: Color(0xFF64748B), fontSize: 11))
+                                subtitle: locStr.isNotEmpty
+                                    ? Text(locStr, style: const TextStyle(color: Color(0xFF64748B), fontSize: 11))
                                     : null,
                                 trailing: isSelected
                                     ? const Icon(Icons.check_circle_rounded, color: Color(0xFF0066FF), size: 18)
@@ -2149,104 +2312,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
-  void _showDateTimePicker() {
-    DateTime tempDate = _submissionDate;
-    double tempHour = _submissionDate.hour.toDouble();
-    double tempMinute = _submissionDate.minute.toDouble();
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Select Submission Date & Time', style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFF1F5F9)),
-                  icon: const Icon(Icons.calendar_today, color: Color(0xFF0066FF)),
-                  label: Text(
-                    'Date: ${tempDate.year}-${tempDate.month.toString().padLeft(2, '0')}-${tempDate.day.toString().padLeft(2, '0')}',
-                    style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w600),
-                  ),
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: tempDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                    );
-                    if (picked != null) {
-                      setModalState(() {
-                        tempDate = DateTime(picked.year, picked.month, picked.day, tempHour.toInt(), tempMinute.toInt());
-                      });
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                Text('Hour: ${tempHour.toInt().toString().padLeft(2, '0')}', style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
-                Slider(
-                  value: tempHour,
-                  min: 0,
-                  max: 23,
-                  divisions: 23,
-                  activeColor: const Color(0xFF0066FF),
-                  onChanged: (val) {
-                    setModalState(() {
-                      tempHour = val;
-                      tempDate = DateTime(tempDate.year, tempDate.month, tempDate.day, tempHour.toInt(), tempMinute.toInt());
-                    });
-                  },
-                ),
-                Text('Minute: ${tempMinute.toInt().toString().padLeft(2, '0')}', style: const TextStyle(color: Color(0xFF475569), fontSize: 13)),
-                Slider(
-                  value: tempMinute,
-                  min: 0,
-                  max: 59,
-                  divisions: 59,
-                  activeColor: const Color(0xFF0066FF),
-                  onChanged: (val) {
-                    setModalState(() {
-                      tempMinute = val;
-                      tempDate = DateTime(tempDate.year, tempDate.month, tempDate.day, tempHour.toInt(), tempMinute.toInt());
-                    });
-                  },
-                ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
-                    onPressed: () {
-                      setState(() {
-                        _submissionDate = tempDate;
-                      });
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Confirm Date & Time', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
-  }
-
   List<String> _getTabTitles() {
-    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false);
+    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false) && !_isCreatingNewDoctor;
     return [
       'Step 1',
       if (_consentGiven) 'Step 2',
       if (_consentGiven) 'Step 3',
-      if (_consentGiven) 'Others',
       if (_consentGiven) (isExistingDoctor ? 'Changes' : 'New Doctor Information'),
     ];
   }
@@ -2334,8 +2405,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       case 2:
         return _consentGiven ? _buildStep3Survey() : const SizedBox();
       case 3:
-        return _consentGiven ? _buildOthersStep() : const SizedBox();
-      case 4:
         return _consentGiven ? _buildChangesStep() : const SizedBox();
       default:
         return const SizedBox();
@@ -2749,6 +2818,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           Navigator.pop(ctx);
                           setState(() {
                             _selectedDoctor = doc;
+                            _isCreatingNewDoctor = false;
                             _prepopulateDoctorData(doc);
                           });
                         },
@@ -2787,7 +2857,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                   ),
                                   if (doc.hcpType.isNotEmpty) ...[
                                     const SizedBox(width: 6),
-                                    Text('• ${doc.hcpType}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                    Text('• ${LocationResolver.resolveHcpTypeName(doc.hcpType, _hcpTypes)}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
                                   ],
                                   if (doc.hcpPractice.isNotEmpty) ...[
                                     const SizedBox(width: 6),
@@ -2803,39 +2873,17 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: const BoxDecoration(
                     color: Color(0xFFF8FAFC),
                     border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
                   ),
-                  child: Column(
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.filter_alt_outlined, color: Color(0xFF64748B), size: 14),
-                          SizedBox(width: 4),
-                          Text('Filters applied for Is Active = Yes', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0B192C),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('+ Create a new HCP', style: TextStyle(fontWeight: FontWeight.bold)),
-                          onPressed: () {
-                            Navigator.pop(ctx);
-                            _showNewHcpModal();
-                          },
-                        ),
-                      ),
+                      Icon(Icons.filter_alt_outlined, color: Color(0xFF64748B), size: 14),
+                      SizedBox(width: 4),
+                      Text('Filters applied for Is Active = Yes', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
                     ],
                   ),
                 ),
@@ -2847,1124 +2895,243 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
-  void _showNewHcpModal() {
-    final newFirstNameCtrl = TextEditingController();
-    final newMiddleNameCtrl = TextEditingController();
-    final newLastNameCtrl = TextEditingController();
-    final newBirthDateCtrl = TextEditingController();
-    String newHcpType = _hcpTypes.isNotEmpty ? _hcpTypes.first.name : 'Resident';
-    String newPractice = 'Dispensing';
-    bool newIsActive = true;
-    bool isSavingModal = false;
-    Uint8List? newDoctorPhotoBytes;
-    XFile? newDoctorPhotoFile;
-
-    final List<HcpSpecialty> newSpecialtiesList = [];
-    final List<HcpWorkplace> newWorkplacesList = [];
-    final List<HcpContact> newContactsList = [];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return DraggableScrollableSheet(
-            initialChildSize: 0.9,
-            maxChildSize: 0.95,
-            minChildSize: 0.5,
-            expand: false,
-            builder: (ctx, scrollCtrl) => Container(
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0B192C),
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            const Text('New HCP', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(4)),
-                              child: const Text('Not Saved', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0066FF),
-                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                          ),
-                          onPressed: isSavingModal ? null : () async {
-                            if (newFirstNameCtrl.text.trim().isEmpty || newLastNameCtrl.text.trim().isEmpty) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('First Name and Last Name are required.')),
-                              );
-                              return;
-                            }
-
-                            setModalState(() => isSavingModal = true);
-                            final apiService = Provider.of<ApiService>(context, listen: false);
-
-                            String? uploadedPhotoUrl;
-                            if (newDoctorPhotoBytes != null) {
-                              try {
-                                uploadedPhotoUrl = await apiService.uploadFile(
-                                  bytes: newDoctorPhotoBytes!,
-                                  filename: 'hcp_${DateTime.now().millisecondsSinceEpoch}.jpg',
-                                  doctype: 'HCP',
-                                );
-                              } catch (e) {
-                                debugPrint('Upload photo error: $e');
-                              }
-                            }
-
-                            final fName = newFirstNameCtrl.text.trim();
-                            final mName = newMiddleNameCtrl.text.trim();
-                            final lName = newLastNameCtrl.text.trim();
-                            final computedFullName = [
-                              fName,
-                              if (mName.isNotEmpty && mName != '-') mName,
-                              lName,
-                            ].join(' ');
-
-                            final createdDoctor = Hcp(
-                              name: '',
-                              firstName: fName,
-                              middleName: mName.isNotEmpty ? mName : null,
-                              lastName: lName,
-                              hcpFullName: computedFullName,
-                              birthDate: newBirthDateCtrl.text.trim().isNotEmpty ? newBirthDateCtrl.text.trim() : null,
-                              hcpPhoto: uploadedPhotoUrl,
-                              hcpType: newHcpType,
-                              hcpPractice: newPractice,
-                              isActive: newIsActive,
-                              specialties: newSpecialtiesList,
-                              workplaces: newWorkplacesList,
-                              contacts: newContactsList,
-                              profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
-                            );
-
-                            setState(() {
-                              _selectedDoctor = null; // Marked as new doctor
-                              _doctorPhotoUrl = uploadedPhotoUrl;
-                              _doctorPhotoBytes = newDoctorPhotoBytes;
-                              _doctorPhotoFile = newDoctorPhotoFile;
-                              _prepopulateDoctorData(createdDoctor);
-                            });
-
-                            Navigator.pop(ctx);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                backgroundColor: const Color(0xFF0066FF),
-                                content: Text('New Doctor "$computedFullName" details loaded into profiling wizard.'),
-                              ),
-                            );
-                          },
-                          child: isSavingModal
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                              : const Text('Save', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: scrollCtrl,
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('DOCTOR\'S INFORMATION SHEET', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 12),
-                          Row(
-                            children: [
-                              InkWell(
-                                onTap: () async {
-                                  showModalBottomSheet(
-                                    context: context,
-                                    backgroundColor: Colors.white,
-                                    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-                                    builder: (bCtx) => SafeArea(
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Padding(
-                                            padding: EdgeInsets.all(16.0),
-                                            child: Text('Doctor Profile Photo', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF0F172A))),
-                                          ),
-                                          ListTile(
-                                            leading: const Icon(Icons.camera_alt_rounded, color: Color(0xFF0066FF)),
-                                            title: const Text('Take Photo with Camera'),
-                                            onTap: () async {
-                                              Navigator.pop(bCtx);
-                                              final picker = ImagePicker();
-                                              final img = await picker.pickImage(source: ImageSource.camera, maxWidth: 800, maxHeight: 800, imageQuality: 85);
-                                              if (img != null) {
-                                                final bytes = await img.readAsBytes();
-                                                setModalState(() {
-                                                  newDoctorPhotoFile = img;
-                                                  newDoctorPhotoBytes = bytes;
-                                                });
-                                              }
-                                            },
-                                          ),
-                                          ListTile(
-                                            leading: const Icon(Icons.photo_library_rounded, color: Color(0xFF0066FF)),
-                                            title: const Text('Upload from Gallery'),
-                                            onTap: () async {
-                                              Navigator.pop(bCtx);
-                                              final picker = ImagePicker();
-                                              final img = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800, maxHeight: 800, imageQuality: 85);
-                                              if (img != null) {
-                                                final bytes = await img.readAsBytes();
-                                                setModalState(() {
-                                                  newDoctorPhotoFile = img;
-                                                  newDoctorPhotoBytes = bytes;
-                                                });
-                                              }
-                                            },
-                                          ),
-                                          if (newDoctorPhotoBytes != null)
-                                            ListTile(
-                                              leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626)),
-                                              title: const Text('Remove Photo', style: TextStyle(color: Color(0xFFDC2626))),
-                                              onTap: () {
-                                                Navigator.pop(bCtx);
-                                                setModalState(() {
-                                                  newDoctorPhotoFile = null;
-                                                  newDoctorPhotoBytes = null;
-                                                });
-                                              },
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  width: 76,
-                                  height: 76,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF1F5F9),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: newDoctorPhotoBytes != null ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
-                                      width: newDoctorPhotoBytes != null ? 2 : 1,
-                                    ),
-                                  ),
-                                  child: newDoctorPhotoBytes != null
-                                      ? Stack(
-                                          children: [
-                                            ClipRRect(
-                                              borderRadius: BorderRadius.circular(10),
-                                              child: Image.memory(
-                                                newDoctorPhotoBytes!,
-                                                width: 76,
-                                                height: 76,
-                                                fit: BoxFit.cover,
-                                              ),
-                                            ),
-                                            Positioned(
-                                              right: 2,
-                                              bottom: 2,
-                                              child: Container(
-                                                padding: const EdgeInsets.all(3),
-                                                decoration: const BoxDecoration(
-                                                  color: Color(0xFF0066FF),
-                                                  shape: BoxShape.circle,
-                                                ),
-                                                child: const Icon(Icons.edit, size: 10, color: Colors.white),
-                                              ),
-                                            ),
-                                          ],
-                                        )
-                                      : Column(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: const [
-                                            Icon(Icons.add_a_photo_rounded, color: Color(0xFF0066FF), size: 22),
-                                            SizedBox(height: 4),
-                                            Text('Add Photo', style: TextStyle(color: Color(0xFF0066FF), fontSize: 10, fontWeight: FontWeight.bold)),
-                                          ],
-                                        ),
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Row(
-                                children: [
-                                  Checkbox(
-                                    value: newIsActive,
-                                    activeColor: const Color(0xFF0066FF),
-                                    checkColor: Colors.white,
-                                    onChanged: (val) => setModalState(() => newIsActive = val ?? true),
-                                  ),
-                                  const Text('Is Active', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14)),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          const Text('PERSONAL', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: TextField(
-                                  controller: newFirstNameCtrl,
-                                  style: const TextStyle(color: Color(0xFF0F172A)),
-                                  decoration: InputDecoration(
-                                    labelText: 'First Name *',
-                                    labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  controller: newMiddleNameCtrl,
-                                  style: const TextStyle(color: Color(0xFF0F172A)),
-                                  decoration: InputDecoration(
-                                    labelText: 'Middle Name *',
-                                    labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: TextField(
-                                  controller: newLastNameCtrl,
-                                  style: const TextStyle(color: Color(0xFF0F172A)),
-                                  decoration: InputDecoration(
-                                    labelText: 'Last Name *',
-                                    labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          InkWell(
-                            onTap: () async {
-                              DateTime initial = DateTime(1985, 1, 1);
-                              if (newBirthDateCtrl.text.isNotEmpty) {
-                                try {
-                                  initial = DateTime.parse(newBirthDateCtrl.text);
-                                } catch (_) {}
-                              }
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: initial,
-                                firstDate: DateTime(1920),
-                                lastDate: DateTime.now(),
-                              );
-                              if (picked != null) {
-                                final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                                setModalState(() {
-                                  newBirthDateCtrl.text = formatted;
-                                });
-                              }
-                            },
-                            child: IgnorePointer(
-                              child: TextField(
-                                controller: newBirthDateCtrl,
-                                readOnly: true,
-                                style: const TextStyle(color: Color(0xFF0F172A)),
-                                decoration: InputDecoration(
-                                  labelText: 'Birth Date',
-                                  labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                                  suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-                                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-
-                          const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 3,
-                                child: Column(
-                                  children: [
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                            color: const Color(0xFFF1F5F9),
-                                            child: Row(
-                                              children: const [
-                                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                                Expanded(child: Text('Specialty', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
-                                                Text('Sub Specialty', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                                                SizedBox(width: 24),
-                                              ],
-                                            ),
-                                          ),
-                                          if (newSpecialtiesList.isEmpty)
-                                            const Padding(
-                                              padding: EdgeInsets.all(12),
-                                              child: Text('No specialty added', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
-                                            )
-                                          else
-                                            ...newSpecialtiesList.asMap().entries.map((entry) {
-                                              final idx = entry.key;
-                                              final s = entry.value;
-                                              final specObj = _specializations.firstWhere(
-                                                (sp) => sp.name == s.hcpSpecialty,
-                                                orElse: () => Specialization(name: s.hcpSpecialty, specialty: s.hcpSpecialty, specialtyGroup: '', isGroup: false),
-                                              );
-                                              final subObj = s.subSpecialty != null
-                                                  ? _specializations.firstWhere(
-                                                      (sp) => sp.name == s.subSpecialty,
-                                                      orElse: () => Specialization(name: s.subSpecialty!, specialty: s.subSpecialty!, specialtyGroup: '', isGroup: false),
-                                                    )
-                                                  : null;
-                                              return Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                child: Row(
-                                                  children: [
-                                                    InkWell(
-                                                      onTap: () {
-                                                        setModalState(() {
-                                                          final old = newSpecialtiesList[idx];
-                                                          newSpecialtiesList[idx] = HcpSpecialty(
-                                                            hcpSpecialty: old.hcpSpecialty,
-                                                            subSpecialty: old.subSpecialty,
-                                                            isPrimary: !old.isPrimary,
-                                                          );
-                                                        });
-                                                      },
-                                                      child: SizedBox(
-                                                        width: 24,
-                                                        child: Icon(
-                                                          s.isPrimary ? Icons.star_rounded : Icons.star_border_rounded,
-                                                          size: 18,
-                                                          color: s.isPrimary ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    Expanded(
-                                                      child: Row(
-                                                        children: [
-                                                          Expanded(
-                                                            child: Text(
-                                                              LocationResolver.resolveSpecialtyName(specObj.specialty.isNotEmpty ? specObj.specialty : s.hcpSpecialty, _specializations),
-                                                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                                                              overflow: TextOverflow.ellipsis,
-                                                            ),
-                                                          ),
-                                                          if (s.isPrimary) ...[
-                                                            const SizedBox(width: 4),
-                                                            Container(
-                                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                              decoration: BoxDecoration(
-                                                                color: const Color(0xFFFEF3C7),
-                                                                borderRadius: BorderRadius.circular(4),
-                                                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                                              ),
-                                                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                                            ),
-                                                          ],
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Text(
-                                                      LocationResolver.resolveSpecialtyName(subObj?.specialty ?? s.subSpecialty ?? '-', _specializations).isNotEmpty
-                                                          ? LocationResolver.resolveSpecialtyName(subObj?.specialty ?? s.subSpecialty ?? '-', _specializations)
-                                                          : '-',
-                                                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    GestureDetector(
-                                                      onTap: () {
-                                                        setModalState(() {
-                                                          newSpecialtiesList.removeAt(idx);
-                                                        });
-                                                      },
-                                                      child: const Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Align(
-                                      alignment: Alignment.centerLeft,
-                                      child: ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                        onPressed: () {
-                                          String? selSpec = _specializations.isNotEmpty ? _specializations.first.name : null;
-                                          String? selSub;
-                                          bool isPreferred = newSpecialtiesList.isEmpty;
-                                          showDialog(
-                                            context: context,
-                                            builder: (dialogCtx) => StatefulBuilder(
-                                              builder: (ctx, setDlgState) {
-                                                final currentSpecObj = _specializations.firstWhere(
-                                                  (s) => s.name == selSpec,
-                                                  orElse: () => _specializations.isNotEmpty ? _specializations.first : Specialization(name: '', specialty: '', specialtyGroup: ''),
-                                                );
-                                                final currentSubSpecObj = selSub != null
-                                                    ? _specializations.firstWhere(
-                                                        (s) => s.name == selSub,
-                                                        orElse: () => Specialization(name: selSub!, specialty: selSub!, specialtyGroup: ''),
-                                                      )
-                                                    : null;
-
-                                                final subSpecs = _specializations.where((s) =>
-                                                    (s.parentSpecialization != null &&
-                                                        (s.parentSpecialization == selSpec ||
-                                                         s.parentSpecialization == currentSpecObj.specialty ||
-                                                         s.parentSpecialization == currentSpecObj.name)) ||
-                                                    (s.specialtyGroup.isNotEmpty && s.specialtyGroup == currentSpecObj.specialty)
-                                                ).toList();
-
-                                                return AlertDialog(
-                                                  backgroundColor: Colors.white,
-                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                                  title: const Text('Add Specialty', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-                                                  content: SingleChildScrollView(
-                                                    child: Column(
-                                                      mainAxisSize: MainAxisSize.min,
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        const Text('Specialty Name *', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
-                                                        const SizedBox(height: 6),
-                                                        InkWell(
-                                                          onTap: () async {
-                                                            final picked = await _showSpecializationSearchDialog(
-                                                              context: context,
-                                                              currentSelectedName: selSpec,
-                                                            );
-                                                            if (picked != null) {
-                                                              setDlgState(() {
-                                                                selSpec = picked.name;
-                                                                selSub = null;
-                                                              });
-                                                            }
-                                                          },
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          child: Container(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                                            decoration: BoxDecoration(
-                                                              color: const Color(0xFFF8FAFC),
-                                                              borderRadius: BorderRadius.circular(8),
-                                                              border: Border.all(color: const Color(0xFFCBD5E1)),
-                                                            ),
-                                                            child: Row(
-                                                              children: [
-                                                                const Icon(Icons.medical_services_outlined, color: Color(0xFF0066FF), size: 18),
-                                                                const SizedBox(width: 10),
-                                                                Expanded(
-                                                                  child: Text(
-                                                                    currentSpecObj.specialty.isNotEmpty ? currentSpecObj.specialty : 'Tap to search specialty...',
-                                                                    style: TextStyle(
-                                                                      color: currentSpecObj.specialty.isNotEmpty ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                                                      fontSize: 13,
-                                                                      fontWeight: FontWeight.w500,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                const Icon(Icons.search_rounded, color: Color(0xFF0066FF), size: 18),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 14),
-                                                        const Text('Sub-Specialty Name (Optional)', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
-                                                        const SizedBox(height: 6),
-                                                        InkWell(
-                                                          onTap: () async {
-                                                            final picked = await _showSpecializationSearchDialog(
-                                                              context: context,
-                                                              currentSelectedName: selSub,
-                                                              customList: subSpecs.isNotEmpty ? subSpecs : _specializations.where((s) => !s.isGroup).toList(),
-                                                              title: 'Select Sub-Specialty',
-                                                            );
-                                                            if (picked != null) {
-                                                              setDlgState(() {
-                                                                selSub = picked.name;
-                                                              });
-                                                            }
-                                                          },
-                                                          borderRadius: BorderRadius.circular(8),
-                                                          child: Container(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                                            decoration: BoxDecoration(
-                                                              color: const Color(0xFFF8FAFC),
-                                                              borderRadius: BorderRadius.circular(8),
-                                                              border: Border.all(color: const Color(0xFFCBD5E1)),
-                                                            ),
-                                                            child: Row(
-                                                              children: [
-                                                                const Icon(Icons.subdirectory_arrow_right_rounded, color: Color(0xFF0066FF), size: 18),
-                                                                const SizedBox(width: 10),
-                                                                Expanded(
-                                                                  child: Text(
-                                                                    currentSubSpecObj?.specialty ?? 'None (Tap to search sub-specialty)',
-                                                                    style: TextStyle(
-                                                                      color: currentSubSpecObj != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                                                      fontSize: 13,
-                                                                      fontWeight: FontWeight.w500,
-                                                                    ),
-                                                                  ),
-                                                                ),
-                                                                if (selSub != null)
-                                                                  GestureDetector(
-                                                                    onTap: () => setDlgState(() => selSub = null),
-                                                                    child: const Padding(
-                                                                      padding: EdgeInsets.only(right: 6),
-                                                                      child: Icon(Icons.clear, size: 16, color: Color(0xFF94A3B8)),
-                                                                    ),
-                                                                  ),
-                                                                const Icon(Icons.search_rounded, color: Color(0xFF0066FF), size: 18),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 12),
-                                                        CheckboxListTile(
-                                                          contentPadding: EdgeInsets.zero,
-                                                          title: const Text('Set as Preferred Specialization', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600)),
-                                                          subtitle: const Text('Designates primary specialty for this doctor', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
-                                                          activeColor: const Color(0xFF0066FF),
-                                                          checkColor: Colors.white,
-                                                          value: isPreferred,
-                                                          onChanged: (val) => setDlgState(() => isPreferred = val ?? false),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                  actions: [
-                                                    TextButton(
-                                                      onPressed: () => Navigator.pop(dialogCtx),
-                                                      child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
-                                                    ),
-                                                    ElevatedButton(
-                                                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
-                                                      onPressed: () {
-                                                        if (selSpec != null) {
-                                                          final specMatch = _specializations.firstWhere((s) => s.name == selSpec, orElse: () => _specializations.first);
-                                                          final subMatch = selSub != null ? _specializations.firstWhere((s) => s.name == selSub, orElse: () => _specializations.first) : null;
-                                                          setModalState(() {
-                                                            newSpecialtiesList.add(HcpSpecialty(
-                                                              hcpSpecialty: specMatch.name,
-                                                              subSpecialty: subMatch?.name,
-                                                              isPrimary: isPreferred,
-                                                            ));
-                                                          });
-                                                          Navigator.pop(dialogCtx);
-                                                        }
-                                                      },
-                                                      child: const Text('Add Row', style: TextStyle(color: Colors.white)),
-                                                    ),
-                                                  ],
-                                                );
-                                              },
-                                            ),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                flex: 2,
-                                child: Column(
-                                  children: [
-                                    DropdownButtonFormField<String>(
-                                      value: newHcpType,
-                                      dropdownColor: Colors.white,
-                                      style: const TextStyle(color: Color(0xFF0F172A)),
-                                      decoration: InputDecoration(
-                                        labelText: 'Type *',
-                                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                      ),
-                                      items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
-                                      onChanged: (val) => setModalState(() => newHcpType = val!),
-                                    ),
-                                    const SizedBox(height: 10),
-                                    DropdownButtonFormField<String>(
-                                      value: newPractice,
-                                      dropdownColor: Colors.white,
-                                      style: const TextStyle(color: Color(0xFF0F172A)),
-                                      decoration: InputDecoration(
-                                        labelText: 'Practice *',
-                                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFDC2626))),
-                                      ),
-                                      items: const [
-                                        DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
-                                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
-                                        DropdownMenuItem(value: 'Both', child: Text('Both')),
-                                      ],
-                                      onChanged: (val) => setModalState(() => newPractice = val!),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-
-                          const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                            color: const Color(0xFFF1F5F9),
-                                            child: Row(
-                                              children: const [
-                                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                                Expanded(child: Text('Workplace', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
-                                                Text('City', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                                                SizedBox(width: 24),
-                                              ],
-                                            ),
-                                          ),
-                                          if (newWorkplacesList.isEmpty)
-                                            const Padding(
-                                              padding: EdgeInsets.all(10),
-                                              child: Text('No workplace added', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                                            )
-                                          else
-                                            ...newWorkplacesList.asMap().entries.map((entry) {
-                                              final idx = entry.key;
-                                              final w = entry.value;
-                                              final instObj = _institutions.firstWhere(
-                                                (i) => i.name == w.workplace,
-                                                orElse: () => Institution(name: w.workplace, institutionName: w.address ?? w.workplace),
-                                              );
-                                              return Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                child: Row(
-                                                  children: [
-                                                    InkWell(
-                                                      onTap: () {
-                                                        setModalState(() {
-                                                          final old = newWorkplacesList[idx];
-                                                          newWorkplacesList[idx] = HcpWorkplace(
-                                                            workplace: old.workplace,
-                                                            address: old.address,
-                                                            cityMunicipality: old.cityMunicipality,
-                                                            provinceName: old.provinceName,
-                                                            isPrimary: !old.isPrimary,
-                                                          );
-                                                        });
-                                                      },
-                                                      child: SizedBox(
-                                                        width: 24,
-                                                        child: Icon(
-                                                          w.isPrimary ? Icons.star_rounded : Icons.star_border_rounded,
-                                                          size: 18,
-                                                          color: w.isPrimary ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    Expanded(
-                                                      child: Row(
-                                                        children: [
-                                                          Expanded(child: Text(instObj.institutionName, style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12), overflow: TextOverflow.ellipsis)),
-                                                          if (w.isPrimary) ...[
-                                                            const SizedBox(width: 4),
-                                                            Container(
-                                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                              decoration: BoxDecoration(
-                                                                color: const Color(0xFFFEF3C7),
-                                                                borderRadius: BorderRadius.circular(4),
-                                                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                                              ),
-                                                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                                            ),
-                                                          ],
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Text(instObj.cityMunicipality ?? w.cityMunicipality ?? 'Ermita', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                                    const SizedBox(width: 4),
-                                                    GestureDetector(
-                                                      onTap: () {
-                                                        setModalState(() {
-                                                          newWorkplacesList.removeAt(idx);
-                                                        });
-                                                      },
-                                                      child: const Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                                      label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                      onPressed: () {
-                                        String? selInst = _institutions.isNotEmpty ? _institutions.first.name : null;
-                                        bool isPreferred = newWorkplacesList.isEmpty;
-                                        showDialog(
-                                          context: context,
-                                          builder: (dialogCtx) => StatefulBuilder(
-                                            builder: (ctx, setDlgState) {
-                                              final currentInstObj = selInst != null
-                                                  ? _institutions.firstWhere(
-                                                      (i) => i.name == selInst,
-                                                      orElse: () => Institution(name: selInst!, institutionName: selInst!),
-                                                    )
-                                                  : (_institutions.isNotEmpty ? _institutions.first : null);
-
-                                              return AlertDialog(
-                                                backgroundColor: Colors.white,
-                                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                                title: const Text('Add Workplace', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-                                                content: SingleChildScrollView(
-                                                  child: Column(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      const Text('Workplace / Hospital *', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
-                                                      const SizedBox(height: 6),
-                                                      InkWell(
-                                                        onTap: () async {
-                                                          final picked = await _showInstitutionSearchDialog(
-                                                            context: context,
-                                                            currentSelectedName: selInst,
-                                                          );
-                                                          if (picked != null) {
-                                                            setDlgState(() => selInst = picked.name);
-                                                          }
-                                                        },
-                                                        borderRadius: BorderRadius.circular(8),
-                                                        child: Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFFF8FAFC),
-                                                            borderRadius: BorderRadius.circular(8),
-                                                            border: Border.all(color: const Color(0xFFCBD5E1)),
-                                                          ),
-                                                          child: Row(
-                                                            children: [
-                                                              const Icon(Icons.local_hospital_outlined, color: Color(0xFF0066FF), size: 18),
-                                                              const SizedBox(width: 10),
-                                                              Expanded(
-                                                                child: Text(
-                                                                  currentInstObj?.institutionName ?? 'Tap to search hospital / clinic...',
-                                                                  style: TextStyle(
-                                                                    color: currentInstObj != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                                                    fontSize: 13,
-                                                                    fontWeight: FontWeight.w500,
-                                                                  ),
-                                                                ),
-                                                              ),
-                                                              const Icon(Icons.search_rounded, color: Color(0xFF0066FF), size: 18),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 12),
-                                                      CheckboxListTile(
-                                                        contentPadding: EdgeInsets.zero,
-                                                        title: const Text('Set as Preferred Workplace', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600)),
-                                                        subtitle: const Text('Designates primary clinic or hospital for this program', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
-                                                        activeColor: const Color(0xFF0066FF),
-                                                        checkColor: Colors.white,
-                                                        value: isPreferred,
-                                                        onChanged: (val) => setDlgState(() => isPreferred = val ?? false),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                actions: [
-                                                  TextButton(
-                                                    onPressed: () => Navigator.pop(dialogCtx),
-                                                    child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
-                                                  ),
-                                                  ElevatedButton(
-                                                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
-                                                    onPressed: () {
-                                                      if (selInst != null) {
-                                                        final instMatch = _institutions.firstWhere((i) => i.name == selInst, orElse: () => _institutions.first);
-                                                        setModalState(() {
-                                                          newWorkplacesList.add(HcpWorkplace(
-                                                            workplace: instMatch.name,
-                                                            address: instMatch.institutionName,
-                                                            cityMunicipality: instMatch.cityMunicipality,
-                                                            provinceName: instMatch.provinceName,
-                                                            isPrimary: isPreferred,
-                                                          ));
-                                                        });
-                                                        Navigator.pop(dialogCtx);
-                                                      }
-                                                    },
-                                                    child: const Text('Add Row', style: TextStyle(color: Colors.white)),
-                                                  ),
-                                                ],
-                                              );
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(10),
-                                        border: Border.all(color: const Color(0xFFE2E8F0)),
-                                      ),
-                                      child: Column(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                            color: const Color(0xFFF1F5F9),
-                                            child: Row(
-                                              children: const [
-                                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                                Expanded(child: Text('Mobile/Phone', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
-                                                Text('Email', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                                                SizedBox(width: 24),
-                                              ],
-                                            ),
-                                          ),
-                                          if (newContactsList.isEmpty)
-                                            const Padding(
-                                              padding: EdgeInsets.all(10),
-                                              child: Text('No contact added', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
-                                            )
-                                          else
-                                            ...newContactsList.asMap().entries.map((entry) {
-                                              final idx = entry.key;
-                                              final c = entry.value;
-                                              return Padding(
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                                child: Row(
-                                                  children: [
-                                                    InkWell(
-                                                      onTap: () {
-                                                        setModalState(() {
-                                                          final old = newContactsList[idx];
-                                                          newContactsList[idx] = HcpContact(
-                                                            contactNumber: old.contactNumber,
-                                                            emailAddress: old.emailAddress,
-                                                            isPrimary: !old.isPrimary,
-                                                          );
-                                                        });
-                                                      },
-                                                      child: SizedBox(
-                                                        width: 24,
-                                                        child: Icon(
-                                                          c.isPrimary ? Icons.star_rounded : Icons.star_border_rounded,
-                                                          size: 18,
-                                                          color: c.isPrimary ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    Expanded(
-                                                      child: Row(
-                                                        children: [
-                                                          Expanded(child: Text(c.contactNumber ?? 'N/A', style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12), overflow: TextOverflow.ellipsis)),
-                                                          if (c.isPrimary) ...[
-                                                            const SizedBox(width: 4),
-                                                            Container(
-                                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                                              decoration: BoxDecoration(
-                                                                color: const Color(0xFFFEF3C7),
-                                                                borderRadius: BorderRadius.circular(4),
-                                                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                                              ),
-                                                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                                            ),
-                                                          ],
-                                                        ],
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    Text(c.emailAddress ?? 'None', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                                    const SizedBox(width: 4),
-                                                    GestureDetector(
-                                                      onTap: () {
-                                                        setModalState(() {
-                                                          newContactsList.removeAt(idx);
-                                                        });
-                                                      },
-                                                      child: const Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                                      label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                                      onPressed: () {
-                                        String phone = '';
-                                        String email = '';
-                                        bool isPreferred = newContactsList.isEmpty;
-                                        showDialog(
-                                          context: context,
-                                          builder: (dialogCtx) => StatefulBuilder(
-                                            builder: (ctx, setDlgState) => AlertDialog(
-                                              backgroundColor: Colors.white,
-                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                              title: const Text('Add Contact Info', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold)),
-                                              content: SingleChildScrollView(
-                                                child: Column(
-                                                  mainAxisSize: MainAxisSize.min,
-                                                  children: [
-                                                    TextFormField(
-                                                      style: const TextStyle(color: Color(0xFF0F172A)),
-                                                      decoration: const InputDecoration(labelText: 'Mobile/Phone Number', labelStyle: TextStyle(color: Color(0xFF64748B))),
-                                                      onChanged: (val) => phone = val,
-                                                    ),
-                                                    TextFormField(
-                                                      style: const TextStyle(color: Color(0xFF0F172A)),
-                                                      decoration: const InputDecoration(labelText: 'Email Address', labelStyle: TextStyle(color: Color(0xFF64748B))),
-                                                      onChanged: (val) => email = val,
-                                                    ),
-                                                    const SizedBox(height: 12),
-                                                    CheckboxListTile(
-                                                      contentPadding: EdgeInsets.zero,
-                                                      title: const Text('Set as Preferred Contact Info', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600)),
-                                                      subtitle: const Text('Designates primary contact number or email', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
-                                                      activeColor: const Color(0xFF0066FF),
-                                                      checkColor: Colors.white,
-                                                      value: isPreferred,
-                                                      onChanged: (val) => setDlgState(() => isPreferred = val ?? false),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.pop(dialogCtx),
-                                                  child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
-                                                ),
-                                                ElevatedButton(
-                                                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
-                                                  onPressed: () {
-                                                    if (phone.isNotEmpty || email.isNotEmpty) {
-                                                      setModalState(() {
-                                                        newContactsList.add(HcpContact(
-                                                          contactNumber: phone.isNotEmpty ? phone : null,
-                                                          emailAddress: email.isNotEmpty ? email : null,
-                                                          isPrimary: isPreferred,
-                                                        ));
-                                                      });
-                                                      Navigator.pop(dialogCtx);
-                                                    }
-                                                  },
-                                                  child: const Text('Add Row', style: TextStyle(color: Colors.white)),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
+  Widget _buildDoctorPhotoAvatar({required double size}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF1F5F9),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: (_doctorPhotoBytes != null || (_doctorPhotoUrl != null && _doctorPhotoUrl!.isNotEmpty))
+              ? const Color(0xFF0066FF).withOpacity(0.5)
+              : const Color(0xFFCBD5E1),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(9),
+        child: _doctorPhotoBytes != null
+            ? Image.memory(_doctorPhotoBytes!, fit: BoxFit.cover)
+            : (_doctorPhotoUrl != null && _doctorPhotoUrl!.isNotEmpty
+                ? Image.network(
+                    Provider.of<ApiService>(context, listen: false).formatFileUrl(_doctorPhotoUrl),
+                    headers: Provider.of<ApiService>(context, listen: false).authHeaders,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Color(0xFF64748B), size: 36),
+                  )
+                : const Center(
+                    child: Icon(Icons.block_flipped, color: Color(0xFF94A3B8), size: 36),
+                  )),
       ),
     );
   }
 
-  // --- STEP 2: DOCTOR'S INFORMATION ---
+  Widget _buildDoctorSearchField() {
+    final hasDoctor = _selectedDoctor != null;
+    final doctorTitle = hasDoctor
+        ? ((_selectedDoctor!.hcpFullName != null && _selectedDoctor!.hcpFullName!.isNotEmpty && !_selectedDoctor!.hcpFullName!.startsWith('HCP-'))
+            ? _selectedDoctor!.hcpFullName!
+            : '${_selectedDoctor!.firstName} ${_selectedDoctor!.lastName}')
+        : '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'HCP',
+          style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 6),
+        InkWell(
+          onTap: _showHcpSelectorModal,
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: hasDoctor ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: hasDoctor ? const Color(0xFF0066FF) : const Color(0xFFCBD5E1),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  hasDoctor ? Icons.person : Icons.search,
+                  color: hasDoctor ? const Color(0xFF0066FF) : const Color(0xFF94A3B8),
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    hasDoctor ? '$doctorTitle (${_selectedDoctor!.name ?? ''})' : 'Search HCP...',
+                    style: TextStyle(
+                      color: hasDoctor ? const Color(0xFF0B192C) : const Color(0xFF94A3B8),
+                      fontWeight: hasDoctor ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 13,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.arrow_drop_down, color: Color(0xFF64748B)),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'To begin, search for your doctor by typing the surname, the firstname, or both in the box provided.',
+          style: TextStyle(color: Color(0xFF64748B), fontSize: 11, height: 1.3),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionOrNewDoctorSection() {
+    if (_isCreatingNewDoctor) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Profile Action',
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFCBD5E1)),
+            ),
+            child: const Text(
+              'New HCP',
+              style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1F2),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFFECDD3)),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.info_outline_rounded, color: Color(0xFFE11D48), size: 16),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Please enter the doctor\'s information below.',
+                    style: TextStyle(color: Color(0xFFBE123C), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: InkWell(
+              onTap: _resetToSearch,
+              child: const Text(
+                'Cancel & Search Existing Doctor',
+                style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+              ),
+            ),
+          ),
+        ],
+      );
+    } else if (_selectedDoctor != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Profile Action',
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDF4),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
+            ),
+            child: Text(
+              'Existing HCP (${_selectedDoctor!.name ?? ''})',
+              style: const TextStyle(color: Color(0xFF166534), fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0F9FF),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFBAE6FD)),
+            ),
+            child: Row(
+              children: const [
+                Icon(Icons.check_circle_outline_rounded, color: Color(0xFF0284C7), size: 16),
+                SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Doctor record loaded. Review or update fields below.',
+                    style: TextStyle(color: Color(0xFF0369A1), fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: InkWell(
+              onTap: _resetToSearch,
+              child: const Text(
+                'Clear / Select Another Doctor',
+                style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Could not find your doctor?',
+            style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0B192C),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+              label: const Text('Add New Doctor', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              onPressed: _setupForNewDoctor,
+            ),
+          ),
+        ],
+      );
+    }
+  }
+
   Widget _buildStep2DoctorInfo() {
     final isMobile = MediaQuery.of(context).size.width < 700;
+    final bool showDetails = _selectedDoctor != null || _isCreatingNewDoctor;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -3974,793 +3141,778 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           const Text('DOCTOR\'S INFORMATION', style: TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           
-          // Doctor Header Section
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Doctor Profile Photo (Display-Only / Non-Editable for Security)
-              Container(
-                width: isMobile ? 84 : 110,
-                height: isMobile ? 104 : 130,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: (_doctorPhotoBytes != null || (_doctorPhotoUrl != null && _doctorPhotoUrl!.isNotEmpty))
-                        ? const Color(0xFF0066FF).withOpacity(0.5)
-                        : const Color(0xFFCBD5E1),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: const [
+                BoxShadow(color: Color(0x06000000), blurRadius: 6, offset: Offset(0, 2)),
+              ],
+            ),
+            child: isMobile
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildDoctorPhotoAvatar(size: 76),
+                          const SizedBox(width: 14),
+                          Expanded(child: _buildDoctorSearchField()),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      _buildActionOrNewDoctorSection(),
+                    ],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDoctorPhotoAvatar(size: 88),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 6,
+                        child: _buildDoctorSearchField(),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        flex: 4,
+                        child: _buildActionOrNewDoctorSection(),
+                      ),
+                    ],
                   ),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: _doctorPhotoBytes != null
-                      ? Image.memory(_doctorPhotoBytes!, fit: BoxFit.cover)
-                      : (_doctorPhotoUrl != null && _doctorPhotoUrl!.isNotEmpty
-                          ? Image.network(
-                              Provider.of<ApiService>(context, listen: false).formatFileUrl(_doctorPhotoUrl),
-                              headers: Provider.of<ApiService>(context, listen: false).authHeaders,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Color(0xFF64748B), size: 48),
-                            )
-                          : Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.account_box_rounded, color: const Color(0xFF94A3B8), size: isMobile ? 36 : 48),
-                                const SizedBox(height: 2),
-                                const Text('HCP Photo', style: TextStyle(color: Color(0xFF64748B), fontSize: 10, fontWeight: FontWeight.bold)),
-                              ],
-                            )),
-                ),
+          ),
+
+          if (!showDetails) ...[
+            const SizedBox(height: 24),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    TextFormField(
-                      controller: _hcpFullNameController,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFF1F5F9),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.person_search_rounded, size: 40, color: Color(0xFF64748B)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Ready to Profile Doctor',
+                    style: TextStyle(color: Color(0xFF0F172A), fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Search for an existing HCP in the database or tap "Add New Doctor" to open the registration form.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 13, height: 1.4),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 20),
+            const Text('BASIC INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+
+            if (isMobile) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _firstNameController,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      readOnly: true,
+                      onChanged: (_) => _syncFullName(),
                       decoration: InputDecoration(
-                        labelText: 'HCP Full Name',
-                        labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        labelText: 'First Name *',
+                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
                         filled: true,
-                        fillColor: const Color(0xFFF8FAFC),
-                        isDense: isMobile,
-                        contentPadding: isMobile ? const EdgeInsets.symmetric(horizontal: 10, vertical: 10) : null,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                        fillColor: Colors.white,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _middleNameController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      onChanged: (_) => _syncFullName(),
+                      decoration: InputDecoration(
+                        labelText: 'Middle Name *',
+                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        filled: true,
+                        fillColor: Colors.white,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _lastNameController,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      onChanged: (_) => _syncFullName(),
+                      decoration: InputDecoration(
+                        labelText: 'Last Name *',
+                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        filled: true,
+                        fillColor: Colors.white,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        DateTime initial = DateTime(1985, 1, 1);
+                        if (_birthDateController.text.isNotEmpty) {
+                          try {
+                            initial = DateTime.parse(_birthDateController.text);
+                          } catch (_) {}
+                        }
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: initial,
+                          firstDate: DateTime(1920),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                          setState(() {
+                            _birthDateController.text = formatted;
+                          });
+                        }
+                      },
+                      child: IgnorePointer(
+                        child: TextFormField(
+                          controller: _birthDateController,
+                          readOnly: true,
+                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                          decoration: InputDecoration(
+                            labelText: 'Birth Date',
+                            labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                            suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 18),
+                            filled: true,
+                            fillColor: Colors.white,
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _firstNameController,
+                      style: const TextStyle(color: Color(0xFF0F172A)),
+                      onChanged: (_) => _syncFullName(),
+                      decoration: InputDecoration(
+                        labelText: 'First Name *',
+                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        filled: true,
+                        fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _middleNameController,
+                      style: const TextStyle(color: Color(0xFF0F172A)),
+                      onChanged: (_) => _syncFullName(),
+                      decoration: InputDecoration(
+                        labelText: 'Middle Name *',
+                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        filled: true,
+                        fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _lastNameController,
+                      style: const TextStyle(color: Color(0xFF0F172A)),
+                      onChanged: (_) => _syncFullName(),
+                      decoration: InputDecoration(
+                        labelText: 'Last Name *',
+                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        filled: true,
+                        fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () async {
+                        DateTime initial = DateTime(1985, 1, 1);
+                        if (_birthDateController.text.isNotEmpty) {
+                          try {
+                            initial = DateTime.parse(_birthDateController.text);
+                          } catch (_) {}
+                        }
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: initial,
+                          firstDate: DateTime(1920),
+                          lastDate: DateTime.now(),
+                        );
+                        if (picked != null) {
+                          final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                          setState(() {
+                            _birthDateController.text = formatted;
+                          });
+                        }
+                      },
+                      child: IgnorePointer(
+                        child: TextFormField(
+                          controller: _birthDateController,
+                          readOnly: true,
+                          style: const TextStyle(color: Color(0xFF0F172A)),
+                          decoration: InputDecoration(
+                            labelText: 'Birth Date',
+                            labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                            suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
+                            filled: true,
+                            fillColor: Colors.white,
+                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 20),
+
+            const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+
+            Builder(
+              builder: (context) {
+                final specialtyCard = Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            color: const Color(0xFFF1F5F9),
+                            child: Row(
+                              children: const [
+                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
+                                Expanded(child: Text('Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
+                                Text('Sub Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 44),
+                              ],
+                            ),
+                          ),
+                          ..._selectedSpecialties.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final s = entry.value;
+
+                            final rawSpec = (s.specialtyName != null && s.specialtyName!.isNotEmpty) ? s.specialtyName! : (s.hcpSpecialty ?? '');
+                            final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
+                            final rawSub = (s.subSpecialtyName != null && s.subSpecialtyName!.isNotEmpty && s.subSpecialtyName != '-') ? s.subSpecialtyName! : (s.subSpecialty ?? '-');
+                            final subName = (rawSub != '-' && rawSub.isNotEmpty) ? LocationResolver.resolveSpecialtyName(rawSub, _specializations) : '-';
+
+                            return InkWell(
+                              onTap: () => _showEditSpecialtyDialog(idx),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          for (int i = 0; i < _selectedSpecialties.length; i++) {
+                                            final item = _selectedSpecialties[i];
+                                            _selectedSpecialties[i] = SubmissionSpecialty(
+                                              preferred: (i == idx),
+                                              hcpSpecialty: item.hcpSpecialty,
+                                              specialtyName: item.specialtyName,
+                                              subSpecialty: item.subSpecialty,
+                                              subSpecialtyName: item.subSpecialtyName,
+                                            );
+                                          }
+                                        });
+                                      },
+                                      child: SizedBox(
+                                        width: 24,
+                                        child: Icon(
+                                          s.preferred ? Icons.star_rounded : Icons.star_border_rounded,
+                                          color: s.preferred ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        specName.isNotEmpty ? specName : 'Select Specialty',
+                                        style: TextStyle(
+                                          color: specName.isNotEmpty ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                                          fontWeight: s.preferred ? FontWeight.bold : FontWeight.normal,
+                                          fontSize: 12.5,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Text(
+                                      subName,
+                                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    GestureDetector(
+                                      onTap: () => _showEditSpecialtyDialog(idx),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedSpecialties.removeAt(idx);
+                                        });
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 6),
+                                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 8),
-                    InkWell(
-                      onTap: _showHcpSelectorModal,
-                      child: Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: isMobile ? 10 : 14),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF0066FF)),
-                          boxShadow: const [
-                            BoxShadow(color: Color(0x08000000), blurRadius: 4, offset: Offset(0, 1)),
-                          ],
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0B192C),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                _selectedDoctor != null ? '${_selectedDoctor!.name}' : 'Select HCP *',
-                                style: TextStyle(color: const Color(0xFF0B192C), fontWeight: FontWeight.bold, fontSize: isMobile ? 13 : 14, fontFamily: 'monospace'),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF0066FF), size: 13),
-                          ],
-                        ),
+                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _showAddSpecialtySelector,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Search doctor or add new profile.',
-                      style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
                     ),
                   ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 18),
+                );
 
-          const Text('BASIC INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-
-          // Responsive Basic Info Form Fields
-          if (isMobile) ...[
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _firstNameController,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'First Name *',
-                      labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                      filled: true,
-                      fillColor: Colors.white,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _middleNameController,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Middle Name *',
-                      labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                      filled: true,
-                      fillColor: Colors.white,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _lastNameController,
-                    style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                    decoration: InputDecoration(
-                      labelText: 'Last Name *',
-                      labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                      filled: true,
-                      fillColor: Colors.white,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      DateTime initial = DateTime(1985, 1, 1);
-                      if (_birthDateController.text.isNotEmpty) {
-                        try {
-                          initial = DateTime.parse(_birthDateController.text);
-                        } catch (_) {}
-                      }
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: initial,
-                        firstDate: DateTime(1920),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) {
-                        final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                        setState(() {
-                          _birthDateController.text = formatted;
-                        });
-                      }
-                    },
-                    child: IgnorePointer(
-                      child: TextFormField(
-                        controller: _birthDateController,
-                        readOnly: true,
-                        style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                        decoration: InputDecoration(
-                          labelText: 'Birth Date',
-                          labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                          suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 18),
-                          filled: true,
-                          fillColor: Colors.white,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                          enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                          focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                final typePracticeCard = Column(
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: _selectedHcpType != null && _hcpTypes.any((t) => t.name == _selectedHcpType)
+                          ? _selectedHcpType
+                          : (_hcpTypes.isNotEmpty ? _hcpTypes.first.name : null),
+                      dropdownColor: Colors.white,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'HCP Type *',
+                        labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        filled: true,
+                        fillColor: Colors.white,
+                        isDense: isMobile,
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: _hcpTypes.map((t) => DropdownMenuItem<String>(
+                        value: t.name,
+                        child: Text(
+                          t.typeName.isNotEmpty ? t.typeName : LocationResolver.resolveHcpTypeName(t.name, _hcpTypes),
+                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
                         ),
+                      )).toList(),
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedHcpType = val);
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _selectedPractice,
+                      dropdownColor: Colors.white,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
+                      decoration: InputDecoration(
+                        labelText: 'HCP Practice *',
+                        labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        filled: true,
+                        fillColor: Colors.white,
+                        isDense: isMobile,
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                      ),
+                      items: const [
+                        DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
+                        DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
+                        DropdownMenuItem(value: 'Both', child: Text('Both')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setState(() => _selectedPractice = val);
+                      },
+                    ),
+                  ],
+                );
+
+                if (isMobile) {
+                  return Column(
+                    children: [
+                      specialtyCard,
+                      const SizedBox(height: 16),
+                      typePracticeCard,
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: specialtyCard),
+                    const SizedBox(width: 14),
+                    Expanded(flex: 2, child: typePracticeCard),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 20),
+
+            const Text('WORKPLACES & CONTACT INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+
+            Builder(
+              builder: (context) {
+                final workplaceCard = Column(
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            color: const Color(0xFFF1F5F9),
+                            child: Row(
+                              children: const [
+                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
+                                Expanded(child: Text('Workplace Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
+                                Text('City / Province', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 44),
+                              ],
+                            ),
+                          ),
+                          ..._selectedWorkplaces.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final w = entry.value;
+
+                            final rawWp = (w.workplaceName != null && w.workplaceName!.isNotEmpty) ? w.workplaceName! : (w.hcpWorkplace ?? '');
+                            final wpName = LocationResolver.resolveInstitutionName(rawWp, _institutions);
+                            final rawProv = (w.provinceName != null && w.provinceName!.isNotEmpty) ? w.provinceName! : (w.provinceTitle ?? '');
+                            final rawCity = (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? w.cityMunicipality! : (w.cityTitle ?? '');
+                            final resolvedProv = LocationResolver.resolveProvinceName(rawProv);
+                            final resolvedCity = LocationResolver.resolveCityName(rawCity);
+                            final locStr = LocationResolver.formatLocation(cityMunicipality: resolvedCity, provinceName: resolvedProv);
+
+                            return InkWell(
+                              onTap: () => _showEditWorkplaceDialog(idx),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          for (int i = 0; i < _selectedWorkplaces.length; i++) {
+                                            final item = _selectedWorkplaces[i];
+                                            _selectedWorkplaces[i] = SubmissionWorkplace(
+                                              preferred: (i == idx),
+                                              hcpWorkplace: item.hcpWorkplace,
+                                              workplaceName: item.workplaceName,
+                                              cityMunicipality: item.cityMunicipality,
+                                              cityTitle: item.cityTitle,
+                                              provinceName: item.provinceName,
+                                              provinceTitle: item.provinceTitle,
+                                            );
+                                          }
+                                        });
+                                      },
+                                      child: SizedBox(
+                                        width: 24,
+                                        child: Icon(
+                                          w.preferred ? Icons.star_rounded : Icons.star_border_rounded,
+                                          color: w.preferred ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                                          size: 18,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Text(
+                                        wpName.isNotEmpty ? wpName : 'Select Workplace',
+                                        style: TextStyle(
+                                          color: wpName.isNotEmpty ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                                          fontWeight: w.preferred ? FontWeight.bold : FontWeight.normal,
+                                          fontSize: 12.5,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    Text(
+                                      locStr.isNotEmpty ? locStr : '-',
+                                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    GestureDetector(
+                                      onTap: () => _showEditWorkplaceDialog(idx),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _selectedWorkplaces.removeAt(idx);
+                                        });
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 6),
+                                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
                       ),
                     ),
-                  ),
-                ),
-              ],
-            ),
-          ] else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _firstNameController,
-                    style: const TextStyle(color: Color(0xFF0F172A)),
-                    decoration: InputDecoration(
-                      labelText: 'First Name *',
-                      labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                      filled: true,
-                      fillColor: Colors.white,
-                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _middleNameController,
-                    style: const TextStyle(color: Color(0xFF0F172A)),
-                    decoration: InputDecoration(
-                      labelText: 'Middle Name *',
-                      labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                      filled: true,
-                      fillColor: Colors.white,
-                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    controller: _lastNameController,
-                    style: const TextStyle(color: Color(0xFF0F172A)),
-                    decoration: InputDecoration(
-                      labelText: 'Last Name *',
-                      labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                      filled: true,
-                      fillColor: Colors.white,
-                      enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                      focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      DateTime initial = DateTime(1985, 1, 1);
-                      if (_birthDateController.text.isNotEmpty) {
-                        try {
-                          initial = DateTime.parse(_birthDateController.text);
-                        } catch (_) {}
-                      }
-                      final picked = await showDatePicker(
-                        context: context,
-                        initialDate: initial,
-                        firstDate: DateTime(1920),
-                        lastDate: DateTime.now(),
-                      );
-                      if (picked != null) {
-                        final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                        setState(() {
-                          _birthDateController.text = formatted;
-                        });
-                      }
-                    },
-                    child: IgnorePointer(
-                      child: TextFormField(
-                        controller: _birthDateController,
-                        readOnly: true,
-                        style: const TextStyle(color: Color(0xFF0F172A)),
-                        decoration: InputDecoration(
-                          labelText: 'Birth Date',
-                          labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                          suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
-                          filled: true,
-                          fillColor: Colors.white,
-                          enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                          focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0B192C),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
+                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _showAddWorkplaceSelector,
                       ),
                     ),
-                  ),
-                ),
-              ],
+                  ],
+                );
+
+                final contactCard = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        boxShadow: const [
+                          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            color: const Color(0xFFF1F5F9),
+                            child: Row(
+                              children: const [
+                                SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
+                                Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
+                                Text('Email Address', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 44),
+                              ],
+                            ),
+                          ),
+                          ..._contacts.asMap().entries.map((entry) {
+                            final idx = entry.key;
+                            final c = entry.value;
+                            return InkWell(
+                              onTap: () => _showEditContactDialog(idx),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                child: Row(
+                                  children: [
+                                    InkWell(
+                                      onTap: () {
+                                        setState(() {
+                                          for (int i = 0; i < _contacts.length; i++) {
+                                            final item = _contacts[i];
+                                            _contacts[i] = SubmissionContact(
+                                              preferred: (i == idx),
+                                              contactNumber: item.contactNumber,
+                                              emailAddress: item.emailAddress,
+                                            );
+                                          }
+                                        });
+                                      },
+                                      child: SizedBox(
+                                        width: 24,
+                                        child: Icon(
+                                          c.preferred ? Icons.star_rounded : Icons.star_border_rounded,
+                                          size: 18,
+                                          color: c.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            child: Text(
+                                              c.contactNumber ?? 'N/A',
+                                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (c.preferred) ...[
+                                            const SizedBox(width: 4),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFEF3C7),
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
+                                              ),
+                                              child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(c.emailAddress ?? '', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                                    const SizedBox(width: 6),
+                                    GestureDetector(
+                                      onTap: () => _showEditContactDialog(idx),
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                      ),
+                                    ),
+                                    GestureDetector(
+                                      onTap: () {
+                                        setState(() {
+                                          _contacts.removeAt(idx);
+                                        });
+                                      },
+                                      child: const Padding(
+                                        padding: EdgeInsets.only(left: 6),
+                                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0B192C),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        onPressed: _showAddContactSelector,
+                      ),
+                    ),
+                  ],
+                );
+
+                if (isMobile) {
+                  return Column(
+                    children: [
+                      workplaceCard,
+                      const SizedBox(height: 16),
+                      contactCard,
+                    ],
+                  );
+                }
+
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: workplaceCard),
+                    const SizedBox(width: 14),
+                    Expanded(child: contactCard),
+                  ],
+                );
+              },
             ),
           ],
-          const SizedBox(height: 20),
-
-          const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-
-          // SPECIALTY SECTION BUILDER
-          Builder(
-            builder: (context) {
-              final specialtyCard = Column(
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          color: const Color(0xFFF1F5F9),
-                          child: Row(
-                            children: const [
-                              SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                              Expanded(child: Text('Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
-                              Text('Sub Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold)),
-                              SizedBox(width: 44),
-                            ],
-                          ),
-                        ),
-                        ..._selectedSpecialties.asMap().entries.map((entry) {
-                          final idx = entry.key;
-                          final s = entry.value;
-
-                          final rawSpec = (s.specialtyName != null && s.specialtyName!.isNotEmpty) ? s.specialtyName! : (s.hcpSpecialty ?? '');
-                          final specName = LocationResolver.resolveSpecialtyName(rawSpec, _specializations);
-                          final rawSub = (s.subSpecialtyName != null && s.subSpecialtyName!.isNotEmpty && s.subSpecialtyName != '-') ? s.subSpecialtyName! : (s.subSpecialty ?? '-');
-                          final subName = (rawSub != '-' && rawSub.isNotEmpty) ? LocationResolver.resolveSpecialtyName(rawSub, _specializations) : '-';
-
-                          return InkWell(
-                            onTap: () => _showEditSpecialtyDialog(idx),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              child: Row(
-                                children: [
-                                  InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        for (int i = 0; i < _selectedSpecialties.length; i++) {
-                                          final item = _selectedSpecialties[i];
-                                          _selectedSpecialties[i] = SubmissionSpecialty(
-                                            preferred: (i == idx),
-                                            hcpSpecialty: item.hcpSpecialty,
-                                            specialtyName: item.specialtyName,
-                                            subSpecialty: item.subSpecialty,
-                                            subSpecialtyName: item.subSpecialtyName,
-                                          );
-                                        }
-                                      });
-                                    },
-                                    child: SizedBox(
-                                      width: 24,
-                                      child: Icon(
-                                        s.preferred ? Icons.star_rounded : Icons.star_border_rounded,
-                                        size: 18,
-                                        color: s.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            specName,
-                                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        if (s.preferred) ...[
-                                          const SizedBox(width: 4),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFFEF3C7),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                            ),
-                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(subName, style: const TextStyle(color: Color(0xFF64748B), fontSize: 13)),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () => _showEditSpecialtyDialog(idx),
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 4),
-                                      child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedSpecialties.removeAt(idx);
-                                      });
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 8),
-                                      child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                      icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                      label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                      onPressed: _showAddSpecialtySelector,
-                    ),
-                  ),
-                ],
-              );
-
-              final typePracticeControls = [
-                DropdownButtonFormField<String>(
-                  value: _selectedHcpType,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: 'Type *',
-                    labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                    filled: true,
-                    fillColor: Colors.white,
-                    isDense: isMobile,
-                    contentPadding: isMobile ? const EdgeInsets.symmetric(horizontal: 10, vertical: 12) : null,
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                  ),
-                  items: _hcpTypes.map((t) => DropdownMenuItem(value: t.name, child: Text(t.typeName))).toList(),
-                  onChanged: (val) => setState(() => _selectedHcpType = val),
-                ),
-                SizedBox(height: isMobile ? 8 : 10),
-                DropdownButtonFormField<String>(
-                  value: _selectedPractice,
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                  decoration: InputDecoration(
-                    labelText: 'Practice *',
-                    labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                    filled: true,
-                    fillColor: Colors.white,
-                    isDense: isMobile,
-                    contentPadding: isMobile ? const EdgeInsets.symmetric(horizontal: 10, vertical: 12) : null,
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'Prescribing', child: Text('Prescribing')),
-                    DropdownMenuItem(value: 'Dispensing', child: Text('Dispensing')),
-                    DropdownMenuItem(value: 'Both', child: Text('Both')),
-                  ],
-                  onChanged: (val) => setState(() => _selectedPractice = val!),
-                ),
-              ];
-
-              if (isMobile) {
-                return Column(
-                  children: [
-                    specialtyCard,
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: typePracticeControls[0]),
-                        const SizedBox(width: 8),
-                        Expanded(child: typePracticeControls[2]),
-                      ],
-                    ),
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(flex: 3, child: specialtyCard),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    flex: 2,
-                    child: Column(children: typePracticeControls),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-
-          const Text('WORKPLACES / CONTACT INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-
-          // WORKPLACES & CONTACTS SECTION BUILDER
-          Builder(
-            builder: (context) {
-              final workplaceCard = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          color: const Color(0xFFF1F5F9),
-                          child: Row(
-                            children: const [
-                              SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                              Expanded(child: Text('Workplace Name', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
-                              Text('City', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                              SizedBox(width: 8),
-                              Text('Province', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                              SizedBox(width: 44),
-                            ],
-                          ),
-                        ),
-                        ..._selectedWorkplaces.asMap().entries.map((entry) {
-                          final idx = entry.key;
-                          final w = entry.value;
-                          final wpName = LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace, _institutions);
-                          final cityName = LocationResolver.resolveCityName(w.cityTitle ?? w.cityMunicipality);
-                          final provName = LocationResolver.resolveProvinceName(w.provinceTitle ?? w.provinceName);
-
-                          return InkWell(
-                            onTap: () => _showEditWorkplaceDialog(idx),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              child: Row(
-                                children: [
-                                  InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        for (int i = 0; i < _selectedWorkplaces.length; i++) {
-                                          final item = _selectedWorkplaces[i];
-                                          _selectedWorkplaces[i] = SubmissionWorkplace(
-                                            preferred: (i == idx),
-                                            hcpWorkplace: item.hcpWorkplace,
-                                            workplaceName: item.workplaceName,
-                                            cityMunicipality: item.cityMunicipality,
-                                            cityTitle: item.cityTitle,
-                                            provinceName: item.provinceName,
-                                            provinceTitle: item.provinceTitle,
-                                          );
-                                        }
-                                      });
-                                    },
-                                    child: SizedBox(
-                                      width: 24,
-                                      child: Icon(
-                                        w.preferred ? Icons.star_rounded : Icons.star_border_rounded,
-                                        size: 18,
-                                        color: w.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            wpName.isNotEmpty ? wpName : 'Manila Doctors Hospital',
-                                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        if (w.preferred) ...[
-                                          const SizedBox(width: 4),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFFEF3C7),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                            ),
-                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(cityName.isNotEmpty ? cityName : 'Ermita', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                  const SizedBox(width: 8),
-                                  Text(provName.isNotEmpty ? provName : 'Metro Manila-Manila', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () => _showEditWorkplaceDialog(idx),
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 4),
-                                      child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _selectedWorkplaces.removeAt(idx);
-                                      });
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 6),
-                                      child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                    icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                    label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                    onPressed: _showAddWorkplaceSelector,
-                  ),
-                ],
-              );
-
-              final contactCard = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFE2E8F0)),
-                      boxShadow: const [
-                        BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                          color: const Color(0xFFF1F5F9),
-                          child: Row(
-                            children: const [
-                              SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                              Expanded(child: Text('Mobile/Phone Number', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold))),
-                              Text('Email Address', style: TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.bold)),
-                              SizedBox(width: 44),
-                            ],
-                          ),
-                        ),
-                        ..._contacts.asMap().entries.map((entry) {
-                          final idx = entry.key;
-                          final c = entry.value;
-                          return InkWell(
-                            onTap: () => _showEditContactDialog(idx),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                              child: Row(
-                                children: [
-                                  InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        for (int i = 0; i < _contacts.length; i++) {
-                                          final item = _contacts[i];
-                                          _contacts[i] = SubmissionContact(
-                                            preferred: (i == idx),
-                                            contactNumber: item.contactNumber,
-                                            emailAddress: item.emailAddress,
-                                          );
-                                        }
-                                      });
-                                    },
-                                    child: SizedBox(
-                                      width: 24,
-                                      child: Icon(
-                                        c.preferred ? Icons.star_rounded : Icons.star_border_rounded,
-                                        size: 18,
-                                        color: c.preferred ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8),
-                                      ),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            c.contactNumber ?? 'N/A',
-                                            style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12),
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        if (c.preferred) ...[
-                                          const SizedBox(width: 4),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFFEF3C7),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: const Color(0xFFF59E0B), width: 0.5),
-                                            ),
-                                            child: const Text('Preferred', style: TextStyle(color: Color(0xFFB45309), fontSize: 9, fontWeight: FontWeight.bold)),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(c.emailAddress ?? '', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () => _showEditContactDialog(idx),
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 4),
-                                      child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
-                                    ),
-                                  ),
-                                  GestureDetector(
-                                    onTap: () {
-                                      setState(() {
-                                        _contacts.removeAt(idx);
-                                      });
-                                    },
-                                    child: const Padding(
-                                      padding: EdgeInsets.only(left: 6),
-                                      child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0B192C)),
-                    icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                    label: const Text('Add Row', style: TextStyle(color: Colors.white, fontSize: 12)),
-                    onPressed: _showAddContactSelector,
-                  ),
-                ],
-              );
-
-              if (isMobile) {
-                return Column(
-                  children: [
-                    workplaceCard,
-                    const SizedBox(height: 16),
-                    contactCard,
-                  ],
-                );
-              }
-
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: workplaceCard),
-                  const SizedBox(width: 14),
-                  Expanded(child: contactCard),
-                ],
-              );
-            },
-          ),
         ],
       ),
     );
@@ -4852,195 +4004,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
-  // --- OTHERS STEP ---
-  Widget _buildOthersStep() {
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    final monthStr = _submissionDate.month.toString().padLeft(2, '0');
-    final dayStr = _submissionDate.day.toString().padLeft(2, '0');
-    final yearStr = _submissionDate.year.toString();
-    final hourStr = _submissionDate.hour.toString().padLeft(2, '0');
-    final minuteStr = _submissionDate.minute.toString().padLeft(2, '0');
-    final secondStr = _submissionDate.second.toString().padLeft(2, '0');
-    final formattedDateStr = '$monthStr-$dayStr-$yearStr $hourStr:$minuteStr:$secondStr';
 
-    final territoryList = _territories.isNotEmpty ? _territories : ['AD0110', 'AD0120', 'AD0130', 'AD0140', 'AD0150', 'CORE01', 'CORE02', 'NCR-01', 'NCR-02', 'All Territories'];
-    final currentTerritory = territoryList.contains(_selectedTerritory) ? _selectedTerritory : territoryList.first;
-
-    final progList = _programs.isNotEmpty ? _programs : apiService.availablePrograms;
-    final currentProgram = progList.contains(_selectedProgram) ? _selectedProgram : (progList.isNotEmpty ? progList.first : 'Abbott Diabetes Care');
-
-    Widget buildLeftFields() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DropdownButtonFormField<String>(
-            value: currentTerritory,
-            dropdownColor: Colors.white,
-            style: const TextStyle(color: Color(0xFF0F172A)),
-            decoration: InputDecoration(
-              labelText: 'Territory Code *',
-              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-              filled: true,
-              fillColor: Colors.white,
-              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-            ),
-            items: territoryList.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-            onChanged: (val) {
-              if (val != null) {
-                setState(() {
-                  _selectedTerritory = val;
-                  _territoryManagerController.text = apiService.getTerritoryManagerForTerritory(val);
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _territoryManagerController,
-            readOnly: true,
-            style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w600),
-            decoration: InputDecoration(
-              labelText: 'Territory Manager (Read-Only)',
-              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-              prefixIcon: const Icon(Icons.lock_rounded, color: Color(0xFF64748B), size: 18),
-              filled: true,
-              fillColor: const Color(0xFFF1F5F9),
-              helperText: 'Automatically assigned based on the selected Territory Code',
-              helperStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            value: currentProgram,
-            dropdownColor: Colors.white,
-            style: const TextStyle(color: Color(0xFF0F172A)),
-            decoration: InputDecoration(
-              labelText: 'Account/Program *',
-              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-              filled: true,
-              fillColor: Colors.white,
-              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-              focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-            ),
-            items: progList.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-            onChanged: (val) {
-              if (val != null) {
-                setState(() {
-                  _selectedProgram = val;
-                });
-                apiService.setProgram(val);
-                _updateActiveSurveyForProgram(val);
-              }
-            },
-          ),
-          const SizedBox(height: 6),
-          const Padding(
-            padding: EdgeInsets.only(left: 4.0),
-            child: Text(
-              'This should be automatically populated depending on the user\'s account affiliation.',
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
-            ),
-          ),
-        ],
-      );
-    }
-
-    Widget buildRightFields() {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          InkWell(
-            onTap: _showDateTimePicker,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: const Color(0xFFCBD5E1)),
-                boxShadow: const [
-                  BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Submission Date', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
-                        const SizedBox(height: 4),
-                        Text(
-                          formattedDateStr,
-                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Asia/Manila',
-                          style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            initialValue: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
-            readOnly: true,
-            style: const TextStyle(color: Color(0xFF64748B)),
-            decoration: InputDecoration(
-              labelText: 'Medrep Email Address',
-              labelStyle: const TextStyle(color: Color(0xFF64748B)),
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 650;
-          if (isWide) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: buildLeftFields()),
-                const SizedBox(width: 24),
-                Expanded(child: buildRightFields()),
-              ],
-            );
-          }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              buildLeftFields(),
-              const SizedBox(height: 16),
-              buildRightFields(),
-            ],
-          );
-        },
-      ),
-    );
-  }
 
   // --- CHANGES STEP ---
   Widget _buildChangesStep() {
     final apiService = Provider.of<ApiService>(context, listen: false);
 
-    final currentDoctor = _selectedDoctor ?? widget.doctor;
-    final bool isExistingDoctor = currentDoctor != null && (currentDoctor.name?.isNotEmpty ?? false);
+    final currentDoctor = _isCreatingNewDoctor ? null : (_selectedDoctor ?? widget.doctor);
+    final bool isExistingDoctor = !_isCreatingNewDoctor && currentDoctor != null && (currentDoctor.name?.isNotEmpty ?? false);
 
     final fn = _firstNameController.text.trim();
     final mn = _middleNameController.text.trim();
@@ -5344,7 +4315,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 children: [
                   Text('Full Name: $fullDoctorName', style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text('Classification: ${_selectedHcpType ?? "Physician"} • Practice: $_selectedPractice', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5)),
+                  Text('Classification: ${LocationResolver.resolveHcpTypeName(_selectedHcpType, _hcpTypes)} • Practice: $_selectedPractice', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5)),
                   if (_birthDateController.text.trim().isNotEmpty) ...[
                     const SizedBox(height: 4),
                     Text('Birth Date: ${_birthDateController.text.trim()}', style: const TextStyle(color: Color(0xFF64748B), fontSize: 12.5)),
@@ -5537,6 +4508,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   Widget _buildBottomBar() {
     final titles = _getTabTitles();
     final isLast = _currentStep == titles.length - 1;
+    final bool isStep2Ready = _currentStep != 1 || (_selectedDoctor != null || _isCreatingNewDoctor);
+
     return Container(
       color: Colors.white,
       padding: const EdgeInsets.all(16),
@@ -5561,9 +4534,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            onPressed: _currentStep == 0 && !_consentGiven
+            onPressed: ((_currentStep == 0 && !_consentGiven) || !isStep2Ready)
                 ? null
                 : () {
+                    if (_currentStep == 1 && _isCreatingNewDoctor) {
+                      if (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: Color(0xFFDC2626),
+                            content: Text('Please enter the doctor\'s First Name and Last Name.'),
+                          ),
+                        );
+                        return;
+                      }
+                    }
                     if (isLast) {
                       _submitForm();
                     } else {

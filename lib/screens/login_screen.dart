@@ -302,7 +302,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 24),
                         // App Title
                         Text(
-                          AppConfig.mode == AppMode.corenergy ? 'PIMS MCP' : 'PIMS HCP',
+                          AppConfig.mode == AppMode.corenergy ? 'PIMS MCP' : 'HCP Profiling',
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             color: Color(0xFF0056B3),

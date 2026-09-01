@@ -41,7 +41,7 @@ class BiometricService {
       if (!isAvailable) return false;
 
       return await _auth.authenticate(
-        localizedReason: customReason ?? 'Authenticate to log in to PIMS HCP',
+        localizedReason: customReason ?? 'Authenticate to log in to HCP Profiling',
         options: const AuthenticationOptions(
           stickyAuth: true,
           biometricOnly: false,

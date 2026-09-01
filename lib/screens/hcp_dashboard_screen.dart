@@ -288,6 +288,30 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
       }
     }
 
+    List<HcpProfileSubmission> mySubmissions = progSubmissions;
+    if (apiService.isMedRep) {
+      final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
+      final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
+      final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+
+      mySubmissions = progSubmissions.where((item) {
+        final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
+        final sSales = (item.salesPerson ?? '').toLowerCase().trim();
+        if (sEmail.isNotEmpty && email.isNotEmpty) {
+          if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
+        }
+        if (sSales.isNotEmpty && fullName.isNotEmpty) {
+          if (sSales == fullName || sSales.contains(fullName) || fullName.contains(sSales)) return true;
+          final salesTokens = sSales.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+          final matchingTokens = salesTokens.where((t) => userTokens.contains(t)).length;
+          if (matchingTokens >= 2 || (salesTokens.length == 1 && userTokens.contains(salesTokens.first))) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
+    }
+
     final effectiveSubmissions = progSubmissions;
 
     final approvedSubmissions = effectiveSubmissions.where((s) => s.docstatus == 1 || s.applicationStatus == 'Applied').length;
@@ -432,8 +456,32 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             ? (constraints.maxWidth - 36) / 4
             : (constraints.maxWidth - 12) / 2;
 
+        final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
+        final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
+        final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+
+        final mySubmissions = effectiveSubmissions.where((item) {
+          final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
+          final sSales = (item.salesPerson ?? '').toLowerCase().trim();
+          if (sEmail.isNotEmpty && email.isNotEmpty) {
+            if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
+          }
+          if (sSales.isNotEmpty && fullName.isNotEmpty) {
+            if (sSales == fullName || sSales.contains(fullName) || fullName.contains(sSales)) return true;
+            final salesTokens = sSales.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+            final matchingTokens = salesTokens.where((t) => userTokens.contains(t)).length;
+            if (matchingTokens >= 2 || (salesTokens.length == 1 && userTokens.contains(salesTokens.first))) {
+              return true;
+            }
+          }
+          return false;
+        }).toList();
+
         final submissionTitle = apiService.isMedRep ? 'MY SUBMISSIONS' : 'ACTIVE SUBMISSIONS';
-        final submissionSubtitle = apiService.isMedRep ? 'Personal Output' : 'SFE Field Force Synced';
+        final submissionValue = apiService.isMedRep ? '${mySubmissions.length}' : '${effectiveSubmissions.length}';
+        final submissionSubtitle = apiService.isMedRep
+            ? '${mySubmissions.length} of ${effectiveSubmissions.length} Program Total'
+            : 'SFE Field Force Synced';
 
         return Wrap(
           spacing: 12,
@@ -470,7 +518,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             _buildMetricCard(
               width: cardWidth,
               title: submissionTitle,
-              value: '${effectiveSubmissions.length}',
+              value: submissionValue,
               subtitle: submissionSubtitle,
               icon: Icons.assignment_turned_in_rounded,
               iconColor: const Color(0xFFF59E0B),
@@ -1030,6 +1078,20 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                             specialty,
                             style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                           ),
+                          if (item.submissionDate != null && item.submissionDate!.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2.0),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.access_time_rounded, size: 10.5, color: Color(0xFF94A3B8)),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _format12HrDate(item.submissionDate),
+                                    style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -1055,6 +1117,50 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         ],
       ),
     );
+  }
+
+  String _format12HrDate(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty || dateStr == 'N/A' || dateStr == 'No date') {
+      return 'No date';
+    }
+    final raw = dateStr.trim();
+    if (raw.toUpperCase().contains('AM') || raw.toUpperCase().contains('PM')) {
+      return raw;
+    }
+    try {
+      DateTime? dt = DateTime.tryParse(raw);
+      if (dt == null && raw.contains(' ')) {
+        final parts = raw.split(' ');
+        if (parts.length >= 2) {
+          final datePart = parts[0];
+          final timePart = parts[1];
+          dt = DateTime.tryParse('${datePart}T$timePart');
+          if (dt == null && datePart.contains('-')) {
+            final dp = datePart.split('-');
+            if (dp.length == 3) {
+              if (dp[0].length == 4) {
+                dt = DateTime.tryParse('${dp[0]}-${dp[1].padLeft(2, '0')}-${dp[2].padLeft(2, '0')}T$timePart');
+              } else if (dp[2].length == 4) {
+                dt = DateTime.tryParse('${dp[2]}-${dp[0].padLeft(2, '0')}-${dp[1].padLeft(2, '0')}T$timePart');
+              }
+            }
+          }
+        }
+      }
+      if (dt != null) {
+        final local = dt.toLocal();
+        final int hour12 = local.hour == 0 ? 12 : (local.hour > 12 ? local.hour - 12 : local.hour);
+        final String period = local.hour >= 12 ? 'PM' : 'AM';
+        final String month = local.month.toString().padLeft(2, '0');
+        final String day = local.day.toString().padLeft(2, '0');
+        final String year = local.year.toString();
+        final String hour = hour12.toString().padLeft(2, '0');
+        final String minute = local.minute.toString().padLeft(2, '0');
+        final String second = local.second.toString().padLeft(2, '0');
+        return '$month-$day-$year $hour:$minute:$second $period';
+      }
+    } catch (_) {}
+    return raw;
   }
 
   Widget _buildTerritoryDistributionCard() {

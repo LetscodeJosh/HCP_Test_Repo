@@ -7,6 +7,7 @@ import '../doctor_masterlist_screen.dart';
 import '../submission_history_screen.dart';
 import '../login_screen.dart';
 import '../doctor_account_screen.dart';
+import '../../constants/app_version.dart';
 
 enum DrawerItem {
   dashboard,
@@ -71,7 +72,7 @@ class AppDrawer extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: const [
                           Text(
-                            'PIMS HCP',
+                            'HCP Profiling',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 22,
@@ -266,12 +267,12 @@ class AppDrawer extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.info_outline_rounded, color: Color(0xFF64748B), size: 14),
-                SizedBox(width: 6),
+              children: [
+                const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B), size: 14),
+                const SizedBox(width: 6),
                 Text(
-                  'HCP V1.0',
-                  style: TextStyle(
+                  AppVersion.fullVersion,
+                  style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
@@ -549,13 +550,12 @@ class _InstitutionsListModalState extends State<_InstitutionsListModal> {
                         itemBuilder: (ctx, idx) {
                           final item = filtered[idx];
                           final name = LocationResolver.resolveInstitutionName(item.institutionName ?? item.name);
-                          final resolvedCity = LocationResolver.resolveCityName(item.cityMunicipality);
-                          final resolvedProv = LocationResolver.resolveProvinceName(item.provinceName);
-                          final resolvedReg = LocationResolver.resolveRegionName(item.regionName);
-                          final location = [resolvedCity, resolvedProv, resolvedReg]
-                              .where((s) => s.isNotEmpty && s != '-')
-                              .toSet()
-                              .join(', ');
+                          final location = LocationResolver.formatLocation(
+                            streetAddress: item.streetAddress,
+                            cityMunicipality: item.cityMunicipality,
+                            provinceName: item.provinceName,
+                            regionName: item.regionName,
+                          );
 
                           return Container(
                             decoration: BoxDecoration(

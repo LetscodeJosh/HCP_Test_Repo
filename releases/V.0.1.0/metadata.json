@@ -1,0 +1,21 @@
+{
+  "appName": "HCP Profiling",
+  "version": "V.0.1.0",
+  "buildNumber": "1",
+  "releaseDate": "2026-08-27T13:40:00+08:00",
+  "targetBackend": "ERPNext v15",
+  "binaries": {
+    "ios": [
+      "HCP_Profiling_V.0.1.0.ipa",
+      "PIMS_HCP_V.0.1.0.ipa"
+    ]
+  },
+  "modules": [
+    "Doctor Masterlist (HCP)",
+    "HCP Accounts",
+    "HCP Profile Submission",
+    "Submissions Fact",
+    "Institutions",
+    "Location Resolver (PSGC)"
+  ]
+}

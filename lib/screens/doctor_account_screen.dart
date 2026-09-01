@@ -93,33 +93,52 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     );
   }
 
+  bool _matchesProgram(HcpAccount acc, String progFilter) {
+    if (progFilter.isEmpty || progFilter.toLowerCase() == 'all') return true;
+    final p = progFilter.toLowerCase().trim();
+    final accP = acc.accountName.toLowerCase().trim();
+    if (accP.isEmpty) return true;
+    return accP == p ||
+        accP.contains(p) ||
+        p.contains(accP) ||
+        (p.contains('abbott') && accP.contains('abbott')) ||
+        (p.contains('adc') && accP.contains('abbott')) ||
+        (p.contains('corenergy') && accP.contains('corenergy'));
+  }
+
+  int _getProgramTotalCount(ApiService apiService) {
+    if (apiService.isAdmin) {
+      if (_programFilter == 'All') {
+        return _allAccounts.length;
+      }
+      return _allAccounts.where((acc) => _matchesProgram(acc, _programFilter)).length;
+    } else {
+      final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
+          ? apiService.selectedProgram.toLowerCase().trim()
+          : _programFilter.toLowerCase().trim();
+      if (userProg.isEmpty || userProg == 'all') {
+        return _allAccounts.length;
+      }
+      return _allAccounts.where((acc) => _matchesProgram(acc, userProg)).length;
+    }
+  }
+
   void _applyFilters() {
     final apiService = Provider.of<ApiService>(context, listen: false);
     setState(() {
       _filteredAccounts = _allAccounts.where((acc) {
         // 1. Program Isolation by Role
         if (apiService.isAdmin) {
-          if (_programFilter != 'All') {
-            final p = _programFilter.toLowerCase().trim();
-            final accP = acc.accountName.toLowerCase().trim();
-            final match = accP == p || accP.contains(p) || p.contains(accP) ||
-                (p.contains('abbott') && accP.contains('abbott')) ||
-                (p.contains('adc') && accP.contains('abbott')) ||
-                (p.contains('corenergy') && accP.contains('corenergy'));
-            if (!match) return false;
+          if (_programFilter != 'All' && !_matchesProgram(acc, _programFilter)) {
+            return false;
           }
         } else {
           // Manager and MedRep are strictly locked to their program
           final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
               ? apiService.selectedProgram.toLowerCase().trim()
               : _programFilter.toLowerCase().trim();
-          if (userProg.isNotEmpty && userProg != 'all') {
-            final accP = acc.accountName.toLowerCase().trim();
-            final match = accP == userProg || accP.contains(userProg) || userProg.contains(accP) ||
-                (userProg.contains('abbott') && accP.contains('abbott')) ||
-                (userProg.contains('adc') && accP.contains('abbott')) ||
-                (userProg.contains('corenergy') && accP.contains('corenergy'));
-            if (!match) return false;
+          if (userProg.isNotEmpty && userProg != 'all' && !_matchesProgram(acc, userProg)) {
+            return false;
           }
         }
 
@@ -501,10 +520,10 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                               else
                                 ...displayWorkplaces.map((w) {
                                         final isPref = w.preferred || w.isPrimary;
-                                        final locStr = [
-                                          if (w.city != null && w.city!.isNotEmpty) LocationResolver.resolveCityName(w.city!),
-                                          if (w.province != null && w.province!.isNotEmpty) LocationResolver.resolveProvinceName(w.province!),
-                                        ].join(', ');
+                                        final locStr = LocationResolver.formatLocation(
+                                          cityMunicipality: w.city,
+                                          provinceName: w.province,
+                                        );
                                         return Padding(
                                           padding: const EdgeInsets.all(12.0),
                                           child: Row(
@@ -1296,7 +1315,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                       SizedBox(
                                         width: 45,
                                         child: Text(
-                                          '${_filteredAccounts.length} of ${_allAccounts.length}',
+                                          '${_filteredAccounts.length} of ${_getProgramTotalCount(apiService)}',
                                           style: const TextStyle(color: Colors.white70, fontSize: 11),
                                           textAlign: TextAlign.right,
                                         ),
@@ -1316,7 +1335,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                   children: [
                                     const Text('DOCTOR ACCOUNTS', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                                     Text(
-                                      'Showing ${_filteredAccounts.length} of ${_allAccounts.length}',
+                                      'Showing ${_filteredAccounts.length} of ${_getProgramTotalCount(apiService)}',
                                       style: const TextStyle(color: Colors.white70, fontSize: 11),
                                     ),
                                   ],

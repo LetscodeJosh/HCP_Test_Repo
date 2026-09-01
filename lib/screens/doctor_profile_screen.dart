@@ -435,11 +435,11 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
           ),
         ...displayList.map((w) {
           final isPref = w.isPrimary;
-          final locInfo = [
-            if (w.address != null && w.address!.isNotEmpty && w.address != w.workplace) w.address!,
-            if (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) w.cityMunicipality!,
-            if (w.provinceName != null && w.provinceName!.isNotEmpty) w.provinceName!,
-          ].join(', ');
+          final locInfo = LocationResolver.formatLocation(
+            streetAddress: (w.address != null && w.address!.isNotEmpty && w.address != w.workplace) ? w.address : null,
+            cityMunicipality: w.cityMunicipality,
+            provinceName: w.provinceName,
+          );
           return Container(
             width: double.infinity,
             margin: const EdgeInsets.only(bottom: 8),
@@ -592,11 +592,11 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
 
   Widget _buildLocationInfo(Hcp doctor) {
     final fields = [
-      {'label': 'Region', 'value': doctor.regionName},
-      {'label': 'Province', 'value': doctor.provinceName},
-      {'label': 'City/Municipality', 'value': doctor.cityMunicipality},
+      {'label': 'Region', 'value': LocationResolver.resolveRegionName(doctor.regionName)},
+      {'label': 'Province', 'value': LocationResolver.resolveProvinceName(doctor.provinceName)},
+      {'label': 'City/Municipality', 'value': LocationResolver.resolveCityName(doctor.cityMunicipality)},
       {'label': 'Barangay', 'value': doctor.barangayName},
-      {'label': 'Institution', 'value': doctor.institution},
+      {'label': 'Institution', 'value': LocationResolver.resolveInstitutionName(doctor.institution)},
     ];
 
     final hasLocation = fields.any((f) => f['value'] != null && f['value']!.isNotEmpty);
@@ -706,7 +706,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                       ),
                     if (sub.submissionDate != null)
                       Text(
-                        'Date: ${sub.submissionDate}',
+                        'Date: ${_format12HrDate(sub.submissionDate)}',
                         style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
                       ),
                     if (sub.medrepEmail != null)
@@ -786,5 +786,49 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
         ),
       ],
     );
+  }
+
+  String _format12HrDate(String? dateStr) {
+    if (dateStr == null || dateStr.trim().isEmpty || dateStr == 'N/A' || dateStr == 'No date') {
+      return 'No date';
+    }
+    final raw = dateStr.trim();
+    if (raw.toUpperCase().contains('AM') || raw.toUpperCase().contains('PM')) {
+      return raw;
+    }
+    try {
+      DateTime? dt = DateTime.tryParse(raw);
+      if (dt == null && raw.contains(' ')) {
+        final parts = raw.split(' ');
+        if (parts.length >= 2) {
+          final datePart = parts[0];
+          final timePart = parts[1];
+          dt = DateTime.tryParse('${datePart}T$timePart');
+          if (dt == null && datePart.contains('-')) {
+            final dp = datePart.split('-');
+            if (dp.length == 3) {
+              if (dp[0].length == 4) {
+                dt = DateTime.tryParse('${dp[0]}-${dp[1].padLeft(2, '0')}-${dp[2].padLeft(2, '0')}T$timePart');
+              } else if (dp[2].length == 4) {
+                dt = DateTime.tryParse('${dp[2]}-${dp[0].padLeft(2, '0')}-${dp[1].padLeft(2, '0')}T$timePart');
+              }
+            }
+          }
+        }
+      }
+      if (dt != null) {
+        final local = dt.toLocal();
+        final int hour12 = local.hour == 0 ? 12 : (local.hour > 12 ? local.hour - 12 : local.hour);
+        final String period = local.hour >= 12 ? 'PM' : 'AM';
+        final String month = local.month.toString().padLeft(2, '0');
+        final String day = local.day.toString().padLeft(2, '0');
+        final String year = local.year.toString();
+        final String hour = hour12.toString().padLeft(2, '0');
+        final String minute = local.minute.toString().padLeft(2, '0');
+        final String second = local.second.toString().padLeft(2, '0');
+        return '$month-$day-$year $hour:$minute:$second $period';
+      }
+    } catch (_) {}
+    return raw;
   }
 }
