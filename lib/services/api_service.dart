@@ -2844,22 +2844,30 @@ class ApiService extends ChangeNotifier {
     String targetState = '';
     int targetDocStatus = 0;
 
-    switch (action) {
+    final normalizedAction = action.trim();
+    String effectiveAction = normalizedAction;
+
+    switch (normalizedAction) {
+      case 'Submit for Processing':
       case 'Select for Processing':
         targetState = 'Processed';
         targetDocStatus = 0;
+        effectiveAction = 'Submit for Processing';
         break;
       case 'Submit for Approval':
         targetState = 'Pending Approval';
         targetDocStatus = 0;
+        effectiveAction = 'Submit for Approval';
         break;
       case 'Approve':
         targetState = 'Approved';
         targetDocStatus = 1;
+        effectiveAction = 'Approve';
         break;
       case 'Reject':
         targetState = 'Rejected';
         targetDocStatus = 2;
+        effectiveAction = 'Reject';
         break;
     }
 

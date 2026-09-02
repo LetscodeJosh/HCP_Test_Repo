@@ -435,7 +435,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ),
                 ),
 
-                // Role-Aware Workflow Action Footer Bar
+                // Role-Aware Workflow Action Footer Bar (Aligned with ERPNext HCP Profile Submission WF)
                 Builder(
                   builder: (footerCtx) {
                     final apiService = Provider.of<ApiService>(context, listen: false);
@@ -446,14 +446,20 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     final bool isApproved = rawWf == 'approved' || rawWf.contains('appr') || currentSub.docstatus == 1;
                     final bool isRejected = rawWf == 'rejected' || rawWf.contains('reject') || currentSub.docstatus == 2;
 
-                    final bool canSelectForProcessing = (apiService.isMedRep || apiService.isAdmin) && isDraft;
-                    final bool canSubmitForApproval = (apiService.isMedRep || apiService.isManager || apiService.isAdmin) && (isDraft || isProcessed);
+                    // Allowed transition rules from ERPNext HCP Profile Submission WF:
+                    // 1. Draft -> Submit for Processing -> Processed (Sales User, System Manager)
+                    final bool canSubmitForProcessing = (apiService.isMedRep || apiService.isAdmin) && isDraft;
+
+                    // 2. Draft / Processed / Rejected -> Submit for Approval -> Pending Approval (Sales User, Sales Manager, System Manager)
+                    final bool canSubmitForApproval = (apiService.isMedRep || apiService.isManager || apiService.isAdmin) && (isDraft || isProcessed || isRejected);
+
+                    // 3. Pending Approval -> Approve / Reject (Sales Manager, System Manager)
                     final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin) && isPending;
 
-                    // If user is Admin, allow override testing on all states
+                    // If user is Admin, allow override testing
                     final bool showAdminOverrides = apiService.isAdmin;
 
-                    if (!canSelectForProcessing && !canSubmitForApproval && !canApproveOrReject && !showAdminOverrides) {
+                    if (!canSubmitForProcessing && !canSubmitForApproval && !canApproveOrReject && !showAdminOverrides) {
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         decoration: const BoxDecoration(
@@ -511,8 +517,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           // Primary allowed actions row
                           Row(
                             children: [
-                              // 1. Action: Select for Processing (Draft -> Processed)
-                              if (canSelectForProcessing) ...[
+                              // 1. Action: Submit for Processing (Draft -> Processed)
+                              if (canSubmitForProcessing) ...[
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
@@ -523,17 +529,17 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                     ),
                                     icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
                                     label: const Text(
-                                      'Select for Processing',
+                                      'Submit for Processing',
                                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                     ),
-                                    onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Select for Processing'),
+                                    onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Submit for Processing'),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                               ],
 
-                              // 2. Action: Submit for Approval (Draft / Processed -> Pending Approval)
-                              if (canSubmitForApproval) ...[
+                              // 2. Action: Submit for Approval (Draft / Processed / Rejected -> Pending Approval)
+                              if (canSubmitForApproval && !isPending && !isApproved) ...[
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
@@ -542,10 +548,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                       padding: const EdgeInsets.symmetric(vertical: 14),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                     ),
-                                    icon: const Icon(Icons.send_rounded, size: 18),
-                                    label: const Text(
-                                      'Submit for Approval',
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    icon: Icon(isRejected ? Icons.replay_rounded : Icons.send_rounded, size: 18),
+                                    label: Text(
+                                      isRejected ? 'Resubmit for Approval' : 'Submit for Approval',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                     ),
                                     onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Submit for Approval'),
                                   ),
@@ -553,7 +559,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                 const SizedBox(width: 8),
                               ],
 
-                              // 3. Action: Reject (Pending Approval -> Rejected)
+                              // 3. Action: Reject & Approve (Pending Approval -> Approved / Rejected)
                               if (canApproveOrReject) ...[
                                 Expanded(
                                   child: OutlinedButton.icon(
@@ -614,7 +620,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           ),
 
                           // Admin QA Action Bar (Allows testing transitions from any state)
-                          if (showAdminOverrides && (isApproved || isRejected)) ...[
+                          if (showAdminOverrides && isApproved) ...[
                             const SizedBox(height: 8),
                             Row(
                               children: [
@@ -624,7 +630,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 TextButton(
-                                  onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Select for Processing'),
+                                  onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Submit for Processing'),
                                   child: const Text('Process', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 11)),
                                 ),
                                 TextButton(
