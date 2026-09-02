@@ -1028,7 +1028,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 final specialty = item.specialties.isNotEmpty
                     ? (item.specialties.first.specialtyName ?? item.specialties.first.hcpSpecialty ?? 'Specialty Pending')
                     : 'Specialty Pending';
-                final workflow = item.workflowState ?? item.status ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Pending Approval'));
+                final workflow = item.workflowState ?? item.status ?? (item.docstatus == 1 ? 'Approved' : (item.docstatus == 2 ? 'Rejected' : 'Draft'));
 
                 Color statusBg;
                 final wLower = workflow.toLowerCase().trim();
@@ -1036,6 +1036,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                   statusBg = const Color(0xFFDC2626);
                 } else if (wLower.contains('cancel')) {
                   statusBg = const Color(0xFF991B1B);
+                } else if (wLower.contains('proc')) {
+                  statusBg = const Color(0xFF2563EB);
                 } else if (wLower.contains('draft')) {
                   statusBg = const Color(0xFF64748B);
                 } else if (wLower.contains('pend')) {

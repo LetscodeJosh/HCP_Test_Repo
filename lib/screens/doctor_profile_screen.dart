@@ -650,7 +650,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
         Color statusColor;
         String statusLabel;
         IconData statusIcon;
-        final workflow = sub.workflowState ?? sub.status ?? (sub.docstatus == 1 ? 'Approved' : (sub.docstatus == 2 ? 'Cancelled' : 'Draft'));
+        final workflow = sub.workflowState ?? sub.status ?? (sub.docstatus == 1 ? 'Approved' : (sub.docstatus == 2 ? 'Rejected' : 'Draft'));
         final wLower = workflow.toLowerCase();
         if (wLower.contains('reject')) {
           statusColor = const Color(0xFFFF453A);
@@ -664,10 +664,18 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
           statusColor = const Color(0xFF30D158);
           statusLabel = 'Approved';
           statusIcon = Icons.check_circle;
+        } else if (wLower.contains('proc')) {
+          statusColor = const Color(0xFF0A84FF);
+          statusLabel = 'Processed';
+          statusIcon = Icons.playlist_add_check;
         } else if (wLower.contains('pend')) {
           statusColor = const Color(0xFFFF9F0A);
           statusLabel = 'Pending Approval';
           statusIcon = Icons.schedule;
+        } else if (wLower == 'draft') {
+          statusColor = const Color(0xFF8E8E93);
+          statusLabel = 'Draft';
+          statusIcon = Icons.edit_note;
         } else {
           statusColor = const Color(0xFF8E8E93);
           statusLabel = workflow;

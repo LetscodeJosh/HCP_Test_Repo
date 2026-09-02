@@ -90,19 +90,34 @@ class HcpProfileSubmission {
   factory HcpProfileSubmission.fromJson(Map<String, dynamic> json) {
     final rawDocstatus = json['docstatus'] is int ? json['docstatus'] as int : int.tryParse('${json['docstatus']}') ?? 0;
     
-    // Resolve workflow state accurately according to ERPNext v15
-    String? rawWorkflow = json['workflow_state'] ?? json['status'];
-    String resolvedWorkflow = 'Pending Approval';
-    if (rawWorkflow != null && rawWorkflow.isNotEmpty) {
-      if (rawWorkflow == 'Approved' || rawWorkflow == 'Pending Approval' || rawWorkflow == 'Cancelled' || rawWorkflow == 'Rejected') {
-        resolvedWorkflow = rawWorkflow;
-      } else if (rawWorkflow == 'Draft') {
-        resolvedWorkflow = (rawDocstatus == 1 || json['application_status'] == 'Applied') ? 'Approved' : 'Pending Approval';
+    // Resolve workflow state accurately according to ERPNext HCP Profile Submission WF
+    String resolvedWorkflow = 'Draft';
+    final rawWf = (json['workflow_state'] ?? json['status'] ?? '').toString().trim();
+    if (rawWf.isNotEmpty) {
+      final lower = rawWf.toLowerCase();
+      if (lower == 'draft') {
+        resolvedWorkflow = 'Draft';
+      } else if (lower == 'processed' || lower.contains('proc')) {
+        resolvedWorkflow = 'Processed';
+      } else if (lower == 'pending approval' || lower.contains('pend')) {
+        resolvedWorkflow = 'Pending Approval';
+      } else if (lower == 'approved' || lower.contains('appr')) {
+        resolvedWorkflow = 'Approved';
+      } else if (lower == 'rejected' || lower.contains('reject')) {
+        resolvedWorkflow = 'Rejected';
+      } else if (lower == 'cancelled' || lower.contains('cancel')) {
+        resolvedWorkflow = 'Cancelled';
       } else {
-        resolvedWorkflow = (json['application_status'] == 'Applied' || rawDocstatus == 1) ? 'Approved' : 'Pending Approval';
+        resolvedWorkflow = rawWf;
       }
-    } else if (rawDocstatus == 1 || json['application_status'] == 'Applied') {
-      resolvedWorkflow = 'Approved';
+    } else {
+      if (rawDocstatus == 1 || json['application_status'] == 'Applied') {
+        resolvedWorkflow = 'Approved';
+      } else if (rawDocstatus == 2) {
+        resolvedWorkflow = 'Rejected';
+      } else {
+        resolvedWorkflow = 'Draft';
+      }
     }
 
     // Resolve full name cleanly if hcp_full_name is missing
