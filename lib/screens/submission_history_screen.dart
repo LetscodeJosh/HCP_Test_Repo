@@ -57,6 +57,65 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
   }
 
+  Future<void> _handleApplyWorkflowAction(BuildContext modalCtx, HcpProfileSubmission submission, String action, {String remarks = ''}) async {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (loadingCtx) => Center(
+          child: CircularProgressIndicator(
+            color: action == 'Approve'
+                ? const Color(0xFF16A34A)
+                : action == 'Reject'
+                    ? const Color(0xFFDC2626)
+                    : const Color(0xFF2563EB),
+          ),
+        ),
+      );
+
+      await apiService.applyWorkflowAction(submission, action, remarks: remarks);
+      if (action == 'Approve') {
+        await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
+        await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
+      }
+      await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
+
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(modalCtx); // Close detail modal
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: action == 'Approve'
+                ? const Color(0xFF16A34A)
+                : action == 'Reject'
+                    ? const Color(0xFFDC2626)
+                    : const Color(0xFF2563EB),
+            content: Text(
+              action == 'Approve'
+                  ? 'Submission Approved! Doctor registered in Masterlist and synced to HCP Account.'
+                  : action == 'Select for Processing'
+                      ? 'Action applied: Selected for Processing (State: Processed).'
+                      : action == 'Submit for Approval'
+                          ? 'Action applied: Submitted for Approval (State: Pending Approval).'
+                          : action == 'Reject'
+                              ? 'Action applied: Submission Rejected.'
+                              : 'Workflow Action "$action" applied successfully.',
+            ),
+          ),
+        );
+        _loadSubmissions();
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Close loading dialog
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to apply $action: $e')),
+        );
+      }
+    }
+  }
+
   bool _matchesProgram(HcpProfileSubmission item, String progFilter) {
     if (progFilter.isEmpty || progFilter.toLowerCase() == 'all') return true;
     final prog = progFilter.toLowerCase().trim();
@@ -196,15 +255,21 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
     if (_statusFilter != 'All') {
       list = list.where((item) {
-        final wf = (item.workflowState ?? item.status ?? '').toLowerCase();
-        final isPending = wf.contains('pend') || wf.contains('draft') || item.docstatus == 0;
-
-        if (_statusFilter == 'Pending Approval') {
-          return isPending;
-        } else if (_statusFilter == 'Approved') {
-          return !isPending || wf.contains('appr') || item.docstatus == 1;
+        final wf = (item.workflowState ?? item.status ?? '').toLowerCase().trim();
+        switch (_statusFilter) {
+          case 'Draft':
+            return wf == 'draft';
+          case 'Processed':
+            return wf == 'processed' || wf.contains('proc');
+          case 'Pending Approval':
+            return (wf.contains('pend') || wf.isEmpty) && item.docstatus == 0 && wf != 'draft' && wf != 'processed';
+          case 'Approved':
+            return wf == 'approved' || wf.contains('appr') || item.docstatus == 1;
+          case 'Rejected':
+            return wf == 'rejected' || wf.contains('reject') || item.docstatus == 2;
+          default:
+            return true;
         }
-        return true;
       }).toList();
     }
 
@@ -370,13 +435,68 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   ),
                 ),
 
-                // Manager / Admin Approval Action Footer Bar
+                // Role-Aware Workflow Action Footer Bar
                 Builder(
                   builder: (footerCtx) {
                     final apiService = Provider.of<ApiService>(context, listen: false);
-                    final isPending = (currentSub.workflowState?.toLowerCase().contains('pend') ?? false) || currentSub.docstatus == 0;
-                    if (!(apiService.isAdmin || apiService.isManager) || !isPending) {
-                      return const SizedBox();
+                    final rawWf = (currentSub.workflowState ?? currentSub.status ?? '').toLowerCase().trim();
+                    final bool isDraft = rawWf == 'draft';
+                    final bool isProcessed = rawWf == 'processed' || rawWf.contains('proc');
+                    final bool isPending = (rawWf.contains('pend') || rawWf.isEmpty) && currentSub.docstatus == 0 && !isDraft && !isProcessed;
+                    final bool isApproved = rawWf == 'approved' || rawWf.contains('appr') || currentSub.docstatus == 1;
+                    final bool isRejected = rawWf == 'rejected' || rawWf.contains('reject') || currentSub.docstatus == 2;
+
+                    final bool canSelectForProcessing = (apiService.isMedRep || apiService.isAdmin) && isDraft;
+                    final bool canSubmitForApproval = (apiService.isMedRep || apiService.isManager || apiService.isAdmin) && (isDraft || isProcessed);
+                    final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin) && isPending;
+
+                    // If user is Admin, allow override testing on all states
+                    final bool showAdminOverrides = apiService.isAdmin;
+
+                    if (!canSelectForProcessing && !canSubmitForApproval && !canApproveOrReject && !showAdminOverrides) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF18181B),
+                          border: Border(top: BorderSide(color: Color(0xFF27272A))),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              isApproved
+                                  ? Icons.check_circle_rounded
+                                  : isRejected
+                                      ? Icons.cancel_rounded
+                                      : Icons.info_outline_rounded,
+                              color: isApproved
+                                  ? const Color(0xFF10B981)
+                                  : isRejected
+                                      ? const Color(0xFFEF4444)
+                                      : const Color(0xFFD97706),
+                              size: 18,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                isApproved
+                                    ? 'Status: Approved & Masterlist Synced'
+                                    : isRejected
+                                        ? 'Status: Rejected'
+                                        : 'Status: Pending Approval (Awaiting Manager Review)',
+                                style: TextStyle(
+                                  color: isApproved
+                                      ? const Color(0xFF10B981)
+                                      : isRejected
+                                          ? const Color(0xFFEF4444)
+                                          : const Color(0xFFD97706),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
                     }
 
                     return Container(
@@ -385,112 +505,139 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                         color: Color(0xFF18181B),
                         border: Border(top: BorderSide(color: Color(0xFF27272A))),
                       ),
-                      child: Row(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: const Color(0xFFEF4444),
-                                side: const BorderSide(color: Color(0xFFEF4444)),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: const Icon(Icons.close, size: 18),
-                              label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
-                              onPressed: () async {
-                                final confirm = await showDialog<bool>(
-                                  context: context,
-                                  builder: (dCtx) => AlertDialog(
-                                    backgroundColor: const Color(0xFF1C1C1E),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                    title: const Text('Reject Submission?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                    content: const Text('Are you sure you want to reject this HCP Profile submission?', style: TextStyle(color: Colors.white70)),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.pop(dCtx, false),
-                                        child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
-                                      ),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                                        onPressed: () => Navigator.pop(dCtx, true),
-                                        child: const Text('Reject', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                      ),
-                                    ],
+                          // Primary allowed actions row
+                          Row(
+                            children: [
+                              // 1. Action: Select for Processing (Draft -> Processed)
+                              if (canSelectForProcessing) ...[
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2563EB),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+                                    label: const Text(
+                                      'Select for Processing',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                    onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Select for Processing'),
                                   ),
-                                );
-                                if (confirm == true && currentSub.name != null) {
-                                  try {
-                                    await apiService.rejectSubmission(currentSub.name!);
-                                    if (mounted) {
-                                      Navigator.pop(ctx);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(
-                                          backgroundColor: Color(0xFFDC2626),
-                                          content: Text('HCP Profile Submission rejected.'),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+
+                              // 2. Action: Submit for Approval (Draft / Processed -> Pending Approval)
+                              if (canSubmitForApproval) ...[
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFD97706),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    icon: const Icon(Icons.send_rounded, size: 18),
+                                    label: const Text(
+                                      'Submit for Approval',
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                    onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Submit for Approval'),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+
+                              // 3. Action: Reject (Pending Approval -> Rejected)
+                              if (canApproveOrReject) ...[
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: const Color(0xFFEF4444),
+                                      side: const BorderSide(color: Color(0xFFEF4444)),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                    icon: const Icon(Icons.close, size: 18),
+                                    label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
+                                    onPressed: () async {
+                                      final confirm = await showDialog<bool>(
+                                        context: context,
+                                        builder: (dCtx) => AlertDialog(
+                                          backgroundColor: const Color(0xFF1C1C1E),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          title: const Text('Reject Submission?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                          content: const Text('Are you sure you want to reject this HCP Profile submission?', style: TextStyle(color: Colors.white70)),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(dCtx, false),
+                                              child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
+                                            ),
+                                            ElevatedButton(
+                                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
+                                              onPressed: () => Navigator.pop(dCtx, true),
+                                              child: const Text('Reject', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
                                         ),
                                       );
-                                      _loadSubmissions();
-                                    }
-                                  } catch (e) {
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Failed to reject: $e')),
-                                      );
-                                    }
-                                  }
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 2,
-                            child: ElevatedButton.icon(
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF16A34A),
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                              icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
-                              label: const Text(
-                                'Approve & Sync Masterlist',
-                                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                              ),
-                              onPressed: () async {
-                                try {
-                                  showDialog(
-                                    context: context,
-                                    barrierDismissible: false,
-                                    builder: (loadingCtx) => const Center(
-                                      child: CircularProgressIndicator(color: Color(0xFF16A34A)),
+                                      if (confirm == true) {
+                                        _handleApplyWorkflowAction(ctx, currentSub, 'Reject');
+                                      }
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 2,
+                                  child: ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF16A34A),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                     ),
-                                  );
-                                  await apiService.approveSubmission(currentSub);
-                                  await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
-                                  await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
-                                  await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
-                                  if (mounted) {
-                                    Navigator.pop(context); // Close loading indicator
-                                    Navigator.pop(ctx); // Close detail modal
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        backgroundColor: Color(0xFF16A34A),
-                                        content: Text('Submission Approved! Doctor registered in Masterlist and synced to HCP Account.'),
-                                      ),
-                                    );
-                                    _loadSubmissions();
-                                  }
-                                } catch (e) {
-                                  if (mounted) {
-                                    Navigator.pop(context); // Close loading indicator
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Failed to approve: $e')),
-                                    );
-                                  }
-                                }
-                              },
-                            ),
+                                    icon: const Icon(Icons.check_circle_outline_rounded, color: Colors.white, size: 18),
+                                    label: const Text(
+                                      'Approve & Sync Masterlist',
+                                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                    ),
+                                    onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Approve'),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
+
+                          // Admin QA Action Bar (Allows testing transitions from any state)
+                          if (showAdminOverrides && (isApproved || isRejected)) ...[
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                const Text(
+                                  'Admin Transition Test:',
+                                  style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Select for Processing'),
+                                  child: const Text('Process', style: TextStyle(color: Color(0xFF60A5FA), fontSize: 11)),
+                                ),
+                                TextButton(
+                                  onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Submit for Approval'),
+                                  child: const Text('Submit', style: TextStyle(color: Color(0xFFFBBF24), fontSize: 11)),
+                                ),
+                                TextButton(
+                                  onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Approve'),
+                                  child: const Text('Approve', style: TextStyle(color: Color(0xFF4ADE80), fontSize: 11)),
+                                ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     );
@@ -1431,10 +1578,25 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
   Widget _buildStatusBadge(HcpProfileSubmission item) {
     final wf = (item.workflowState ?? item.status ?? '').toLowerCase().trim();
-    final bool isPending = wf.contains('pend') || wf.contains('draft') || item.docstatus == 0;
+    String displayStatus;
+    Color bgColor;
 
-    final String displayStatus = isPending ? 'Pending Approval' : 'Approved';
-    final Color bgColor = isPending ? const Color(0xFF6B7280) : const Color(0xFF10B981); // (color gray) pending approval, (color green) approved
+    if (wf.contains('reject') || item.docstatus == 2) {
+      displayStatus = 'Rejected';
+      bgColor = const Color(0xFFEF4444);
+    } else if (wf == 'approved' || wf.contains('appr') || item.docstatus == 1) {
+      displayStatus = 'Approved';
+      bgColor = const Color(0xFF10B981);
+    } else if (wf == 'processed' || wf.contains('proc')) {
+      displayStatus = 'Processed';
+      bgColor = const Color(0xFF2563EB);
+    } else if (wf == 'draft') {
+      displayStatus = 'Draft';
+      bgColor = const Color(0xFF64748B);
+    } else {
+      displayStatus = 'Pending Approval';
+      bgColor = const Color(0xFFD97706);
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -1668,8 +1830,11 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                         style: const TextStyle(color: Colors.white, fontSize: 12),
                         items: const [
                           DropdownMenuItem(value: 'All', child: Text('Status: All')),
+                          DropdownMenuItem(value: 'Draft', child: Text('Draft')),
+                          DropdownMenuItem(value: 'Processed', child: Text('Processed')),
                           DropdownMenuItem(value: 'Pending Approval', child: Text('Pending Approval')),
                           DropdownMenuItem(value: 'Approved', child: Text('Approved')),
+                          DropdownMenuItem(value: 'Rejected', child: Text('Rejected')),
                         ],
                         onChanged: (val) {
                           if (val != null) setState(() => _statusFilter = val);
