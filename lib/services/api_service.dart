@@ -29,7 +29,11 @@ class ApiService extends ChangeNotifier {
   UserPosition _userPosition = UserPosition.medRep;
   UserPosition get userPosition => _userPosition;
 
-  // Employee Metadata & Designation
+  // User Role Profile (Primary decider for workflow actions & permissions)
+  String _userRoleProfile = '';
+  String get userRoleProfile => _userRoleProfile;
+
+  // Employee Metadata & Designation (Display indicator for who is logged in)
   String _userDesignation = '';
   String get userDesignation => _userDesignation;
   String? employeeId;
@@ -571,7 +575,12 @@ class ApiService extends ChangeNotifier {
   Future<bool> login(String username, String password) async {
     if (_isOffline) {
       loggedInEmail = username.trim().isEmpty ? 'offline_user@pims-marketing.com' : username.trim();
-      _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
+      _applyPositionFromRoleProfile(
+        roleProfile: _userRoleProfile,
+        roleNames: [],
+        email: loggedInEmail ?? '',
+        designation: _userDesignation,
+      );
       await fetchAvailablePrograms();
       return true;
     }
@@ -600,7 +609,12 @@ class ApiService extends ChangeNotifier {
             loggedInFullName = body['user_fullname'].toString();
           }
 
-          _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
+          _applyPositionFromRoleProfile(
+            roleProfile: _userRoleProfile,
+            roleNames: [],
+            email: loggedInEmail ?? '',
+            designation: _userDesignation,
+          );
 
           // Parse cookie header to persist session (e.g. sid=xxxxxx)
           final rawCookie = response.headers['set-cookie'];
@@ -724,7 +738,12 @@ class ApiService extends ChangeNotifier {
 
   Future<void> fetchLoggedInUserInfo() async {
     if (_isOffline || _sessionCookie == null) {
-      _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
+      _applyPositionFromRoleProfile(
+        roleProfile: _userRoleProfile,
+        roleNames: [],
+        email: loggedInEmail ?? '',
+        designation: _userDesignation,
+      );
       return;
     }
     try {
@@ -736,7 +755,7 @@ class ApiService extends ChangeNotifier {
         if (userEmail != null && userEmail is String) {
           loggedInEmail = userEmail;
 
-          // Fetch full User document (without fields limitation so child table roles are populated)
+          // 1. Fetch User document to extract role_profile_name and roles
           final userDocUrl = Uri.parse('$baseUrl/api/resource/User/${Uri.encodeComponent(userEmail)}');
           final userDocRes = await http.get(userDocUrl, headers: _headers);
           
@@ -744,11 +763,15 @@ class ApiService extends ChangeNotifier {
           final hasRoleUrl = Uri.parse('$baseUrl/api/resource/Has%20Role?filters=[["parent","=","$userEmail"]]&fields=["role"]&limit=100');
           final hasRoleRes = await http.get(hasRoleUrl, headers: _headers);
 
+          String roleProfile = '';
           List<String> roleNames = [];
           if (userDocRes.statusCode == 200) {
             final userDocBody = jsonDecode(userDocRes.body);
             final data = userDocBody['data'];
             if (data != null) {
+              if (data['role_profile_name'] != null && data['role_profile_name'].toString().trim().isNotEmpty) {
+                roleProfile = data['role_profile_name'].toString().trim();
+              }
               if (data['full_name'] != null && data['full_name'].toString().isNotEmpty) {
                 loggedInFullName = data['full_name'];
               }
@@ -756,6 +779,21 @@ class ApiService extends ChangeNotifier {
                 roleNames.addAll((data['roles'] as List).map((r) => r is Map ? (r['role']?.toString().toLowerCase() ?? '') : r.toString().toLowerCase()));
               }
             }
+          }
+
+          // Fallback: Query frappe.client.get_value for role_profile_name if not returned in REST resource
+          if (roleProfile.isEmpty) {
+            try {
+              final getValUrl = Uri.parse('$baseUrl/api/method/frappe.client.get_value?doctype=User&filters={"name":"$userEmail"}&fieldname=["role_profile_name","full_name"]');
+              final getValRes = await http.get(getValUrl, headers: _headers);
+              if (getValRes.statusCode == 200) {
+                final valBody = jsonDecode(getValRes.body);
+                final msg = valBody['message'];
+                if (msg is Map && msg['role_profile_name'] != null && msg['role_profile_name'].toString().trim().isNotEmpty) {
+                  roleProfile = msg['role_profile_name'].toString().trim();
+                }
+              }
+            } catch (_) {}
           }
 
           if (hasRoleRes.statusCode == 200) {
@@ -769,7 +807,7 @@ class ApiService extends ChangeNotifier {
             }
           }
 
-          // Fetch Employee Designation from Employee doctype
+          // 2. Fetch Employee Designation (used as the UI indicator for who logged in)
           final empData = await fetchEmployeeDesignation(userEmail);
           String designation = '';
           if (empData != null) {
@@ -785,7 +823,13 @@ class ApiService extends ChangeNotifier {
             }
           }
 
-          _applyPositionFromDesignation(designation, userEmail, roleNames);
+          // 3. Apply position strictly based on role_profile_name and workflow allowed roles
+          _applyPositionFromRoleProfile(
+            roleProfile: roleProfile,
+            roleNames: roleNames,
+            email: userEmail,
+            designation: designation,
+          );
 
           // Auto-detect selectedProgram from employee department/branch
           _autoDetectProgram();
@@ -795,7 +839,12 @@ class ApiService extends ChangeNotifier {
       }
     } catch (e) {
       print('Error fetching logged in user info: $e');
-      _applyPositionFromDesignation(_userDesignation, loggedInEmail ?? '', []);
+      _applyPositionFromRoleProfile(
+        roleProfile: _userRoleProfile,
+        roleNames: [],
+        email: loggedInEmail ?? '',
+        designation: _userDesignation,
+      );
     }
   }
 
@@ -825,55 +874,65 @@ class ApiService extends ChangeNotifier {
     // Admin stays on whatever default or last-used program
   }
 
-  void _applyPositionFromDesignation(String designation, String email, List<String> roleNames) {
+  /// Determine user permissions based on role_profile_name and ERPNext roles,
+  /// while preserving designation strictly as the UI display indicator on top-right.
+  void _applyPositionFromRoleProfile({
+    required String roleProfile,
+    required List<String> roleNames,
+    required String email,
+    required String designation,
+  }) {
+    if (roleProfile.isNotEmpty) {
+      _userRoleProfile = roleProfile.trim();
+    }
     if (designation.isNotEmpty) {
       _userDesignation = designation.trim();
     }
-    final lowerDes = _userDesignation.toLowerCase();
-    final lowerEmail = email.toLowerCase().trim();
 
-    // 1. Admin Designation / System Master
+    final lowerRoleProfile = _userRoleProfile.toLowerCase();
+    final lowerEmail = email.toLowerCase().trim();
+    final normalizedRoles = roleNames.map((r) => r.toLowerCase().trim()).toList();
+
+    // 1. System Manager / Administrator (Admin position)
     if (lowerEmail == 'administrator' ||
         lowerEmail == 'jptan@profinsights.biz' ||
         lowerEmail.contains('cig-it') ||
-        lowerDes.contains('administrator') ||
-        lowerDes.contains('system manager') ||
-        lowerDes.contains('it manager') ||
-        lowerDes.contains('ceo') ||
-        lowerDes.contains('managing director') ||
-        lowerDes.contains('president') ||
-        (lowerEmail.endsWith('@profinsights.biz') && (lowerEmail.contains('josh') || lowerEmail.contains('tan') || lowerEmail.contains('root') || lowerEmail.contains('admin'))) ||
-        roleNames.any((r) => r == 'system manager' || r == 'administrator' || r.contains('it staff'))) {
+        lowerRoleProfile == 'system manager' ||
+        lowerRoleProfile == 'administrator' ||
+        lowerRoleProfile.contains('admin') ||
+        lowerRoleProfile.contains('system master') ||
+        lowerRoleProfile.contains('it manager') ||
+        lowerRoleProfile.contains('it staff') ||
+        normalizedRoles.any((r) => r == 'system manager' || r == 'administrator' || r.contains('it staff')) ||
+        (lowerEmail.endsWith('@profinsights.biz') && (lowerEmail.contains('josh') || lowerEmail.contains('tan') || lowerEmail.contains('root') || lowerEmail.contains('admin')))) {
       _userPosition = UserPosition.admin;
       if (_userDesignation.isEmpty) _userDesignation = 'Administrator';
     } 
-    // 2. Managerial Designation (GM, DSM, RSM, ASM, Supervisor, Approver)
-    else if (lowerEmail == 'admendoza@profinsights.biz' ||
-             lowerDes.contains('district sales manager') ||
-             lowerDes.contains('regional sales manager') ||
-             lowerDes.contains('area sales manager') ||
-             lowerDes.contains('general manager') ||
-             lowerDes.contains('sales manager') ||
-             lowerDes.contains('territory sales manager') ||
-             lowerDes.contains('manager') ||
-             lowerDes.contains('dsm') ||
-             lowerDes.contains('rsm') ||
-             lowerDes.contains('asm') ||
-             lowerDes.contains('gm') ||
-             lowerDes.contains('tsm') ||
-             lowerDes.contains('supervisor') ||
-             lowerDes.contains('director') ||
-             lowerDes.contains('lead') ||
-             lowerDes.contains('head') ||
-             roleNames.any((r) => r.contains('sales manager') || r.contains('manager') || r.contains('dsm') || r.contains('gm') || r.contains('supervisor') || r.contains('regional'))) {
+    // 2. Sales & Marketing Manager / Sales Manager / Superior (Manager position)
+    else if (lowerRoleProfile.contains('sales manager') ||
+             lowerRoleProfile.contains('sales & marketing manager') ||
+             lowerRoleProfile.contains('marketing manager') ||
+             lowerRoleProfile.contains('sales and marketing manager') ||
+             lowerRoleProfile.contains('manager') ||
+             lowerRoleProfile.contains('superior') ||
+             lowerRoleProfile.contains('supervisor') ||
+             lowerRoleProfile.contains('dsm') ||
+             lowerRoleProfile.contains('rsm') ||
+             lowerRoleProfile.contains('asm') ||
+             lowerRoleProfile.contains('gm') ||
+             lowerRoleProfile.contains('tsm') ||
+             lowerRoleProfile.contains('director') ||
+             normalizedRoles.any((r) => r == 'sales manager' || r == 'superior' || r.contains('manager') || r.contains('sales manager')) ||
+             lowerEmail == 'admendoza@profinsights.biz') {
       _userPosition = UserPosition.manager;
       if (_userDesignation.isEmpty) _userDesignation = 'District Sales Manager';
     } 
-    // 3. MedRep / Field Sales Representative (Sales Representative, MedRep, PHSR, PHSS, etc.)
+    // 3. Sales User / Field Representative (MedRep position)
     else {
       _userPosition = UserPosition.medRep;
       if (_userDesignation.isEmpty) _userDesignation = 'Sales Representative';
     }
+
     notifyListeners();
   }
 
@@ -882,6 +941,7 @@ class ApiService extends ChangeNotifier {
     _sessionCookie = null;
     loggedInEmail = null;
     loggedInFullName = null;
+    _userRoleProfile = '';
     _userDesignation = '';
     employeeId = null;
     employeeReportsTo = null;
