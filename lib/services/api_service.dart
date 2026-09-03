@@ -587,6 +587,7 @@ class ApiService extends ChangeNotifier {
       await fetchAvailablePrograms();
       return true;
     }
+    loginErrorMessage = null;
     final url = Uri.parse('$baseUrl/api/method/login');
     try {
       final response = await http.post(
@@ -640,10 +641,30 @@ class ApiService extends ChangeNotifier {
           loginErrorMessage = null;
           return true;
         }
+      } else {
+        try {
+          final errBody = jsonDecode(response.body);
+          if (errBody['message'] != null && errBody['message'].toString().isNotEmpty) {
+            loginErrorMessage = errBody['message'].toString();
+          } else if (errBody['exception'] != null) {
+            final exc = errBody['exception'].toString();
+            if (exc.contains('locked')) {
+              loginErrorMessage = 'Account temporarily locked due to consecutive login attempts. Please wait 60 seconds before trying again.';
+            } else {
+              loginErrorMessage = exc.split(':').last.trim();
+            }
+          } else {
+            loginErrorMessage = 'Authentication failed (Status ${response.statusCode}). Please verify your credentials.';
+          }
+        } catch (_) {
+          loginErrorMessage = 'Authentication failed. Please verify your credentials.';
+        }
+        return false;
       }
       return false;
     } catch (e) {
       print('Login error: $e');
+      loginErrorMessage = 'Network or connection error. Please check your internet connection.';
       return false;
     }
   }
@@ -792,6 +813,44 @@ class ApiService extends ChangeNotifier {
             }
           }
 
+          // 1b. Fetch active/checked roles directly from frappe.boot on /app (most accurate in ERPNext)
+          try {
+            final appUrl = Uri.parse('$baseUrl/app');
+            final appRes = await http.get(appUrl, headers: _headers);
+            if (appRes.statusCode == 200) {
+              final html = appRes.body;
+              final idx = html.indexOf('frappe.boot =');
+              if (idx != -1) {
+                final endIdx = html.indexOf('};\n', idx);
+                if (endIdx != -1) {
+                  final jsonStr = html.substring(idx + 'frappe.boot ='.length, endIdx + 1).trim();
+                  final bootData = jsonDecode(jsonStr);
+                  final bootUser = bootData['user'];
+                  if (bootUser != null) {
+                    if (bootUser['roles'] is List) {
+                      for (var r in bootUser['roles']) {
+                        final rLower = r.toString().toLowerCase().trim();
+                        if (rLower.isNotEmpty && !roleNames.contains(rLower)) {
+                          roleNames.add(rLower);
+                        }
+                      }
+                    }
+                    if ((loggedInFullName == null || loggedInFullName!.isEmpty)) {
+                      final fn = (bootUser['first_name'] ?? '').toString().trim();
+                      final ln = (bootUser['last_name'] ?? '').toString().trim();
+                      final full = '$fn $ln'.trim();
+                      if (full.isNotEmpty) {
+                        loggedInFullName = full;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            print('Non-blocking /app boot role extraction: $e');
+          }
+
           // Fallback: Query frappe.client.get_value for role_profile_name if not returned in REST resource
           if (roleProfile.isEmpty) {
             try {
@@ -805,6 +864,17 @@ class ApiService extends ChangeNotifier {
                 }
               }
             } catch (_) {}
+          }
+
+          // Fallback role profile derivation if hidden on User doc
+          if (roleProfile.isEmpty) {
+            if (roleNames.contains('system manager') || roleNames.contains('administrator')) {
+              roleProfile = 'Administrator';
+            } else if (roleNames.contains('sales manager') || roleNames.contains('superior') || roleNames.contains('field force manager')) {
+              roleProfile = 'Sales Manager';
+            } else if (roleNames.contains('sales user')) {
+              roleProfile = 'Employee + Sales User';
+            }
           }
 
           if (hasRoleRes.statusCode == 200) {
@@ -902,31 +972,36 @@ class ApiService extends ChangeNotifier {
 
     final lowerRoleProfile = _userRoleProfile.toLowerCase();
     final lowerEmail = email.toLowerCase().trim();
+    final lowerDesignation = _userDesignation.toLowerCase().trim();
     final normalizedRoles = roleNames.map((r) => r.toLowerCase().trim()).toList();
 
     // 1. System Manager / Administrator (Admin position - Allowed Role 1)
     if (lowerEmail == 'administrator' ||
         lowerEmail == 'jptan@profinsights.biz' ||
         lowerEmail.contains('cig-it') ||
+        normalizedRoles.any((r) => r == 'system manager' || r == 'administrator' || r.contains('it staff')) ||
         lowerRoleProfile == 'system manager' ||
         lowerRoleProfile == 'administrator' ||
         lowerRoleProfile.contains('admin') ||
         lowerRoleProfile.contains('system master') ||
         lowerRoleProfile.contains('it manager') ||
         lowerRoleProfile.contains('it staff') ||
-        normalizedRoles.any((r) => r == 'system manager' || r == 'administrator' || r.contains('it staff')) ||
+        lowerRoleProfile.contains('technical support') ||
         (lowerEmail.endsWith('@profinsights.biz') && (lowerEmail.contains('josh') || lowerEmail.contains('tan') || lowerEmail.contains('root') || lowerEmail.contains('admin')))) {
       _userPosition = UserPosition.admin;
       _isRoleAuthorized = true;
+      if (_userRoleProfile.isEmpty) _userRoleProfile = 'Administrator';
       if (_userDesignation.isEmpty) _userDesignation = 'Administrator';
     } 
     // 2. Sales & Marketing Manager / Sales Manager / Superior (Manager position - Allowed Role 2)
-    else if (lowerRoleProfile.contains('sales manager') ||
+    else if (normalizedRoles.any((r) => r == 'sales manager' || r == 'superior' || r == 'field force manager' || r == 'next level manager' || r.contains('sales manager')) ||
+             lowerRoleProfile.contains('sales manager') ||
              lowerRoleProfile.contains('sales & marketing manager') ||
              lowerRoleProfile.contains('marketing manager') ||
              lowerRoleProfile.contains('sales and marketing manager') ||
-             lowerRoleProfile.contains('manager') ||
+             lowerRoleProfile.contains('phss') ||
              lowerRoleProfile.contains('superior') ||
+             lowerRoleProfile.contains('manager') ||
              lowerRoleProfile.contains('supervisor') ||
              lowerRoleProfile.contains('dsm') ||
              lowerRoleProfile.contains('rsm') ||
@@ -934,25 +1009,37 @@ class ApiService extends ChangeNotifier {
              lowerRoleProfile.contains('gm') ||
              lowerRoleProfile.contains('tsm') ||
              lowerRoleProfile.contains('director') ||
-             normalizedRoles.any((r) => r == 'sales manager' || r == 'superior' || r.contains('manager') || r.contains('sales manager')) ||
+             lowerDesignation.contains('supervisor') ||
+             lowerDesignation.contains('manager') ||
+             lowerDesignation.contains('dsm') ||
+             lowerDesignation.contains('rsm') ||
+             lowerDesignation.contains('asm') ||
+             lowerDesignation.contains('phss') ||
              lowerEmail == 'admendoza@profinsights.biz') {
       _userPosition = UserPosition.manager;
       _isRoleAuthorized = true;
+      if (_userRoleProfile.isEmpty) _userRoleProfile = 'Sales Manager';
       if (_userDesignation.isEmpty) _userDesignation = 'District Sales Manager';
     } 
     // 3. Sales User / Field Sales Representative (MedRep position - Allowed Role 3)
-    else if (lowerRoleProfile.contains('sales user') ||
+    else if (normalizedRoles.any((r) => r == 'sales user' || r.contains('sales user') || r.contains('medical representative')) ||
+             lowerRoleProfile.contains('sales user') ||
+             lowerRoleProfile.contains('employee + sales user') ||
              lowerRoleProfile.contains('sales representative') ||
              lowerRoleProfile.contains('representative') ||
              lowerRoleProfile.contains('medical representative') ||
              lowerRoleProfile.contains('medrep') ||
              lowerRoleProfile.contains('field') ||
              lowerRoleProfile.contains('phsr') ||
-             lowerRoleProfile.contains('phss') ||
              lowerRoleProfile.contains('sales') ||
-             normalizedRoles.any((r) => r == 'sales user' || r.contains('sales') || r.contains('medical representative'))) {
+             lowerDesignation.contains('representative') ||
+             lowerDesignation.contains('phsr') ||
+             lowerDesignation.contains('sales rep') ||
+             lowerDesignation.contains('medical representative') ||
+             lowerDesignation.contains('medrep')) {
       _userPosition = UserPosition.medRep;
       _isRoleAuthorized = true;
+      if (_userRoleProfile.isEmpty) _userRoleProfile = 'Employee + Sales User';
       if (_userDesignation.isEmpty) _userDesignation = 'Sales Representative';
     } 
     // 4. Any other role is NOT authorized to access the HCP Profiling App
