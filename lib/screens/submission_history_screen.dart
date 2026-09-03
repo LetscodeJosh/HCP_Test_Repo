@@ -370,28 +370,45 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ERPNext Blue Workflow Notification Banner
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF0284C7),
-                    borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'This form is not editable due to a Workflow.',
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                        ),
+                // ERPNext Workflow Notification / Manager Review Banner
+                Builder(
+                  builder: (ctxBanner) {
+                    final apiService = Provider.of<ApiService>(context, listen: false);
+                    final rawWf = (currentSub.workflowState ?? currentSub.status ?? '').toLowerCase().trim();
+                    final bool isPending = (rawWf.contains('pend') || rawWf.isEmpty) && currentSub.docstatus == 0 && rawWf != 'draft' && !rawWf.contains('proc');
+                    final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin) && isPending;
+
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: canApproveOrReject ? const Color(0xFF1E3A8A) : const Color(0xFF0284C7),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                       ),
-                      GestureDetector(
-                        onTap: () => Navigator.pop(ctx),
-                        child: const Icon(Icons.close, color: Colors.white, size: 20),
+                      child: Row(
+                        children: [
+                          Icon(
+                            canApproveOrReject ? Icons.verified_user_rounded : Icons.info_outline_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              canApproveOrReject
+                                  ? 'Managerial Review — Complete detail view. Action buttons (Approve / Reject) are available below.'
+                                  : 'This form is not editable due to a Workflow.',
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.pop(ctx),
+                            child: const Icon(Icons.close, color: Colors.white, size: 20),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
 
                 // Dark Workflow Tab Bar

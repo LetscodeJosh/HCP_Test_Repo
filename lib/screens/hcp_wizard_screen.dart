@@ -565,7 +565,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     return 'data:image/svg+xml;base64,${base64Encode(bytes)}';
   }
 
-  Future<void> _submitForm() async {
+  Future<void> _submitForm({String workflowAction = 'Submit for Approval'}) async {
     if (_firstNameController.text.isEmpty || _lastNameController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('First Name and Last Name are required.')),
@@ -939,21 +939,28 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     }
     final changeSummaryHtmlStr = sb.toString();
 
-    // Determine approval requirement:
+    // Determine approval requirement and target workflow state:
+    // - Submit for Processing: Transitions directly to Processed.
     // - Existing doctor updates: NO approval required (auto-approved / applied immediately).
-    //   Previous submission in doctype will be overwritten ("tampered") in-place to prevent duplicate submission rows.
     // - New doctor registration: Requires managerial approval if submitted by MedRep.
+    final bool isProcessing = workflowAction == 'Submit for Processing';
     final bool requiresApproval = isExistingDoctor ? false : (!apiService.isAdmin && !apiService.isManager);
-    final String targetWorkflow = requiresApproval ? 'Pending Approval' : 'Approved';
-    final String targetAppStatus = requiresApproval ? 'Not Applied' : 'Applied';
-    final int targetDocstatus = requiresApproval ? 0 : 1;
+    final String targetWorkflow = isProcessing
+        ? 'Processed'
+        : (isExistingDoctor
+            ? 'Approved'
+            : (requiresApproval ? 'Pending Approval' : 'Approved'));
+    final String targetAppStatus = isProcessing
+        ? 'Processed'
+        : (isExistingDoctor ? 'Applied' : (requiresApproval ? 'Not Applied' : 'Applied'));
+    final int targetDocstatus = isExistingDoctor && !isProcessing ? 1 : 0;
 
     try {
       final actualSubmissionTime = DateTime.now();
       String effectiveHcpId = isExistingDoctor ? (_selectedDoctor?.name ?? '') : '';
 
-      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account immediately
-      if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
+      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account immediately (unless saving for processing)
+      if (isExistingDoctor && effectiveHcpId.isNotEmpty && !isProcessing) {
         try {
           final updatedDoctor = Hcp(
             name: effectiveHcpId,
@@ -1058,16 +1065,17 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
       setState(() => _isLoading = false);
       if (mounted) {
+        final String successMsg = isProcessing
+            ? 'HCP Profile Submission submitted for processing (Status: Processed)!'
+            : (isExistingDoctor
+                ? 'Doctor profile changes applied and HCP Profile Submission recorded (Status: Approved)!'
+                : (requiresApproval
+                    ? 'New doctor submitted to HCP Profile Submission (Status: Pending Approval).'
+                    : 'Doctor profile registered immediately to HCP Masterlist and $_selectedProgram Account!'));
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFF10B981),
-            content: Text(
-              isExistingDoctor
-                  ? 'Doctor profile changes applied and HCP Profile Submission recorded (Approved)!'
-                  : (requiresApproval
-                      ? 'New doctor submitted to HCP Profile Submission (Pending Managerial Approval).'
-                      : 'Doctor profile registered immediately to HCP Masterlist and $_selectedProgram Account!'),
-            ),
+            backgroundColor: isProcessing ? const Color(0xFF2563EB) : const Color(0xFF10B981),
+            content: Text(successMsg),
           ),
         );
         Navigator.of(context).pop(true);
@@ -4472,35 +4480,76 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             )
           else
             const SizedBox(),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0B192C),
-              disabledBackgroundColor: const Color(0xFF0B192C).withOpacity(0.4),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          if (isLast) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF2563EB),
+                    disabledBackgroundColor: const Color(0xFF2563EB).withOpacity(0.4),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.playlist_add_check_rounded, size: 18, color: Colors.white),
+                  label: const Text(
+                    'Submit for Processing',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                      ? null
+                      : () {
+                          _submitForm(workflowAction: 'Submit for Processing');
+                        },
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD97706),
+                    disabledBackgroundColor: const Color(0xFFD97706).withOpacity(0.4),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+                  label: const Text(
+                    'Submit for Approval',
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                  ),
+                  onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                      ? null
+                      : () {
+                          _submitForm(workflowAction: 'Submit for Approval');
+                        },
+                ),
+              ],
             ),
-            onPressed: ((_currentStep == 0 && !_consentGiven) || !isStep2Ready)
-                ? null
-                : () {
-                    if (_currentStep == 1 && _isCreatingNewDoctor) {
-                      if (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: Color(0xFFDC2626),
-                            content: Text('Please enter the doctor\'s First Name and Last Name.'),
-                          ),
-                        );
-                        return;
+          ] else ...[
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0B192C),
+                disabledBackgroundColor: const Color(0xFF0B192C).withOpacity(0.4),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: ((_currentStep == 0 && !_consentGiven) || !isStep2Ready)
+                  ? null
+                  : () {
+                      if (_currentStep == 1 && _isCreatingNewDoctor) {
+                        if (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Color(0xFFDC2626),
+                              content: Text('Please enter the doctor\'s First Name and Last Name.'),
+                            ),
+                          );
+                          return;
+                        }
                       }
-                    }
-                    if (isLast) {
-                      _submitForm();
-                    } else {
                       setState(() => _currentStep++);
-                    }
-                  },
-            child: Text(isLast ? 'Submit' : 'Next', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ),
+                    },
+              child: const Text('Next', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
         ],
       ),
     );

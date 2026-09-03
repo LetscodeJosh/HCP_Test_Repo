@@ -2644,9 +2644,43 @@ class ApiService extends ChangeNotifier {
             );
           } catch (_) {}
         } 
-        // Flow B: New Doctor Registration
-        // Adding new doctor REQUIRES managerial approval.
-        // Sales User executes action 'Submit for Approval' (Draft -> Pending Approval)
+        // Flow B: Submit for Processing (Draft -> Processed via WF action 'Submit for Processing')
+        else if (targetWorkflow == 'Processed') {
+          bool transitioned = false;
+          try {
+            final wfResp = await http.post(
+              wfUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+                'action': 'Submit for Processing',
+              }),
+            );
+            if (wfResp.statusCode == 200) {
+              transitioned = true;
+            }
+          } catch (_) {}
+
+          if (!transitioned) {
+            try {
+              await http.post(
+                setValUrl,
+                headers: _headers,
+                body: jsonEncode({
+                  'doctype': 'HCP Profile Submission',
+                  'name': createdName,
+                  'fieldname': {
+                    'workflow_state': 'Processed',
+                    'status': 'Processed',
+                    'application_status': 'Processed',
+                    'docstatus': 0,
+                  },
+                }),
+              );
+            } catch (_) {}
+          }
+        }
+        // Flow C: Submit for Approval / New Doctor Registration (Draft -> Pending Approval)
         else {
           bool transitioned = false;
           try {
