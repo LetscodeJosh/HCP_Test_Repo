@@ -3218,9 +3218,13 @@ class ApiService extends ChangeNotifier {
       final validFrom = HcpAccount.calculateMonthValidFrom();
       final validTo = HcpAccount.calculateMonthValidTo();
 
+      // Filter strictly to preferred items for this program's HCP Account
+      final prefSpecsList = specialties.where((s) => s.preferred || s.isPrimary).toList();
+      final effectiveSpecs = prefSpecsList.isNotEmpty ? prefSpecsList : specialties;
+
       // Clean specialization child table links
       final List<Map<String, dynamic>> cleanSpecs = [];
-      for (var s in specialties) {
+      for (var s in effectiveSpecs) {
         final sId = LocationResolver.resolveSpecialtyId(s.hcpSpecialty);
         if (sId.isNotEmpty) {
           final subId = (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-')
@@ -3230,22 +3234,25 @@ class ApiService extends ChangeNotifier {
             'hcp_specialty': sId,
             'specialty': sId,
             if (subId != null && subId.isNotEmpty) 'sub_specialty': subId,
-            'is_primary': (s.isPrimary || s.preferred) ? 1 : 0,
-            'preferred': (s.isPrimary || s.preferred) ? 1 : 0,
+            'is_primary': 1,
+            'preferred': 1,
           });
         }
       }
 
+      final prefWpsList = workplaces.where((w) => w.preferred || w.isPrimary).toList();
+      final effectiveWps = prefWpsList.isNotEmpty ? prefWpsList : workplaces;
+
       // Clean workplace child table links
       final List<Map<String, dynamic>> cleanWps = [];
-      for (var w in workplaces) {
+      for (var w in effectiveWps) {
         final wpId = LocationResolver.resolveInstitutionId(w.hcpWorkplace);
         if (wpId.isNotEmpty) {
           cleanWps.add({
             'hcp_workplace': wpId,
             'workplace': wpId,
-            'is_primary': (w.isPrimary || w.preferred) ? 1 : 0,
-            'preferred': (w.isPrimary || w.preferred) ? 1 : 0,
+            'is_primary': 1,
+            'preferred': 1,
           });
         }
       }
@@ -3258,17 +3265,20 @@ class ApiService extends ChangeNotifier {
         });
       }
 
+      final prefContactsList = contacts.where((c) => c.preferred || c.isPrimary).toList();
+      final effectiveContacts = prefContactsList.isNotEmpty ? prefContactsList : contacts;
+
       // Clean contact child table
       final List<Map<String, dynamic>> cleanContacts = [];
-      for (var c in contacts) {
+      for (var c in effectiveContacts) {
         final num = (c.contactNumber ?? '').trim();
         final em = (c.emailAddress ?? '').trim();
         if (num.isNotEmpty || em.isNotEmpty) {
           cleanContacts.add({
             if (num.isNotEmpty) 'contact_number': num,
             if (em.isNotEmpty) 'email_address': em,
-            'is_primary': (c.isPrimary || c.preferred) ? 1 : 0,
-            'preferred': (c.isPrimary || c.preferred) ? 1 : 0,
+            'is_primary': 1,
+            'preferred': 1,
           });
         }
       }
