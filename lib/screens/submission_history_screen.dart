@@ -125,6 +125,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         prog.contains(subProg) ||
         (prog.contains('abbott') && subProg.contains('abbott')) ||
         (prog.contains('adc') && subProg.contains('abbott')) ||
+        (prog.contains('bayer') && subProg.contains('bayer')) ||
+        (prog.contains('bch') && subProg.contains('bayer')) ||
         (prog.contains('corenergy') && subProg.contains('corenergy'));
   }
 

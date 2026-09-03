@@ -118,6 +118,10 @@ class ApiService extends ChangeNotifier {
   String selectedProgram = 'COREnergy';
   List<String> availablePrograms = [
     'Abbott Diabetes Care',
+    'Bayer Consumer Health - Team 1',
+    'Bayer Consumer Health - Team 2',
+    'Bayer Consumer Health - Team 3',
+    'Bayer',
     'COREnergy',
     'NES',
     'Nurturemed',
@@ -938,6 +942,14 @@ class ApiService extends ChangeNotifier {
 
     if (combined.contains('abbott') || combined.contains('adc')) {
       selectedProgram = 'Abbott Diabetes Care';
+    } else if (combined.contains('bayer') || combined.contains('bch')) {
+      if (combined.contains('team 3')) {
+        selectedProgram = 'Bayer Consumer Health - Team 3';
+      } else if (combined.contains('team 2')) {
+        selectedProgram = 'Bayer Consumer Health - Team 2';
+      } else {
+        selectedProgram = 'Bayer Consumer Health - Team 1';
+      }
     } else if (combined.contains('corenergy') || combined.contains('cor energy')) {
       selectedProgram = 'COREnergy';
     } else if (combined.contains('nes')) {
