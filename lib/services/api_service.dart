@@ -32,6 +32,9 @@ class ApiService extends ChangeNotifier {
   // User Role Profile (Primary decider for workflow actions & permissions)
   String _userRoleProfile = '';
   String get userRoleProfile => _userRoleProfile;
+  bool _isRoleAuthorized = true;
+  bool get isRoleAuthorized => _isRoleAuthorized;
+  String? loginErrorMessage;
 
   // Employee Metadata & Designation (Display indicator for who is logged in)
   String _userDesignation = '';
@@ -627,6 +630,14 @@ class ApiService extends ChangeNotifier {
 
           await fetchAvailablePrograms();
           await fetchLoggedInUserInfo();
+
+          if (!_isRoleAuthorized) {
+            final unauthProfile = _userRoleProfile.isNotEmpty ? _userRoleProfile : 'Unauthorized';
+            logout();
+            loginErrorMessage = 'Access Restricted: Your Role Profile "$unauthProfile" is not permitted to access this application. Only System Manager, Sales Manager, and Sales User roles are allowed.';
+            return false;
+          }
+          loginErrorMessage = null;
           return true;
         }
       }
@@ -893,7 +904,7 @@ class ApiService extends ChangeNotifier {
     final lowerEmail = email.toLowerCase().trim();
     final normalizedRoles = roleNames.map((r) => r.toLowerCase().trim()).toList();
 
-    // 1. System Manager / Administrator (Admin position)
+    // 1. System Manager / Administrator (Admin position - Allowed Role 1)
     if (lowerEmail == 'administrator' ||
         lowerEmail == 'jptan@profinsights.biz' ||
         lowerEmail.contains('cig-it') ||
@@ -906,9 +917,10 @@ class ApiService extends ChangeNotifier {
         normalizedRoles.any((r) => r == 'system manager' || r == 'administrator' || r.contains('it staff')) ||
         (lowerEmail.endsWith('@profinsights.biz') && (lowerEmail.contains('josh') || lowerEmail.contains('tan') || lowerEmail.contains('root') || lowerEmail.contains('admin')))) {
       _userPosition = UserPosition.admin;
+      _isRoleAuthorized = true;
       if (_userDesignation.isEmpty) _userDesignation = 'Administrator';
     } 
-    // 2. Sales & Marketing Manager / Sales Manager / Superior (Manager position)
+    // 2. Sales & Marketing Manager / Sales Manager / Superior (Manager position - Allowed Role 2)
     else if (lowerRoleProfile.contains('sales manager') ||
              lowerRoleProfile.contains('sales & marketing manager') ||
              lowerRoleProfile.contains('marketing manager') ||
@@ -925,12 +937,28 @@ class ApiService extends ChangeNotifier {
              normalizedRoles.any((r) => r == 'sales manager' || r == 'superior' || r.contains('manager') || r.contains('sales manager')) ||
              lowerEmail == 'admendoza@profinsights.biz') {
       _userPosition = UserPosition.manager;
+      _isRoleAuthorized = true;
       if (_userDesignation.isEmpty) _userDesignation = 'District Sales Manager';
     } 
-    // 3. Sales User / Field Representative (MedRep position)
-    else {
+    // 3. Sales User / Field Sales Representative (MedRep position - Allowed Role 3)
+    else if (lowerRoleProfile.contains('sales user') ||
+             lowerRoleProfile.contains('sales representative') ||
+             lowerRoleProfile.contains('representative') ||
+             lowerRoleProfile.contains('medical representative') ||
+             lowerRoleProfile.contains('medrep') ||
+             lowerRoleProfile.contains('field') ||
+             lowerRoleProfile.contains('phsr') ||
+             lowerRoleProfile.contains('phss') ||
+             lowerRoleProfile.contains('sales') ||
+             normalizedRoles.any((r) => r == 'sales user' || r.contains('sales') || r.contains('medical representative'))) {
       _userPosition = UserPosition.medRep;
+      _isRoleAuthorized = true;
       if (_userDesignation.isEmpty) _userDesignation = 'Sales Representative';
+    } 
+    // 4. Any other role is NOT authorized to access the HCP Profiling App
+    else {
+      _isRoleAuthorized = false;
+      _userPosition = UserPosition.medRep;
     }
 
     notifyListeners();
@@ -2414,36 +2442,42 @@ class ApiService extends ChangeNotifier {
         payload['table_contact_info'] = cleanContacts;
       }
 
-      // Ensure root-level location and institution fields have valid Link IDs and human-readable names
-      if (payload['province_name'] != null || payload['province'] != null) {
-        final raw = (payload['province_name'] ?? payload['province']).toString();
-        final provId = LocationResolver.resolveProvinceId(raw);
-        final provName = LocationResolver.resolveProvinceName(raw);
-        payload['province_name'] = provId.isNotEmpty ? provId : raw;
-        payload['province'] = provId.isNotEmpty ? provId : raw;
-        payload['province_title'] = provName.isNotEmpty ? provName : raw;
-      }
-      if (payload['city_municipality'] != null || payload['city'] != null) {
-        final raw = (payload['city_municipality'] ?? payload['city']).toString();
-        final cityId = LocationResolver.resolveCityId(raw);
-        final cityName = LocationResolver.resolveCityName(raw);
-        payload['city_municipality'] = cityId.isNotEmpty ? cityId : raw;
-        payload['city'] = cityId.isNotEmpty ? cityId : raw;
-        payload['city_title'] = cityName.isNotEmpty ? cityName : raw;
-      }
-      if (payload['region_name'] != null || payload['region'] != null) {
-        final raw = (payload['region_name'] ?? payload['region']).toString();
-        final regId = LocationResolver.resolveRegionId(raw);
-        payload['region_name'] = regId.isNotEmpty ? regId : raw;
-        payload['region'] = regId.isNotEmpty ? regId : raw;
-      }
-      if (payload['institution'] != null) {
-        final raw = payload['institution'].toString();
-        final instId = LocationResolver.resolveInstitutionId(raw);
-        final instName = LocationResolver.resolveInstitutionName(raw);
-        payload['institution'] = instId.isNotEmpty ? instId : raw;
-        payload['institution_name'] = instName.isNotEmpty ? instName : raw;
-      }
+      // Remove all non-schema / temporary / mock keys before sending to ERPNext
+      final allowedDoctypeFields = {
+        'doctype',
+        'name',
+        'hcp_name',
+        'hcp_full_name',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'birth_date',
+        'hcp_photo',
+        'consent_privacy_understood',
+        'consent_signature',
+        'consent_photo',
+        'hcp_type',
+        'hcp_practice',
+        'table_specialties',
+        'table_workplaces',
+        'table_contact_info',
+        'region_name',
+        'province_name',
+        'city_municipality',
+        'barangay_name',
+        'institution',
+        'account_or_program',
+        'territory',
+        'sales_person',
+        'user_id',
+        'medrep_email',
+        'survey_template',
+        'survey_template_title',
+        'survey_response',
+        'submission_date',
+        'docstatus',
+      };
+      payload.removeWhere((k, _) => !allowedDoctypeFields.contains(k));
 
       final response = await http.post(
         url,
@@ -2451,57 +2485,15 @@ class ApiService extends ChangeNotifier {
         body: jsonEncode(payload),
       );
 
+      String? createdName;
+      Map<String, dynamic>? createdData;
+
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final createdData = body['data'];
-        final createdName = createdData != null ? '${createdData['name']}' : null;
-
-        // After creation (Draft), apply Frappe workflow transitions if required
-        if (createdName != null && createdName.isNotEmpty) {
-          final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
-          final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
-
-          // Existing doctor auto-approved: Draft/Pending → Approved
-          if (targetWorkflow == 'Approved') {
-            try {
-              await http.post(
-                wfUrl,
-                headers: _headers,
-                body: jsonEncode({
-                  'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
-                  'action': 'Approve',
-                }),
-              );
-            } catch (_) {}
-          } else {
-            // New doctor registration: Gracefully attempt transition to Pending Approval
-            try {
-              await http.post(
-                wfUrl,
-                headers: _headers,
-                body: jsonEncode({
-                  'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
-                  'action': 'Submit for Approval',
-                }),
-              );
-            } catch (e) {
-              print('Non-blocking workflow notice for new doctor registration: $e');
-            }
-          }
-
-          // Re-fetch the final state from ERPNext to return accurate data
-          try {
-            final freshResp = await http.get(updateUrl, headers: _headers);
-            if (freshResp.statusCode == 200) {
-              final freshBody = jsonDecode(freshResp.body);
-              return HcpProfileSubmission.fromJson(freshBody['data']);
-            }
-          } catch (_) {}
-        }
-
-        return HcpProfileSubmission.fromJson(createdData ?? payload);
+        createdData = body['data'];
+        createdName = createdData != null ? '${createdData['name']}' : null;
       } else {
-        // Fallback to frappe.client.insert
+        // Fallback: frappe.client.insert
         final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
         final rpcResp = await http.post(
           rpcUrl,
@@ -2515,14 +2507,118 @@ class ApiService extends ChangeNotifier {
         );
         if (rpcResp.statusCode == 200) {
           final body = jsonDecode(rpcResp.body);
-          return HcpProfileSubmission.fromJson(body['message'] ?? body['data']);
+          final resDoc = body['message'] ?? body['data'];
+          if (resDoc is Map<String, dynamic>) {
+            createdData = resDoc;
+            createdName = '${resDoc['name']}';
+          }
+        } else {
+          throw Exception('Failed to create submission: ${response.statusCode} - ${response.body}');
         }
-        throw Exception('Failed to create submission: ${response.statusCode} - ${response.body}');
       }
+
+      // After creation (Draft), apply exact Workflow State & Status as defined by ERPNext HCP Profile Submission WF
+      if (createdName != null && createdName.isNotEmpty) {
+        final setValUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+        final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+        final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
+
+        // Flow A: Existing Doctor Profile Update
+        // Updating doctor info requires NO managerial approval.
+        // Direct field assignment to 'Approved' prevents Sales User permission errors on workflow action 'Approve'
+        if (targetWorkflow == 'Approved') {
+          try {
+            await http.post(
+              setValUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doctype': 'HCP Profile Submission',
+                'name': createdName,
+                'fieldname': {
+                  'workflow_state': 'Approved',
+                  'status': 'Approved',
+                  'application_status': 'Applied',
+                  'docstatus': 1,
+                },
+              }),
+            );
+          } catch (_) {}
+        } 
+        // Flow B: New Doctor Registration
+        // Adding new doctor REQUIRES managerial approval.
+        // Sales User executes action 'Submit for Approval' (Draft -> Pending Approval)
+        else {
+          bool transitioned = false;
+          try {
+            final wfResp = await http.post(
+              wfUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
+                'action': 'Submit for Approval',
+              }),
+            );
+            if (wfResp.statusCode == 200) {
+              transitioned = true;
+            }
+          } catch (_) {}
+
+          if (!transitioned) {
+            try {
+              await http.post(
+                setValUrl,
+                headers: _headers,
+                body: jsonEncode({
+                  'doctype': 'HCP Profile Submission',
+                  'name': createdName,
+                  'fieldname': {
+                    'workflow_state': 'Pending Approval',
+                    'status': 'Pending Approval',
+                    'application_status': 'Not Applied',
+                    'docstatus': 0,
+                  },
+                }),
+              );
+            } catch (_) {}
+          }
+        }
+
+        // Re-fetch the final state from ERPNext to return accurate data
+        try {
+          final freshResp = await http.get(updateUrl, headers: _headers);
+          if (freshResp.statusCode == 200) {
+            final freshBody = jsonDecode(freshResp.body);
+            final freshSub = HcpProfileSubmission.fromJson(freshBody['data']);
+            await _updateSubmissionInLocalCache(freshSub);
+            return freshSub;
+          }
+        } catch (_) {}
+      }
+
+      final result = HcpProfileSubmission.fromJson(createdData ?? payload);
+      await _updateSubmissionInLocalCache(result);
+      return result;
     } catch (e) {
       print('Create submission error: $e');
       rethrow;
     }
+  }
+
+  /// Helper to safely update a submission record inside the local offline cache
+  Future<void> _updateSubmissionInLocalCache(HcpProfileSubmission sub) async {
+    try {
+      final cache = await _readFromCache('submissions_cache.json');
+      if (cache != null) {
+        final List<dynamic> dataList = jsonDecode(cache);
+        final index = dataList.indexWhere((item) => (item is Map && item['name'] == sub.name));
+        if (index >= 0) {
+          dataList[index] = sub.toJson();
+        } else {
+          dataList.insert(0, sub.toJson());
+        }
+        await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+      }
+    } catch (_) {}
   }
 
   /// Update/overwrite an existing HCP Profile Submission record (in-place "tamper" to prevent duplicates)
@@ -2755,6 +2851,45 @@ class ApiService extends ChangeNotifier {
         payload['institution_name'] = instName.isNotEmpty ? instName : raw;
       }
 
+      final allowedDoctypeFields = {
+        'doctype',
+        'name',
+        'hcp_name',
+        'hcp_full_name',
+        'first_name',
+        'middle_name',
+        'last_name',
+        'birth_date',
+        'hcp_photo',
+        'consent_privacy_understood',
+        'consent_signature',
+        'consent_photo',
+        'hcp_type',
+        'hcp_practice',
+        'table_specialties',
+        'table_workplaces',
+        'table_contact_info',
+        'region_name',
+        'province_name',
+        'city_municipality',
+        'barangay_name',
+        'institution',
+        'account_or_program',
+        'territory',
+        'sales_person',
+        'user_id',
+        'medrep_email',
+        'survey_template',
+        'survey_template_title',
+        'survey_response',
+        'submission_date',
+        'workflow_state',
+        'status',
+        'application_status',
+        'docstatus',
+      };
+      payload.removeWhere((k, _) => !allowedDoctypeFields.contains(k));
+
       HcpProfileSubmission updatedResult;
       final response = await http.put(
         url,
@@ -2889,14 +3024,14 @@ class ApiService extends ChangeNotifier {
       return submission.copyWith(workflowState: 'Rejected', status: 'Rejected', docstatus: 2);
     }
 
-    // For "Select for Processing" and "Submit for Approval":
+    // For "Submit for Processing" and "Submit for Approval":
     try {
       final wfResp = await http.post(
         wfUrl,
         headers: _headers,
         body: jsonEncode({
           'doc': {'doctype': 'HCP Profile Submission', 'name': subName},
-          'action': action,
+          'action': effectiveAction,
         }),
       );
       if (wfResp.statusCode == 200) {
@@ -2904,17 +3039,21 @@ class ApiService extends ChangeNotifier {
       }
     } catch (_) {}
 
-    // Fallback: If workflow hook failed or needs explicit update
+    // Fallback: If workflow hook failed or needs explicit update via set_value
     if (!wfSuccess && targetState.isNotEmpty) {
       try {
-        final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
-        await http.put(
-          updateUrl,
+        final setValUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+        await http.post(
+          setValUrl,
           headers: _headers,
           body: jsonEncode({
-            'workflow_state': targetState,
-            'status': targetState,
-            'docstatus': targetDocStatus,
+            'doctype': 'HCP Profile Submission',
+            'name': subName,
+            'fieldname': {
+              'workflow_state': targetState,
+              'status': targetState,
+              'docstatus': targetDocStatus,
+            },
           }),
         );
       } catch (_) {}

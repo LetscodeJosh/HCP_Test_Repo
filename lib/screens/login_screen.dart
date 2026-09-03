@@ -110,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         setState(() {
-          _errorMessage = 'Authentication failed. Please verify your credentials.';
+          _errorMessage = apiService.loginErrorMessage ?? 'Authentication failed. Please verify your credentials.';
         });
       }
     }
@@ -175,7 +175,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else {
         setState(() {
-          _errorMessage = 'Biometric login failed on server. Please verify your credentials manually.';
+          _errorMessage = apiService.loginErrorMessage ?? 'Biometric login failed on server. Please verify your credentials manually.';
         });
       }
     }

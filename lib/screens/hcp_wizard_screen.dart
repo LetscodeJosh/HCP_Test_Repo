@@ -1051,65 +1051,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         docstatus: targetDocstatus,
       );
 
-      if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
-        // Find existing submission to tamper/overwrite in-place
-        final allSubs = await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
-        HcpProfileSubmission? existingSub;
-        for (var s in allSubs) {
-          if (s.hcpName == effectiveHcpId ||
-              (s.hcpFullName != null && s.hcpFullName!.trim().toLowerCase() == fullDoctorName.trim().toLowerCase()) ||
-              ((s.firstName?.trim().toLowerCase() == fn.toLowerCase()) && (s.lastName?.trim().toLowerCase() == ln.toLowerCase()))) {
-            existingSub = s;
-            break;
-          }
-        }
-
-        if (existingSub != null && existingSub.name != null && existingSub.name!.isNotEmpty) {
-          final submissionToUpdate = HcpProfileSubmission(
-            name: existingSub.name,
-            hcpName: effectiveHcpId,
-            hcpFullName: fullDoctorName,
-            firstName: fn,
-            middleName: mn.isNotEmpty ? mn : '-',
-            lastName: ln,
-            birthDate: _birthDateController.text.trim(),
-            hcpType: _selectedHcpType,
-            hcpPractice: _selectedPractice,
-            consentPrivacyUnderstood: _consentGiven,
-            consentSignature: sigUri.isNotEmpty ? sigUri : existingSub.consentSignature,
-            consentPhoto: uploadedConsentPhotoUrl ?? existingSub.consentPhoto,
-            hcpPhoto: uploadedDoctorPhotoUrl ?? existingSub.hcpPhoto,
-            specialties: _selectedSpecialties,
-            workplaces: _selectedWorkplaces,
-            contacts: _contacts,
-            accountOrProgram: _selectedProgram,
-            territory: _selectedTerritory,
-            salesPerson: _territoryManagerController.text.trim().isNotEmpty
-                ? _territoryManagerController.text.trim()
-                : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
-            userId: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
-            surveyTemplate: _activeSurvey?.name ?? existingSub.surveyTemplate,
-            surveyTemplateTitle: _activeSurvey?.templateName ?? existingSub.surveyTemplateTitle,
-            answers: answersList.isNotEmpty ? answersList : existingSub.answers,
-            medrepEmail: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
-            submissionDate: actualSubmissionTime.toIso8601String().split('.').first,
-            validFrom: HcpAccount.calculateMonthValidFrom(actualSubmissionTime),
-            validTo: HcpAccount.calculateMonthValidTo(actualSubmissionTime),
-            validityPeriod: HcpAccount.calculateMonthLabel(actualSubmissionTime),
-            workflowState: 'Approved',
-            applicationStatus: 'Applied',
-            changeSummaryHtml: changeSummaryHtmlStr,
-            changesJson: changesJsonStr,
-            docstatus: 1,
-          );
-          await apiService.updateSubmission(existingSub.name!, submissionToUpdate);
-        } else {
-          await apiService.createSubmission(submission);
-        }
-      } else {
-        // Brand new doctor registration
-        await apiService.createSubmission(submission);
-      }
+      // Record submission in ERPNext HCP Profile Submission doctype:
+      // - Existing Doctor Update: Saved directly as Approved (no approval required).
+      // - New Doctor Registration: Transitioned to Pending Approval (requires managerial approval).
+      await apiService.createSubmission(submission);
 
       setState(() => _isLoading = false);
       if (mounted) {
@@ -1118,7 +1063,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             backgroundColor: const Color(0xFF10B981),
             content: Text(
               isExistingDoctor
-                  ? 'Doctor profile changes applied and HCP Profile Submission updated!'
+                  ? 'Doctor profile changes applied and HCP Profile Submission recorded (Approved)!'
                   : (requiresApproval
                       ? 'New doctor submitted to HCP Profile Submission (Pending Managerial Approval).'
                       : 'Doctor profile registered immediately to HCP Masterlist and $_selectedProgram Account!'),
