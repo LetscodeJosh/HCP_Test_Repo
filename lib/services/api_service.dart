@@ -558,7 +558,9 @@ class ApiService extends ChangeNotifier {
 
   bool get isAuthenticated => _sessionCookie != null;
 
-  // Header helpers that inject session cookies
+  String? _csrfToken;
+
+  // Header helpers that inject session cookies and Frappe CSRF token
   Map<String, String> get _headers {
     final headers = {
       'Content-Type': 'application/json',
@@ -567,7 +569,38 @@ class ApiService extends ChangeNotifier {
     if (_sessionCookie != null) {
       headers['Cookie'] = _sessionCookie!;
     }
+    if (_csrfToken != null && _csrfToken!.isNotEmpty) {
+      headers['X-Frappe-CSRF-Token'] = _csrfToken!;
+    }
     return headers;
+  }
+
+  /// Ensure a valid Frappe CSRF Token is available for mutating API calls
+  Future<String?> ensureCsrfToken() async {
+    if (_csrfToken != null && _csrfToken!.isNotEmpty) {
+      return _csrfToken;
+    }
+    if (_isOffline || _sessionCookie == null) {
+      return null;
+    }
+    try {
+      final appUrl = Uri.parse('$baseUrl/app');
+      final appRes = await http.get(appUrl, headers: {
+        'Cookie': _sessionCookie!,
+        'Accept': 'text/html,application/xhtml+xml',
+      });
+      if (appRes.statusCode == 200) {
+        final html = appRes.body;
+        final csrfMatch = RegExp(r'frappe\.csrf_token\s*=\s*["\x27]([^"\x27]+)["\x27]').firstMatch(html);
+        if (csrfMatch != null) {
+          _csrfToken = csrfMatch.group(1);
+          return _csrfToken;
+        }
+      }
+    } catch (e) {
+      print('Error extracting CSRF token: $e');
+    }
+    return _csrfToken;
   }
 
   Map<String, String> get authHeaders => _headers;
@@ -824,12 +857,19 @@ class ApiService extends ChangeNotifier {
             final appRes = await http.get(appUrl, headers: _headers);
             if (appRes.statusCode == 200) {
               final html = appRes.body;
+              final csrfMatch = RegExp(r'frappe\.csrf_token\s*=\s*["\x27]([^"\x27]+)["\x27]').firstMatch(html);
+              if (csrfMatch != null) {
+                _csrfToken = csrfMatch.group(1);
+              }
               final idx = html.indexOf('frappe.boot =');
               if (idx != -1) {
                 final endIdx = html.indexOf('};\n', idx);
                 if (endIdx != -1) {
                   final jsonStr = html.substring(idx + 'frappe.boot ='.length, endIdx + 1).trim();
                   final bootData = jsonDecode(jsonStr);
+                  if ((_csrfToken == null || _csrfToken!.isEmpty) && bootData['csrf_token'] != null) {
+                    _csrfToken = bootData['csrf_token'].toString();
+                  }
                   final bootUser = bootData['user'];
                   if (bootUser != null) {
                     if (bootUser['roles'] is List) {
@@ -1067,6 +1107,7 @@ class ApiService extends ChangeNotifier {
   /// Log out
   void logout() {
     _sessionCookie = null;
+    _csrfToken = null;
     loggedInEmail = null;
     loggedInFullName = null;
     _userRoleProfile = '';
@@ -2579,11 +2620,24 @@ class ApiService extends ChangeNotifier {
       };
       payload.removeWhere((k, _) => !allowedDoctypeFields.contains(k));
 
-      final response = await http.post(
+      await ensureCsrfToken();
+
+      var response = await http.post(
         url,
         headers: _headers,
         body: jsonEncode(payload),
       );
+
+      // Automatic CSRF token refresh & retry if server throws CSRFTokenError
+      if (response.statusCode == 400 && response.body.contains('CSRFTokenError')) {
+        _csrfToken = null;
+        await ensureCsrfToken();
+        response = await http.post(
+          url,
+          headers: _headers,
+          body: jsonEncode(payload),
+        );
+      }
 
       String? createdName;
       Map<String, dynamic>? createdData;
@@ -2595,7 +2649,7 @@ class ApiService extends ChangeNotifier {
       } else {
         // Fallback: frappe.client.insert
         final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
-        final rpcResp = await http.post(
+        var rpcResp = await http.post(
           rpcUrl,
           headers: _headers,
           body: jsonEncode({
@@ -2605,6 +2659,20 @@ class ApiService extends ChangeNotifier {
             }
           }),
         );
+        if (rpcResp.statusCode == 400 && rpcResp.body.contains('CSRFTokenError')) {
+          _csrfToken = null;
+          await ensureCsrfToken();
+          rpcResp = await http.post(
+            rpcUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doc': {
+                'doctype': 'HCP Profile Submission',
+                ...payload,
+              }
+            }),
+          );
+        }
         if (rpcResp.statusCode == 200) {
           final body = jsonDecode(rpcResp.body);
           final resDoc = body['message'] ?? body['data'];
