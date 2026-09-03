@@ -446,18 +446,19 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     final bool isApproved = rawWf == 'approved' || rawWf.contains('appr') || currentSub.docstatus == 1;
                     final bool isRejected = rawWf == 'rejected' || rawWf.contains('reject') || currentSub.docstatus == 2;
 
-                    // Allowed transition rules from ERPNext HCP Profile Submission WF:
+                    // Allowed transition rules strictly from ERPNext HCP Profile Submission WF:
                     // 1. Draft -> Submit for Processing -> Processed (Sales User, System Manager)
                     final bool canSubmitForProcessing = (apiService.isMedRep || apiService.isAdmin) && isDraft;
 
-                    // 2. Draft / Processed / Rejected -> Submit for Approval -> Pending Approval (Sales User, Sales Manager, System Manager)
-                    final bool canSubmitForApproval = (apiService.isMedRep || apiService.isManager || apiService.isAdmin) && (isDraft || isProcessed || isRejected);
+                    // 2. Draft / Rejected -> Submit for Approval -> Pending Approval (Sales User, Sales Manager, System Manager)
+                    // Note: 'Processed' has NO transitions defined in ERPNext HCP Profile Submission WF.
+                    final bool canSubmitForApproval = (apiService.isMedRep || apiService.isManager || apiService.isAdmin) && (isDraft || isRejected);
 
                     // 3. Pending Approval -> Approve / Reject (Sales Manager, System Manager)
                     final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin) && isPending;
 
-                    // If user is Admin, allow override testing
-                    final bool showAdminOverrides = apiService.isAdmin;
+                    // If user is Admin, allow override testing on Approved/Processed
+                    final bool showAdminOverrides = apiService.isAdmin && isApproved;
 
                     if (!canSubmitForProcessing && !canSubmitForApproval && !canApproveOrReject && !showAdminOverrides) {
                       return Container(
@@ -473,12 +474,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                   ? Icons.check_circle_rounded
                                   : isRejected
                                       ? Icons.cancel_rounded
-                                      : Icons.info_outline_rounded,
+                                      : isProcessed
+                                          ? Icons.playlist_add_check_rounded
+                                          : Icons.info_outline_rounded,
                               color: isApproved
                                   ? const Color(0xFF10B981)
                                   : isRejected
                                       ? const Color(0xFFEF4444)
-                                      : const Color(0xFFD97706),
+                                      : isProcessed
+                                          ? const Color(0xFF3B82F6)
+                                          : const Color(0xFFD97706),
                               size: 18,
                             ),
                             const SizedBox(width: 8),
@@ -488,13 +493,17 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                     ? 'Status: Approved & Masterlist Synced'
                                     : isRejected
                                         ? 'Status: Rejected'
-                                        : 'Status: Pending Approval (Awaiting Manager Review)',
+                                        : isProcessed
+                                            ? 'Status: Processed (Form Locked by Workflow)'
+                                            : 'Status: Pending Approval (Awaiting Manager Review)',
                                 style: TextStyle(
                                   color: isApproved
                                       ? const Color(0xFF10B981)
                                       : isRejected
                                           ? const Color(0xFFEF4444)
-                                          : const Color(0xFFD97706),
+                                          : isProcessed
+                                              ? const Color(0xFF3B82F6)
+                                              : const Color(0xFFD97706),
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
                                 ),
@@ -538,8 +547,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                 const SizedBox(width: 8),
                               ],
 
-                              // 2. Action: Submit for Approval (Draft / Processed / Rejected -> Pending Approval)
-                              if (canSubmitForApproval && !isPending && !isApproved) ...[
+                              // 2. Action: Submit for Approval (Draft / Rejected -> Pending Approval)
+                              if (canSubmitForApproval && !isPending && !isApproved && !isProcessed) ...[
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     style: ElevatedButton.styleFrom(
