@@ -633,9 +633,10 @@ class ApiService extends ChangeNotifier {
           await fetchLoggedInUserInfo();
 
           if (!_isRoleAuthorized) {
-            final unauthProfile = _userRoleProfile.isNotEmpty ? _userRoleProfile : 'Unauthorized';
+            final unauthProfile = _userRoleProfile.isNotEmpty ? _userRoleProfile : 'Unassigned';
+            final unauthDesig = _userDesignation.isNotEmpty ? 'Designation: "$_userDesignation"' : 'Unassigned Designation';
             logout();
-            loginErrorMessage = 'Access Restricted: Your Role Profile "$unauthProfile" is not permitted to access this application. Only System Manager, Sales Manager, and Sales User roles are allowed.';
+            loginErrorMessage = 'Access Restricted: Your account ($unauthDesig, Role Profile: "$unauthProfile") is not authorized to access this application. Only System Manager, Sales Manager, and Sales User roles are permitted.';
             return false;
           }
           loginErrorMessage = null;
