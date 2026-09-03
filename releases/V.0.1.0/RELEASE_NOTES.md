@@ -39,4 +39,5 @@
 
 ## Release Binaries Included in this Folder
 - `HCP_Profiling_V.0.1.0.ipa`
+- `HCP_Profiling.ipa`
 - `PIMS_HCP_V.0.1.0.ipa`
