@@ -205,8 +205,11 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       }
     }
 
-    // 2. Submissions Scope Filter (Defaults to All Program Submissions; toggleable to My Submissions)
-    if (_onlyMySubmissions) {
+    // 2. Submissions Scope Filter:
+    // MedRep is strictly locked to their own submissions under their assigned program.
+    // They cannot view all scope or other representatives' submissions.
+    final bool enforceMySubmissions = apiService.isMedRep || _onlyMySubmissions;
+    if (enforceMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
       final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
@@ -1651,31 +1654,26 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 },
               ),
               const SizedBox(width: 8),
-              InkWell(
-                onTap: () {
-                  setState(() {
-                    _onlyMySubmissions = !_onlyMySubmissions;
-                  });
-                },
-                child: Container(
+              if (apiService.isMedRep) ...[
+                Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: _onlyMySubmissions ? const Color(0xFF0066FF).withOpacity(0.2) : const Color(0xFF1E293B),
+                    color: const Color(0xFF0066FF).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: _onlyMySubmissions ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+                    border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.4)),
                   ),
                   child: Row(
-                    children: [
+                    children: const [
                       Icon(
-                        _onlyMySubmissions ? Icons.person_rounded : Icons.groups_rounded,
+                        Icons.person_rounded,
                         size: 14,
-                        color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                        color: Color(0xFF38BDF8),
                       ),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                       Text(
-                        _onlyMySubmissions ? 'My Submissions' : (apiService.isAdmin ? 'All Scope' : 'Program Scope'),
+                        'My Submissions',
                         style: TextStyle(
-                          color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                          color: Color(0xFF38BDF8),
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                         ),
@@ -1683,7 +1681,41 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     ],
                   ),
                 ),
-              ),
+              ] else ...[
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _onlyMySubmissions = !_onlyMySubmissions;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _onlyMySubmissions ? const Color(0xFF0066FF).withOpacity(0.2) : const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _onlyMySubmissions ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _onlyMySubmissions ? Icons.person_rounded : Icons.groups_rounded,
+                          size: 14,
+                          color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _onlyMySubmissions ? 'My Submissions' : (apiService.isAdmin ? 'All Scope' : 'Program Scope'),
+                          style: TextStyle(
+                            color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const Spacer(),
               IconButton(
                 style: IconButton.styleFrom(

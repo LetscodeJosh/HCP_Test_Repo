@@ -2172,7 +2172,7 @@ class ApiService extends ChangeNotifier {
       return [];
     }
 
-    const submissionFields = '["name","owner","creation","modified","docstatus","application_status","workflow_state","status","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
+    const submissionFields = '["name","owner","creation","modified","docstatus","application_status","workflow_state","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
     final encodedFields = Uri.encodeQueryComponent(submissionFields);
     final url = Uri.parse(
       '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit_page_length=5000&limit=5000&order_by=creation%20desc',
