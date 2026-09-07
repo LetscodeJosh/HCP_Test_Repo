@@ -1,29 +1,21 @@
 # Frappe Workflow Rule: HCP Profile Submission WF
 
-## STRICT CONSTRAINT: EXACTLY 12 TRANSITION ROWS & PRESERVED CONDITIONS
+## APPLICATION WORKFLOW & ARCHITECTURE STANDARD
 
-### 1. Row Count & Structure Constraint
-The Transition Rules table for **`HCP Profile Submission WF`** must **always remain exactly 12 rows**.
-- **NO rows may be added.**
-- **NO rows may be deleted.**
+1. **Two-Tier Architecture**:
+   - **`HCP` DocType**: Universal masterlist of all doctors across all programs.
+   - **`HCP Account` DocType**: Masterlist per program (e.g. Abbott Diabetes Care, Bayer) with program-specific preferred items.
 
-The exact 12-row configuration:
-1. `Draft` -> `Submit for Processing` -> `Processed` (`System Manager`) [Condition: `doc.profile_action=="Existing HCP"`]
-2. `Draft` -> `Submit for Processing` -> `Processed` (`Sales User`) [Condition: `doc.profile_action=="Existing HCP"`]
-3. `Draft` -> `Submit for Approval` -> `Pending Approval` (`System Manager`) [Condition: `doc.profile_action=="New HCP"`]
-4. `Draft` -> `Submit for Approval` -> `Pending Approval` (`Sales Manager`) [Condition: `doc.profile_action=="New HCP"`]
-5. `Draft` -> `Submit for Approval` -> `Pending Approval` (`Sales User`) [Condition: `doc.profile_action=="New HCP"`]
-6. `Pending Approval` -> `Approve` -> `Approved` (`System Manager`)
-7. `Pending Approval` -> `Approve` -> `Approved` (`Sales Manager`)
-8. `Pending Approval` -> `Reject` -> `Rejected` (`System Manager`)
-9. `Pending Approval` -> `Reject` -> `Rejected` (`Sales Manager`)
-10. `Rejected` -> `Submit for Approval` -> `Pending Approval` (`System Manager`)
-11. `Rejected` -> `Submit for Approval` -> `Pending Approval` (`Sales User`)
-12. `Rejected` -> `Submit for Approval` -> `Pending Approval` (`Sales Manager`)
+2. **Application Submission Rules (1:1 with ERPNext WF)**:
+   - **Existing Doctor (`Existing HCP`)**:
+     - Action: `Submit for Processing` $\rightarrow$ State: `Processed` (Rows 1 & 2: `doc.profile_action=="Existing HCP"`).
+     - Requires NO managerial approval; merges automatically upon submission with preferred items active.
+   - **New Doctor (`+ Add New Doctor` / `New HCP`)**:
+     - Action: `Submit for Approval` $\rightarrow$ State: `Pending Approval` (Rows 3, 4, 5: `doc.profile_action=="New HCP"`).
+     - Requires Managerial Approval (`Sales Manager` or `System Manager`).
+     - Action: `Approve` $\rightarrow$ State: `Approved` (Rows 6 & 7: `doc.profile_action=="New HCP"`).
 
-### 2. Mandatory Condition Expressions
-Under no circumstances should the `condition` field in the Transition Rules table be deleted, cleared, or modified:
-- `doc.profile_action=="New HCP"`
-- `doc.profile_action=="Existing HCP"`
+3. **ERPNext Workflow Conditions Preservation**:
+   - The set conditions (`doc.profile_action=="Existing HCP"` and `doc.profile_action=="New HCP"`) in `HCP Profile Submission WF` are standard and must NOT be changed or removed by the agent.
 
-**Any deviation, row removal, row addition, or condition edit is strictly prohibited without explicit user instruction and approval.**
+

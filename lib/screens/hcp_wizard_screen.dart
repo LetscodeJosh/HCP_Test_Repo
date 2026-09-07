@@ -971,9 +971,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     final changeSummaryHtmlStr = sb.toString();
 
     // Determine approval requirement and target workflow state:
-    // Strictly aligned with ERPNext HCP Profile Submission standard workflow (Image 4):
-    // All submissions transition from Draft -> Pending Approval via action 'Submit for Approval'
-    final String targetWorkflow = 'Pending Approval';
+    // Strictly aligned with ERPNext HCP Profile Submission standard 12-row workflow:
+    // - Existing Doctor (doc.profile_action=="Existing HCP"):
+    //   Transitions from Draft -> Processed via action 'Submit for Processing' (Rows 1 & 2).
+    //   NO approval required; merges automatically to HCP masterlist and syncs HCP Account.
+    // - New Doctor (doc.profile_action=="New HCP"):
+    //   Transitions from Draft -> Pending Approval via action 'Submit for Approval' (Rows 3, 4, 5).
+    //   REQUIRES Managerial Approval; held until Manager approves it.
+    final bool isProcessing = workflowAction == 'Submit for Processing' || isExistingDoctor;
+    final String targetWorkflow = isProcessing ? 'Processed' : 'Pending Approval';
     final String targetAppStatus = isExistingDoctor ? 'Applied' : 'Not Applied';
     final int targetDocstatus = 0;
 
@@ -1082,16 +1088,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       );
 
       // Record submission in ERPNext HCP Profile Submission doctype:
-      // - Existing Doctor: Transitioned to Processed (Rows 1 & 2).
-      // - New Doctor: Transitioned to Pending Approval (Rows 3, 4, 5).
+      // - Existing Doctor: Transitioned to Processed via Submit for Processing (Rows 1 & 2).
+      // - New Doctor: Transitioned to Pending Approval via Submit for Approval (Rows 3, 4, 5).
       await apiService.createSubmission(submission);
 
       setState(() => _isLoading = false);
       if (mounted) {
-        final String successMsg = 'HCP Profile Submission sent for managerial approval (Status: Pending Approval)!';
+        final String successMsg = isProcessing
+            ? 'Doctor profile updated in Masterlist & processed (Status: Processed)!'
+            : 'New Doctor profile submitted for managerial approval (Status: Pending Approval)!';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFFD97706),
+            backgroundColor: isProcessing ? const Color(0xFF2563EB) : const Color(0xFFD97706),
             content: Text(successMsg),
           ),
         );
@@ -4506,24 +4514,43 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     (!_isCreatingNewDoctor && _allDoctors.any((d) =>
                         d.firstName.trim().toLowerCase() == currentFn && d.lastName.trim().toLowerCase() == currentLn));
 
-                return ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFD97706),
-                    disabledBackgroundColor: const Color(0xFFD97706).withOpacity(0.4),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
-                  label: const Text(
-                    'Submit for Approval',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
-                      ? null
-                      : () {
-                          _submitForm(workflowAction: 'Submit for Approval');
-                        },
-                );
+                return isDoctorExisting
+                    ? ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          disabledBackgroundColor: const Color(0xFF2563EB).withOpacity(0.4),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.playlist_add_check_rounded, size: 18, color: Colors.white),
+                        label: const Text(
+                          'Submit for Processing',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                            ? null
+                            : () {
+                                _submitForm(workflowAction: 'Submit for Processing');
+                              },
+                      )
+                    : ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFD97706),
+                          disabledBackgroundColor: const Color(0xFFD97706).withOpacity(0.4),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
+                        label: const Text(
+                          'Submit for Approval',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                        ),
+                        onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                            ? null
+                            : () {
+                                _submitForm(workflowAction: 'Submit for Approval');
+                              },
+                      );
               },
             ),
           ] else ...[

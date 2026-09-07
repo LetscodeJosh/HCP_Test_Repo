@@ -668,10 +668,23 @@ class LocationResolver {
     GeographicUnit('Ifugao', '1402700000'),
     GeographicUnit('Kalinga', '1403200000'),
     GeographicUnit('Mountain Province', '1404400000'),
-    GeographicUnit('Metro Manila-Manila', '1376000000'),
-    GeographicUnit('Metro Manila-Makati', '1376020000'),
-    GeographicUnit('Metro Manila-Pasig', '1376030000'),
-    GeographicUnit('Metro Manila-Quezon City', '1374040000'),
+    GeographicUnit('Metro Manila-Caloocan', '1380100000'),
+    GeographicUnit('Metro Manila-Las Piñas', '1380200000'),
+    GeographicUnit('Metro Manila-Makati', '1380300000'),
+    GeographicUnit('Metro Manila-Malabon', '1380400000'),
+    GeographicUnit('Metro Manila-Mandaluyong', '1380500000'),
+    GeographicUnit('Metro Manila-Manila', '1380600000'),
+    GeographicUnit('Metro Manila-Marikina', '1380700000'),
+    GeographicUnit('Metro Manila-Muntinlupa', '1380800000'),
+    GeographicUnit('Metro Manila-Navotas', '1380900000'),
+    GeographicUnit('Metro Manila-Parañaque', '1381000000'),
+    GeographicUnit('Metro Manila-Pasay', '1381100000'),
+    GeographicUnit('Metro Manila-Pasig', '1381200000'),
+    GeographicUnit('Metro Manila-Quezon City', '1381300000'),
+    GeographicUnit('Metro Manila-San Juan', '1381400000'),
+    GeographicUnit('Metro Manila-Taguig', '1381500000'),
+    GeographicUnit('Metro Manila-Valenzuela', '1381600000'),
+    GeographicUnit('Metro Manila-Pateros', '1381701000'),
   ];
 
   static const List<GeographicUnit> standardRegions = [
@@ -698,19 +711,19 @@ class LocationResolver {
     // NCR / Metro Manila
     GeographicUnit('City of Manila', '1380600000'),
     GeographicUnit('Ermita, Manila', '1380608000'),
-    GeographicUnit('Quiapo / Sampaloc, Manila', '1380602000'),
-    GeographicUnit('Binondo, Manila', '1380601000'),
-    GeographicUnit('San Nicolas, Manila', '1380603000'),
-    GeographicUnit('Santa Cruz, Manila', '1380604000'),
-    GeographicUnit('Tondo, Manila', '1380605000'),
-    GeographicUnit('Ermita, Manila', '1380606000'),
-    GeographicUnit('Intramuros, Manila', '1380607000'),
-    GeographicUnit('Paco, Manila', '1380609000'),
-    GeographicUnit('Pandacan, Manila', '1380610000'),
-    GeographicUnit('Port Area, Manila', '1380611000'),
-    GeographicUnit('Santa Ana, Manila', '1380612000'),
-    GeographicUnit('Santa Mesa, Manila', '1380613000'),
-    GeographicUnit('Sampaloc, Manila', '1380614000'),
+    GeographicUnit('Binondo, Manila', '1380602000'),
+    GeographicUnit('Quiapo, Manila', '1380603000'),
+    GeographicUnit('San Nicolas, Manila', '1380604000'),
+    GeographicUnit('Santa Cruz, Manila', '1380605000'),
+    GeographicUnit('Sampaloc, Manila', '1380606000'),
+    GeographicUnit('San Miguel, Manila', '1380607000'),
+    GeographicUnit('Intramuros, Manila', '1380609000'),
+    GeographicUnit('Malate, Manila', '1380610000'),
+    GeographicUnit('Paco, Manila', '1380611000'),
+    GeographicUnit('Pandacan, Manila', '1380612000'),
+    GeographicUnit('Port Area, Manila', '1380613000'),
+    GeographicUnit('Santa Ana, Manila', '1380614000'),
+    GeographicUnit('Tondo, Manila', '1380601000'),
     GeographicUnit('Caloocan City', '1380100000'),
     GeographicUnit('Las Piñas City', '1380200000'),
     GeographicUnit('Makati City', '1380300000'),
@@ -722,11 +735,11 @@ class LocationResolver {
     GeographicUnit('Parañaque City', '1381000000'),
     GeographicUnit('Pasay City', '1381100000'),
     GeographicUnit('Pasig City', '1381200000'),
-    GeographicUnit('Pateros', '1381300000'),
-    GeographicUnit('Quezon City', '1381400000'),
-    GeographicUnit('San Juan City', '1381500000'),
-    GeographicUnit('Taguig City', '1381600000'),
-    GeographicUnit('Valenzuela City', '1381700000'),
+    GeographicUnit('Quezon City', '1381300000'),
+    GeographicUnit('San Juan City', '1381400000'),
+    GeographicUnit('Taguig City', '1381500000'),
+    GeographicUnit('Valenzuela City', '1381600000'),
+    GeographicUnit('Pateros', '1381701000'),
     // Cavite
     GeographicUnit('General Trias', '0402123000'),
     GeographicUnit('Bacoor', '0402102000'),
@@ -1180,23 +1193,22 @@ class LocationResolver {
 
     // 4. Intelligently map known PSGC city/district patterns
     if (digitsOnly.startsWith('13806')) return 'City of Manila';
-    if (digitsOnly.startsWith('13812') || digitsOnly.startsWith('137603')) return 'Pasig City';
-    if (digitsOnly.startsWith('13803') || digitsOnly.startsWith('137602')) return 'Makati City';
-    if (digitsOnly.startsWith('13814') || digitsOnly.startsWith('1374')) return 'Quezon City';
-    if (digitsOnly.startsWith('13811')) return 'Pasay City';
-    if (digitsOnly.startsWith('13810')) return 'Parañaque City';
-    if (digitsOnly.startsWith('13808')) return 'Muntinlupa City';
-    if (digitsOnly.startsWith('13807')) return 'Marikina City';
-    if (digitsOnly.startsWith('13805')) return 'Mandaluyong City';
-    if (digitsOnly.startsWith('13816')) return 'Taguig City';
     if (digitsOnly.startsWith('13801')) return 'Caloocan City';
-    if (digitsOnly.startsWith('13804')) return 'Malabon City';
-    if (digitsOnly.startsWith('13809')) return 'Navotas City';
-    if (digitsOnly.startsWith('13817')) return 'Valenzuela City';
-    if (digitsOnly.startsWith('13815')) return 'San Juan City';
     if (digitsOnly.startsWith('13802')) return 'Las Piñas City';
-    if (digitsOnly.startsWith('13813')) return 'Pateros';
-    if (digitsOnly.startsWith('137601')) return 'City of Manila';
+    if (digitsOnly.startsWith('13803') || digitsOnly.startsWith('137602')) return 'Makati City';
+    if (digitsOnly.startsWith('13804')) return 'Malabon City';
+    if (digitsOnly.startsWith('13805')) return 'Mandaluyong City';
+    if (digitsOnly.startsWith('13807')) return 'Marikina City';
+    if (digitsOnly.startsWith('13808')) return 'Muntinlupa City';
+    if (digitsOnly.startsWith('13809')) return 'Navotas City';
+    if (digitsOnly.startsWith('13810')) return 'Parañaque City';
+    if (digitsOnly.startsWith('13811')) return 'Pasay City';
+    if (digitsOnly.startsWith('13812') || digitsOnly.startsWith('137603')) return 'Pasig City';
+    if (digitsOnly.startsWith('13813') || digitsOnly.startsWith('1374')) return 'Quezon City';
+    if (digitsOnly.startsWith('13814')) return 'San Juan City';
+    if (digitsOnly.startsWith('13815')) return 'Taguig City';
+    if (digitsOnly.startsWith('13816')) return 'Valenzuela City';
+    if (digitsOnly.startsWith('13817')) return 'Pateros';
 
     // Cavite cities & towns
     if (digitsOnly.startsWith('0402123')) return 'General Trias';
@@ -1446,16 +1458,55 @@ class LocationResolver {
 
     // 3. Known ERPNext Province aliases
     if (lower == 'metro manila' || lower == 'ncr' || lower == 'national capital region' || lower == 'metro manila-manila' || lower == 'manila') {
-      return '1376000000';
+      return '1380600000';
     }
     if (lower == 'metro manila-makati' || lower == 'makati') {
-      return '1376020000';
+      return '1380300000';
     }
     if (lower == 'metro manila-pasig' || lower == 'pasig') {
-      return '1376030000';
+      return '1381200000';
     }
     if (lower == 'metro manila-quezon city' || lower == 'quezon city' || lower == 'qc') {
-      return '1374040000';
+      return '1381300000';
+    }
+    if (lower == 'metro manila-taguig' || lower == 'taguig') {
+      return '1381500000';
+    }
+    if (lower == 'metro manila-mandaluyong' || lower == 'mandaluyong') {
+      return '1380500000';
+    }
+    if (lower == 'metro manila-marikina' || lower == 'marikina') {
+      return '1380700000';
+    }
+    if (lower == 'metro manila-pasay' || lower == 'pasay') {
+      return '1381100000';
+    }
+    if (lower == 'metro manila-paranaque' || lower == 'metro manila-parañaque' || lower == 'paranaque' || lower == 'parañaque') {
+      return '1381000000';
+    }
+    if (lower == 'metro manila-las pinas' || lower == 'metro manila-las piñas' || lower == 'las pinas' || lower == 'las piñas') {
+      return '1380200000';
+    }
+    if (lower == 'metro manila-muntinlupa' || lower == 'muntinlupa') {
+      return '1380800000';
+    }
+    if (lower == 'metro manila-caloocan' || lower == 'caloocan') {
+      return '1380100000';
+    }
+    if (lower == 'metro manila-malabon' || lower == 'malabon') {
+      return '1380400000';
+    }
+    if (lower == 'metro manila-navotas' || lower == 'navotas') {
+      return '1380900000';
+    }
+    if (lower == 'metro manila-valenzuela' || lower == 'valenzuela') {
+      return '1381600000';
+    }
+    if (lower == 'metro manila-san juan' || lower == 'san juan') {
+      return '1381400000';
+    }
+    if (lower == 'metro manila-pateros' || lower == 'pateros') {
+      return '1381701000';
     }
 
     // 4. Check standard provinces list
@@ -1499,54 +1550,98 @@ class LocationResolver {
     }
 
     // 3. Known ERPNext City / District aliases
-    if (lower == 'ermita' || lower == 'malate' || lower == 'tondo' || lower == 'binondo' ||
-        lower == 'intramuros' || lower == 'sampaloc' || lower == 'santa cruz' || lower == 'sta cruz' ||
-        lower == 'paco' || lower == 'pandacan' || lower == 'san miguel' || lower == 'san nicolas' ||
-        lower == 'port area' || lower == 'santa ana' || lower == 'sta ana' || lower == 'city of manila' ||
-        lower == 'manila city' || lower == 'manila') {
-      return '133900000'; // City of Manila PSGC Code
+    if (lower == 'ermita') {
+      return '1380608000';
+    }
+    if (lower == 'malate') {
+      return '1380610000';
+    }
+    if (lower == 'intramuros') {
+      return '1380609000';
+    }
+    if (lower == 'tondo') {
+      return '1380601000';
+    }
+    if (lower == 'binondo') {
+      return '1380602000';
+    }
+    if (lower == 'quiapo') {
+      return '1380603000';
+    }
+    if (lower == 'san nicolas') {
+      return '1380604000';
+    }
+    if (lower == 'santa cruz' || lower == 'sta cruz') {
+      return '1380605000';
+    }
+    if (lower == 'sampaloc') {
+      return '1380606000';
+    }
+    if (lower == 'san miguel') {
+      return '1380607000';
+    }
+    if (lower == 'paco') {
+      return '1380611000';
+    }
+    if (lower == 'pandacan') {
+      return '1380612000';
+    }
+    if (lower == 'port area') {
+      return '1380613000';
+    }
+    if (lower == 'santa ana' || lower == 'sta ana') {
+      return '1380614000';
+    }
+    if (lower == 'city of manila' || lower == 'manila city' || lower == 'manila') {
+      return '1380600000';
     }
     if (lower == 'makati' || lower == 'makati city') {
-      return '1376020000';
+      return '1380300000';
     }
     if (lower == 'quezon city' || lower == 'qc') {
-      return '1374040000';
+      return '1381300000';
     }
     if (lower == 'pasig' || lower == 'pasig city') {
-      return '1376030000';
+      return '1381200000';
     }
     if (lower == 'taguig' || lower == 'taguig city' || lower == 'bgc' || lower == 'bonifacio global city') {
-      return '1376070000';
+      return '1381500000';
     }
     if (lower == 'mandaluyong' || lower == 'mandaluyong city') {
-      return '1374010000';
+      return '1380500000';
     }
     if (lower == 'marikina' || lower == 'marikina city') {
-      return '1374020000';
+      return '1380700000';
     }
     if (lower == 'pasay' || lower == 'pasay city') {
-      return '1376050000';
+      return '1381100000';
     }
     if (lower == 'paranaque' || lower == 'parañaque' || lower == 'paranaque city') {
-      return '1376040000';
+      return '1381000000';
     }
     if (lower == 'las pinas' || lower == 'las piñas' || lower == 'las pinas city') {
-      return '1376010000';
+      return '1380200000';
     }
     if (lower == 'muntinlupa' || lower == 'muntinlupa city') {
-      return '1376030000';
+      return '1380800000';
     }
     if (lower == 'caloocan' || lower == 'caloocan city') {
-      return '1375010000';
+      return '1380100000';
     }
     if (lower == 'malabon' || lower == 'malabon city') {
-      return '1375020000';
+      return '1380400000';
     }
     if (lower == 'navotas' || lower == 'navotas city') {
-      return '1375030000';
+      return '1380900000';
     }
     if (lower == 'valenzuela' || lower == 'valenzuela city') {
-      return '1375040000';
+      return '1381600000';
+    }
+    if (lower == 'san juan' || lower == 'san juan city') {
+      return '1381400000';
+    }
+    if (lower == 'pateros') {
+      return '1381701000';
     }
 
     // 4. Standard cities list

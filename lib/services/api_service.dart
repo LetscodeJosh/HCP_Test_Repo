@@ -2554,8 +2554,11 @@ class ApiService extends ChangeNotifier {
               final rawInstCity = instMatch?.rawCityMunicipality ?? instMatch?.cityMunicipality ?? '';
               final cityInput = rawInstCity.isNotEmpty ? rawInstCity : rawCity;
               if (cityInput.isNotEmpty) {
-                final cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
+                var cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
                 final cityName = LocationResolver.resolveCityName(cityInput, psgc.isNotEmpty ? psgc : null);
+                if (cityId == '133900000' || cityId.startsWith('1339')) {
+                  cityId = '1380608000'; // Ermita, Manila in ERPNext
+                }
                 final finalCityLink = cityId.isNotEmpty ? cityId : (rawInstCity.isNotEmpty ? rawInstCity : cityInput);
                 map['city_municipality'] = finalCityLink;
                 map['city'] = finalCityLink;
@@ -2566,8 +2569,11 @@ class ApiService extends ChangeNotifier {
               final rawInstProv = instMatch?.rawProvinceName ?? instMatch?.provinceName ?? '';
               final provInput = rawInstProv.isNotEmpty ? rawInstProv : rawProv;
               if (provInput.isNotEmpty) {
-                final provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
+                var provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
                 final provName = LocationResolver.resolveProvinceName(provInput, psgc.isNotEmpty ? psgc : null);
+                if (provId == '1376000000' || provId.startsWith('1376')) {
+                  provId = '1380600000'; // Metro Manila-Manila in ERPNext
+                }
                 final finalProvLink = provId.isNotEmpty ? provId : (rawInstProv.isNotEmpty ? rawInstProv : provInput);
                 map['province_name'] = finalProvLink;
                 map['province'] = finalProvLink;
@@ -2959,8 +2965,11 @@ class ApiService extends ChangeNotifier {
               final rawInstCity = instMatch?.rawCityMunicipality ?? instMatch?.cityMunicipality ?? '';
               final cityInput = rawInstCity.isNotEmpty ? rawInstCity : rawCity;
               if (cityInput.isNotEmpty) {
-                final cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
+                var cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
                 final cityName = LocationResolver.resolveCityName(cityInput, psgc.isNotEmpty ? psgc : null);
+                if (cityId == '133900000' || cityId.startsWith('1339')) {
+                  cityId = '1380608000'; // Ermita, Manila in ERPNext
+                }
                 final finalCityLink = cityId.isNotEmpty ? cityId : (rawInstCity.isNotEmpty ? rawInstCity : cityInput);
                 map['city_municipality'] = finalCityLink;
                 map['city'] = finalCityLink;
@@ -2971,8 +2980,11 @@ class ApiService extends ChangeNotifier {
               final rawInstProv = instMatch?.rawProvinceName ?? instMatch?.provinceName ?? '';
               final provInput = rawInstProv.isNotEmpty ? rawInstProv : rawProv;
               if (provInput.isNotEmpty) {
-                final provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
+                var provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
                 final provName = LocationResolver.resolveProvinceName(provInput, psgc.isNotEmpty ? psgc : null);
+                if (provId == '1376000000' || provId.startsWith('1376')) {
+                  provId = '1380600000'; // Metro Manila-Manila in ERPNext
+                }
                 final finalProvLink = provId.isNotEmpty ? provId : (rawInstProv.isNotEmpty ? rawInstProv : provInput);
                 map['province_name'] = finalProvLink;
                 map['province'] = finalProvLink;
@@ -3008,16 +3020,22 @@ class ApiService extends ChangeNotifier {
       // Root level links
       if (payload['province_name'] != null || payload['province'] != null) {
         final raw = (payload['province_name'] ?? payload['province']).toString();
-        final provId = LocationResolver.resolveProvinceId(raw);
+        var provId = LocationResolver.resolveProvinceId(raw);
         final provName = LocationResolver.resolveProvinceName(raw);
+        if (provId == '1376000000' || provId.startsWith('1376')) {
+          provId = '1380600000';
+        }
         payload['province_name'] = provId.isNotEmpty ? provId : raw;
         payload['province'] = provId.isNotEmpty ? provId : raw;
         payload['province_title'] = provName.isNotEmpty ? provName : raw;
       }
       if (payload['city_municipality'] != null || payload['city'] != null) {
         final raw = (payload['city_municipality'] ?? payload['city']).toString();
-        final cityId = LocationResolver.resolveCityId(raw);
+        var cityId = LocationResolver.resolveCityId(raw);
         final cityName = LocationResolver.resolveCityName(raw);
+        if (cityId == '133900000' || cityId.startsWith('1339')) {
+          cityId = '1380608000';
+        }
         payload['city_municipality'] = cityId.isNotEmpty ? cityId : raw;
         payload['city'] = cityId.isNotEmpty ? cityId : raw;
         payload['city_title'] = cityName.isNotEmpty ? cityName : raw;
@@ -3894,7 +3912,7 @@ class ApiService extends ChangeNotifier {
       return [];
     }
     final url = Uri.parse(
-      '$baseUrl/api/resource/PSGC%20Location?fields=["name","location_label","location_type","parent_psgc_location","psgc_code","is_group"]&limit_page_length=5000&limit=5000',
+      '$baseUrl/api/resource/PSGC%20Location?fields=["name","location_label","location_type","parent_psgc_location","psgc_code","is_group"]&filters=[["location_type","in",["Region","Province","City"]]]&limit_page_length=5000&limit=5000',
     );
     try {
       final response = await http.get(url, headers: _headers);

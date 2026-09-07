@@ -1,38 +1,23 @@
 # Critical Project Rules & Workflow Constraints
 
-## ⚠️ STRICT RULE: HCP Profile Submission Workflow (`HCP Profile Submission WF`)
+## 📋 Core App Workflow & Architecture Standard
 
-### 1. Fixed 12 Transition Rules (NO ADDITIONS, NO DELETIONS)
-The **Transition Rules** (`transitions`) table in `HCP Profile Submission WF` must **ALWAYS REMAIN EXACTLY 12 ROWS**.
-- **DO NOT** delete any of the 12 transition rows.
-- **DO NOT** add any new rows.
-- The 12 rows are strictly defined as follows:
+### 1. The Two-Tier Masterlist Architecture
+* **`HCP` DocType**: Universal masterlist of all doctors present across every program.
+* **`HCP Account` DocType**: Masterlist **per program** (e.g., Abbott Diabetes Care, Bayer, COREnergy) where doctor affiliations repeat across different programs with program-specific preferred items (workplace, specialization, contacts).
 
-| No. | State | Action | Next State | Allowed Role | Notes / Condition |
-| :---: | :--- | :--- | :--- | :--- | :--- |
-| **1** | Draft | Submit for Processing | Processed | System Manager | `doc.profile_action=="Existing HCP"` |
-| **2** | Draft | Submit for Processing | Processed | Sales User | `doc.profile_action=="Existing HCP"` |
-| **3** | Draft | Submit for Approval | Pending Approval | System Manager | `doc.profile_action=="New HCP"` |
-| **4** | Draft | Submit for Approval | Pending Approval | Sales Manager | `doc.profile_action=="New HCP"` |
-| **5** | Draft | Submit for Approval | Pending Approval | Sales User | `doc.profile_action=="New HCP"` |
-| **6** | Pending Approval | Approve | Approved | System Manager | |
-| **7** | Pending Approval | Approve | Approved | Sales Manager | |
-| **8** | Pending Approval | Reject | Rejected | System Manager | |
-| **9** | Pending Approval | Reject | Rejected | Sales Manager | |
-| **10** | Rejected | Submit for Approval | Pending Approval | System Manager | |
-| **11** | Rejected | Submit for Approval | Pending Approval | Sales User | |
-| **12** | Rejected | Submit for Approval | Pending Approval | Sales Manager | |
+### 2. Application Workflow Rules (Strictly Aligned with ERPNext HCP Profile Submission WF)
+1. **Existing Doctor (`Existing HCP`)**:
+   * **Action**: `Submit for Processing` $\rightarrow$ State: **`Processed`** (Rows 1 & 2: `doc.profile_action=="Existing HCP"`).
+   * **Requires NO Managerial Approval**.
+   * Merges automatically upon submission directly into the `HCP` record and syncs `HCP Account` with the **preferred** features active.
+2. **New Doctor (`+ Add New Doctor` / `New HCP`)**:
+   * **Action**: `Submit for Approval` $\rightarrow$ State: **`Pending Approval`** (Rows 3, 4, 5: `doc.profile_action=="New HCP"`).
+   * **Requires Managerial Approval** (`Sales Manager` or `System Manager`).
+   * Manager clicks **`Approve`** $\rightarrow$ State: **`Approved`** (Rows 6 & 7: `doc.profile_action=="New HCP"`).
+   * Committed to the masterlist only after approval.
 
----
+### 3. ERPNext Workflow Rule
+* Do **NOT** modify or change the set `condition` expressions (`doc.profile_action=="Existing HCP"` / `doc.profile_action=="New HCP"`) in `HCP Profile Submission WF` on the ERPNext server. The app matches this server-side workflow 1:1.
 
-### 2. Mandatory Preservation of Conditions
-**DO NOT EVER DELETE OR REMOVE** the condition expressions under the **Transition Rules** (`transitions`) table:
-- **`doc.profile_action=="New HCP"`**
-- **`doc.profile_action=="Existing HCP"`**
 
-These conditions control the core business routing between automatic processing and approval cycles.
-
----
-
-### 3. Absolute Constraint
-Any modification, row addition, row removal, or condition deletion in this workflow is **strictly prohibited** unless explicitly requested and approved by the user.
