@@ -978,11 +978,26 @@ class ApiService extends ChangeNotifier {
   void _autoDetectProgram() {
     final dept = (employeeDepartment ?? '').toLowerCase().trim();
     final branch = (employeeBranch ?? '').toLowerCase().trim();
-    final combined = '$dept $branch';
+    final lowerEmail = (loggedInEmail ?? '').toLowerCase().trim();
+    final combined = '$dept $branch $lowerEmail';
 
-    if (combined.contains('abbott') || combined.contains('adc')) {
+    // 1. Dynamic exact & bidirectional substring match against all programs in availablePrograms
+    for (final prog in availablePrograms) {
+      final pLower = prog.toLowerCase().trim();
+      if (dept.isNotEmpty && (dept == pLower || dept.contains(pLower) || pLower.contains(dept))) {
+        selectedProgram = prog;
+        return;
+      }
+      if (branch.isNotEmpty && (branch == pLower || branch.contains(pLower) || pLower.contains(branch))) {
+        selectedProgram = prog;
+        return;
+      }
+    }
+
+    // 2. Keyword, team, and email heuristics fallback
+    if (combined.contains('abbott') || combined.contains('adc') || lowerEmail.contains('mengorio') || lowerEmail == 'admendoza@profinsights.biz') {
       selectedProgram = 'Abbott Diabetes Care';
-    } else if (combined.contains('bayer') || combined.contains('bch')) {
+    } else if (combined.contains('bayer') || combined.contains('bch') || lowerEmail.contains('sanjuan') || lowerEmail == 'aodimaano@profinsights.biz') {
       if (combined.contains('team 3')) {
         selectedProgram = 'Bayer Consumer Health - Team 3';
       } else if (combined.contains('team 2')) {
@@ -2225,7 +2240,7 @@ class ApiService extends ChangeNotifier {
       return [];
     }
 
-    const submissionFields = '["name","owner","creation","modified","docstatus","application_status","workflow_state","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
+    const submissionFields = '["name","owner","creation","modified","docstatus","workflow_state","profile_action","application_status","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
     final encodedFields = Uri.encodeQueryComponent(submissionFields);
     final url = Uri.parse(
       '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit_page_length=5000&limit=5000&order_by=creation%20desc',
@@ -2244,10 +2259,10 @@ class ApiService extends ChangeNotifier {
       print('Fetch submissions direct error: $e');
     }
 
-    // Fallback via client method
+    // Fallback via client method using fields=["*"]
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=$encodedFields&limit_page_length=5000&order_by=creation%20desc',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=["*"]&limit_page_length=5000&order_by=creation%20desc',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -2389,8 +2404,10 @@ class ApiService extends ChangeNotifier {
       final payload = submission.toJson();
 
       // Frappe workflow requires insertion in Draft state first.
-      // Transitions (Draft → Pending Approval → Approved) are applied AFTER creation.
+      // Transitions (Draft → Pending Approval → Approved / Processed) are applied AFTER creation.
       final targetWorkflow = submission.workflowState ?? 'Pending Approval';
+      final targetAppStatus = submission.applicationStatus ?? ((targetWorkflow == 'Approved' || targetWorkflow == 'Processed') ? 'Applied' : 'Not Applied');
+      payload['application_status'] = targetAppStatus;
       payload.remove('workflow_state');
       payload.remove('status');
       payload['docstatus'] = 0;
@@ -2583,7 +2600,15 @@ class ApiService extends ChangeNotifier {
         payload['table_contact_info'] = cleanContacts;
       }
 
-      // Remove all non-schema / temporary / mock keys before sending to ERPNext
+      // Ensure profile_action is explicitly set according to doctor status
+      final effectiveProfileAction = (submission.profileAction != null && submission.profileAction!.isNotEmpty)
+          ? submission.profileAction!
+          : (payload['profile_action'] != null && payload['profile_action'].toString().isNotEmpty
+              ? payload['profile_action'].toString()
+              : (targetWorkflow == 'Processed' || submission.hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP'));
+      payload['profile_action'] = effectiveProfileAction;
+
+      // Remove non-schema / temporary / mock keys before sending to ERPNext, ensuring all valid doctype fields are preserved
       final allowedDoctypeFields = {
         'doctype',
         'name',
@@ -2599,6 +2624,7 @@ class ApiService extends ChangeNotifier {
         'consent_photo',
         'hcp_type',
         'hcp_practice',
+        'profile_action',
         'table_specialties',
         'table_workplaces',
         'table_contact_info',
@@ -2615,7 +2641,16 @@ class ApiService extends ChangeNotifier {
         'survey_template',
         'survey_template_title',
         'survey_response',
+        'answers',
         'submission_date',
+        'valid_from',
+        'valid_to',
+        'validity_period',
+        'workflow_state',
+        'status',
+        'application_status',
+        'change_summary_html',
+        'changes_json',
         'docstatus',
       };
       payload.removeWhere((k, _) => !allowedDoctypeFields.contains(k));
@@ -2685,107 +2720,55 @@ class ApiService extends ChangeNotifier {
         }
       }
 
-      // After creation (Draft), apply exact Workflow State & Status as defined by ERPNext HCP Profile Submission WF
+      // After creation, apply exact Workflow State & Status as defined by ERPNext HCP Profile Submission WF
       if (createdName != null && createdName.isNotEmpty) {
-        final setValUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
         final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
         final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
 
-        // Flow A: Existing Doctor Profile Update
-        // Updating doctor info requires NO managerial approval.
-        // Direct field assignment to 'Approved' prevents Sales User permission errors on workflow action 'Approve'
-        if (targetWorkflow == 'Approved') {
-          try {
-            await http.post(
-              setValUrl,
-              headers: _headers,
-              body: jsonEncode({
-                'doctype': 'HCP Profile Submission',
-                'name': createdName,
-                'fieldname': {
-                  'workflow_state': 'Approved',
-                  'status': 'Approved',
-                  'application_status': 'Applied',
-                  'docstatus': 1,
-                },
-              }),
-            );
-          } catch (_) {}
-        } 
-        // Flow B: Submit for Processing (Draft -> Processed via WF action 'Submit for Processing')
-        else if (targetWorkflow == 'Processed') {
-          bool transitioned = false;
-          try {
-            final wfResp = await http.post(
-              wfUrl,
-              headers: _headers,
-              body: jsonEncode({
-                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
-                'action': 'Submit for Processing',
-              }),
-            );
-            if (wfResp.statusCode == 200) {
-              transitioned = true;
+        // Fetch fresh live doc from ERPNext so workflow engine has full doc context
+        Map<String, dynamic> liveDoc = {};
+        try {
+          final getDocUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(createdName)}');
+          final getResp = await http.get(getDocUrl, headers: _headers);
+          if (getResp.statusCode == 200) {
+            final gb = jsonDecode(getResp.body);
+            if (gb['data'] is Map) {
+              liveDoc = Map<String, dynamic>.from(gb['data']);
             }
-          } catch (_) {}
-
-          if (!transitioned) {
-            try {
-              await http.post(
-                setValUrl,
-                headers: _headers,
-                body: jsonEncode({
-                  'doctype': 'HCP Profile Submission',
-                  'name': createdName,
-                  'fieldname': {
-                    'workflow_state': 'Processed',
-                    'status': 'Processed',
-                    'application_status': 'Processed',
-                    'docstatus': 0,
-                  },
-                }),
-              );
-            } catch (_) {}
           }
-        }
-        // Flow C: Submit for Approval / New Doctor Registration (Draft -> Pending Approval)
-        else {
-          bool transitioned = false;
-          try {
-            final wfResp = await http.post(
-              wfUrl,
-              headers: _headers,
-              body: jsonEncode({
-                'doc': {'doctype': 'HCP Profile Submission', 'name': createdName},
-                'action': 'Submit for Approval',
-              }),
-            );
-            if (wfResp.statusCode == 200) {
-              transitioned = true;
-            }
-          } catch (_) {}
+        } catch (_) {}
 
-          if (!transitioned) {
-            try {
-              await http.post(
-                setValUrl,
-                headers: _headers,
-                body: jsonEncode({
-                  'doctype': 'HCP Profile Submission',
-                  'name': createdName,
-                  'fieldname': {
-                    'workflow_state': 'Pending Approval',
-                    'status': 'Pending Approval',
-                    'application_status': 'Not Applied',
-                    'docstatus': 0,
-                  },
-                }),
-              );
-            } catch (_) {}
+        final fullDocParam = {
+          if (createdData != null) ...createdData else ...payload,
+          if (liveDoc.isNotEmpty) ...liveDoc,
+          'doctype': 'HCP Profile Submission',
+          'name': createdName,
+          'profile_action': effectiveProfileAction,
+        };
+
+        // Apply exact Workflow State & Status as defined by ERPNext HCP Profile Submission WF
+        final actionToApply = (targetWorkflow == 'Approved')
+            ? 'Approve'
+            : (targetWorkflow == 'Processed' ? 'Submit for Processing' : 'Submit for Approval');
+
+        try {
+          final wfResp = await http.post(
+            wfUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doc': fullDocParam,
+              'action': actionToApply,
+            }),
+          );
+          if (wfResp.statusCode != 200) {
+            print('apply_workflow response non-200: ${wfResp.statusCode} - ${wfResp.body}');
           }
+        } catch (e) {
+          print('apply_workflow error: $e');
         }
 
-        // Re-fetch the final state from ERPNext to return accurate data
+        // Re-fetch the final clean state from ERPNext to return accurate data
+        // No redundant frappe.client.save call, preventing dirty/Not Saved state in ERPNext Desk
         try {
           final freshResp = await http.get(updateUrl, headers: _headers);
           if (freshResp.statusCode == 200) {
@@ -3227,12 +3210,20 @@ class ApiService extends ChangeNotifier {
     }
 
     // For "Submit for Processing" and "Submit for Approval":
+    final effectiveActionProfile = submission.profileAction ?? (submission.hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP');
+    final docWorkflowPayload = {
+      'doctype': 'HCP Profile Submission',
+      'name': subName,
+      'profile_action': effectiveActionProfile,
+      ...submission.toJson(),
+    };
+
     try {
       final wfResp = await http.post(
         wfUrl,
         headers: _headers,
         body: jsonEncode({
-          'doc': {'doctype': 'HCP Profile Submission', 'name': subName},
+          'doc': docWorkflowPayload,
           'action': effectiveAction,
         }),
       );
@@ -3252,6 +3243,7 @@ class ApiService extends ChangeNotifier {
             'doctype': 'HCP Profile Submission',
             'name': subName,
             'fieldname': {
+              'profile_action': effectiveActionProfile,
               'workflow_state': targetState,
               'status': targetState,
               'docstatus': targetDocStatus,
@@ -3260,6 +3252,23 @@ class ApiService extends ChangeNotifier {
         );
       } catch (_) {}
     }
+
+    // Clean save to clear any unsaved/dirty state in Desk
+    try {
+      final saveUrl = Uri.parse('$baseUrl/api/method/frappe.client.save');
+      await http.post(
+        saveUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'doc': {
+            ...docWorkflowPayload,
+            'workflow_state': targetState,
+            'status': targetState,
+            'docstatus': targetDocStatus,
+          }
+        }),
+      );
+    } catch (_) {}
 
     // Update local cache
     try {

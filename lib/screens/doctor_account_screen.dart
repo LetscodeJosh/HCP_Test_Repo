@@ -103,7 +103,15 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
         p.contains(accP) ||
         (p.contains('abbott') && accP.contains('abbott')) ||
         (p.contains('adc') && accP.contains('abbott')) ||
-        (p.contains('corenergy') && accP.contains('corenergy'));
+        (p.contains('bayer') && accP.contains('bayer')) ||
+        (p.contains('bch') && accP.contains('bayer')) ||
+        (p.contains('corenergy') && accP.contains('corenergy')) ||
+        (p.contains('nes') && accP.contains('nes')) ||
+        (p.contains('nurturemed') && accP.contains('nurturemed')) ||
+        (p.contains('pch') && accP.contains('pch')) ||
+        (p.contains('pharmabest') && accP.contains('pharmabest')) ||
+        (p.contains('tstacco') && accP.contains('tstacco')) ||
+        (p.contains('tstacc1') && accP.contains('tstacc1'));
   }
 
   int _getProgramTotalCount(ApiService apiService) {
@@ -1018,11 +1026,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                             });
                           }
                         },
-                        items: const [
-                          DropdownMenuItem(value: 'All', child: Text('Program: All')),
-                          DropdownMenuItem(value: 'Abbott Diabetes Care', child: Text('Abbott Diabetes Care')),
-                          DropdownMenuItem(value: 'COREnergy', child: Text('COREnergy')),
-                          DropdownMenuItem(value: 'Bayer', child: Text('Bayer')),
+                        items: [
+                          const DropdownMenuItem(value: 'All', child: Text('Program: All')),
+                          ...apiService.availablePrograms.map((p) => DropdownMenuItem(value: p, child: Text(p))),
                         ],
                       ),
                     ),

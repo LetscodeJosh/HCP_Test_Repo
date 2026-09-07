@@ -4,7 +4,7 @@
 - **Version**: V.0.1.0 (Build 1)
 - **Release Date**: August 27, 2026
 - **Target Backend**: ERPNext v15
-- **Supported Platforms**: iOS (.ipa)
+- **Supported Platforms**: iOS (.ipa), Android (.apk)
 
 ---
 
@@ -38,6 +38,12 @@
 ---
 
 ## Release Binaries Included in this Folder
+### iOS (.ipa)
 - `HCP_Profiling_V.0.1.0.ipa`
 - `HCP_Profiling.ipa`
 - `PIMS_HCP_V.0.1.0.ipa`
+
+### Android (.apk)
+- `HCP_Profiling_V.0.1.0.apk`
+- `HCP_Profiling.apk`
+- `HCP_Profiling_Release.apk`

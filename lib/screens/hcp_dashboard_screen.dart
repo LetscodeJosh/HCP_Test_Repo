@@ -127,26 +127,31 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     final apiService = Provider.of<ApiService>(context, listen: false);
 
     try {
-      final doctorsList = await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
-      final institutions = await apiService.fetchInstitutions().catchError((_) => <Institution>[]);
-      final specializations = await apiService.fetchSpecializations().catchError((_) => <Specialization>[]);
-      final submissions = await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
-      final hcpAccounts = await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
+      final results = await Future.wait([
+        apiService.fetchDoctors().catchError((_) => <Hcp>[]),
+        apiService.fetchInstitutions().catchError((_) => <Institution>[]),
+        apiService.fetchSpecializations().catchError((_) => <Specialization>[]),
+        apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]),
+        apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]),
+      ]);
+      final doctorsList = results[0] as List<Hcp>;
+      final institutions = results[1] as List<Institution>;
+      final specializations = results[2] as List<Specialization>;
+      final submissions = results[3] as List<HcpProfileSubmission>;
+      final hcpAccounts = results[4] as List<HcpAccount>;
 
-      final List<Hcp> doctors = [];
-      for (var doc in doctorsList) {
-        if (doc.name != null) {
-          try {
-            final fullDoc = await apiService.fetchDoctorDetail(doc.name!);
-            doctors.add(fullDoc);
-          } catch (e) {
-            print('Error fetching detail for ${doc.name}: $e');
-            doctors.add(doc);
+      final List<Hcp> doctors = await Future.wait(
+        doctorsList.map((doc) async {
+          if (doc.name != null && doc.specialties.isEmpty) {
+            try {
+              return await apiService.fetchDoctorDetail(doc.name!);
+            } catch (e) {
+              return doc;
+            }
           }
-        } else {
-          doctors.add(doc);
-        }
-      }
+          return doc;
+        }),
+      );
 
       final Map<String, String> specLookup = {};
       for (var s in specializations) {
@@ -283,7 +288,15 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               userProg.contains(subProg) ||
               (userProg.contains('abbott') && subProg.contains('abbott')) ||
               (userProg.contains('adc') && subProg.contains('abbott')) ||
-              (userProg.contains('corenergy') && subProg.contains('corenergy'));
+              (userProg.contains('bayer') && subProg.contains('bayer')) ||
+              (userProg.contains('bch') && subProg.contains('bayer')) ||
+              (userProg.contains('corenergy') && subProg.contains('corenergy')) ||
+              (userProg.contains('nes') && subProg.contains('nes')) ||
+              (userProg.contains('nurturemed') && subProg.contains('nurturemed')) ||
+              (userProg.contains('pch') && subProg.contains('pch')) ||
+              (userProg.contains('pharmabest') && subProg.contains('pharmabest')) ||
+              (userProg.contains('tstacco') && subProg.contains('tstacco')) ||
+              (userProg.contains('tstacc1') && subProg.contains('tstacc1'));
         }).toList();
       }
     }

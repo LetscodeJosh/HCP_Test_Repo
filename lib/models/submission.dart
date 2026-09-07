@@ -42,6 +42,7 @@ class HcpProfileSubmission {
   final String? changeSummaryHtml;
   final String? changesJson;
   final int docstatus; // 0: Draft/Pending, 1: Approved/Submitted, 2: Cancelled
+  final String? profileAction; // 'New HCP' or 'Existing HCP'
 
   HcpProfileSubmission({
     this.name,
@@ -85,6 +86,7 @@ class HcpProfileSubmission {
     this.changeSummaryHtml,
     this.changesJson,
     this.docstatus = 0,
+    this.profileAction,
   });
 
   factory HcpProfileSubmission.fromJson(Map<String, dynamic> json) {
@@ -101,7 +103,7 @@ class HcpProfileSubmission {
         resolvedWorkflow = 'Processed';
       } else if (lower == 'pending approval' || lower.contains('pend')) {
         resolvedWorkflow = 'Pending Approval';
-      } else if (lower == 'approved' || lower.contains('appr')) {
+      } else if (lower == 'approved' || (lower.contains('appr') && !lower.contains('pend'))) {
         resolvedWorkflow = 'Approved';
       } else if (lower == 'rejected' || lower.contains('reject')) {
         resolvedWorkflow = 'Rejected';
@@ -111,7 +113,7 @@ class HcpProfileSubmission {
         resolvedWorkflow = rawWf;
       }
     } else {
-      if (rawDocstatus == 1 || json['application_status'] == 'Applied') {
+      if (rawDocstatus == 1) {
         resolvedWorkflow = 'Approved';
       } else if (rawDocstatus == 2) {
         resolvedWorkflow = 'Rejected';
@@ -134,6 +136,13 @@ class HcpProfileSubmission {
 
     // Resolve application status (Not Applied, Applying, Applied, Failed)
     String resolvedAppStatus = json['application_status'] ?? ((resolvedWorkflow == 'Approved' || rawDocstatus == 1) ? 'Applied' : 'Not Applied');
+
+    // Resolve Profile Action (Existing HCP vs New HCP)
+    final rawProfileAction = (json['profile_action'] ?? '').toString().trim();
+    final String resolvedHcpId = (json['hcp_name'] ?? '').toString().trim();
+    final String resolvedAction = rawProfileAction.isNotEmpty
+        ? rawProfileAction
+        : (resolvedHcpId.isNotEmpty ? 'Existing HCP' : 'New HCP');
 
     return HcpProfileSubmission(
       name: json['name'],
@@ -185,6 +194,7 @@ class HcpProfileSubmission {
       changeSummaryHtml: json['change_summary_html'],
       changesJson: json['changes_json'],
       docstatus: rawDocstatus,
+      profileAction: resolvedAction,
     );
   }
 
@@ -196,14 +206,18 @@ class HcpProfileSubmission {
         ? hcpFullName!.trim()
         : [fn, mn != '-' ? mn : null, ln].where((p) => p != null && p.isNotEmpty).join(' ');
 
+    final resolvedAction = (profileAction != null && profileAction!.trim().isNotEmpty)
+        ? profileAction!.trim()
+        : (hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP');
+
     return {
       if (name != null) 'name': name,
-      if (hcpName.isNotEmpty) 'hcp_name': hcpName,
-      'hcp_full_name': computedFullName,
-      if (firstName != null) 'first_name': firstName,
+      'hcp_name': hcpName,
+      'hcp_full_name': computedFullName.isNotEmpty ? computedFullName : null,
+      'first_name': fn,
       'middle_name': mn,
-      if (lastName != null) 'last_name': lastName,
-      if (birthDate != null) 'birth_date': birthDate,
+      'last_name': ln,
+      if (birthDate != null && birthDate!.isNotEmpty) 'birth_date': birthDate,
       'consent_privacy_understood': consentPrivacyUnderstood ? 1 : 0,
       if (consentSignature != null) 'consent_signature': consentSignature,
       if (consentPhoto != null) 'consent_photo': consentPhoto,
@@ -213,20 +227,12 @@ class HcpProfileSubmission {
       'table_specialties': specialties.map((e) => e.toJson()).toList(),
       'table_workplaces': workplaces.map((e) => e.toJson()).toList(),
       'table_contact_info': contacts.map((e) => e.toJson()).toList(),
-      if (regionName != null) 'region_name': LocationResolver.resolveRegionId(regionName),
-      if (provinceName != null) ...{
-        'province_name': LocationResolver.resolveProvinceId(provinceName),
-        'province': LocationResolver.resolveProvinceId(provinceName),
-        'province_title': LocationResolver.resolveProvinceName(provinceName),
-      },
-      if (cityMunicipality != null) ...{
-        'city_municipality': LocationResolver.resolveCityId(cityMunicipality),
-        'city': LocationResolver.resolveCityId(cityMunicipality),
-        'city_title': LocationResolver.resolveCityName(cityMunicipality),
-      },
+      if (regionName != null) 'region_name': regionName,
+      if (provinceName != null) 'province_name': provinceName,
+      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
       if (barangayName != null) 'barangay_name': barangayName,
-      if (institution != null) ...{
-        'institution': LocationResolver.resolveInstitutionId(institution),
+      if (institution != null) 'institution': institution,
+      'custom_workplace': {
         'institution_name': LocationResolver.resolveInstitutionName(institution),
       },
       if (accountOrProgram != null) 'account_or_program': accountOrProgram,
@@ -247,7 +253,7 @@ class HcpProfileSubmission {
       if (changeSummaryHtml != null) 'change_summary_html': changeSummaryHtml,
       if (changesJson != null) 'changes_json': changesJson,
       'docstatus': docstatus,
-      'profile_action': hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP',
+      'profile_action': resolvedAction,
     };
   }
 
@@ -293,6 +299,7 @@ class HcpProfileSubmission {
     String? changeSummaryHtml,
     String? changesJson,
     int? docstatus,
+    String? profileAction,
   }) {
     return HcpProfileSubmission(
       name: name ?? this.name,
@@ -336,6 +343,7 @@ class HcpProfileSubmission {
       changeSummaryHtml: changeSummaryHtml ?? this.changeSummaryHtml,
       changesJson: changesJson ?? this.changesJson,
       docstatus: docstatus ?? this.docstatus,
+      profileAction: profileAction ?? this.profileAction,
     );
   }
 }

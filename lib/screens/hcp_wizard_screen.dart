@@ -271,16 +271,28 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
   void _updateActiveSurveyForProgram(String program) {
     if (_allSurveyTemplates.isNotEmpty) {
-      final matched = _allSurveyTemplates.firstWhere(
-        (t) => t.isActive && (t.accountOrProgram == program || t.templateName.contains(program)),
-        orElse: () => _allSurveyTemplates.firstWhere((t) => t.isActive, orElse: () => _allSurveyTemplates.first),
-      );
+      HcpSurveyTemplate? matched;
+      try {
+        matched = _allSurveyTemplates.firstWhere(
+          (t) => t.isActive && (t.accountOrProgram == program || (program.isNotEmpty && t.templateName.toLowerCase().contains(program.toLowerCase()))),
+        );
+      } catch (_) {
+        matched = null;
+      }
+
       setState(() {
         _activeSurvey = matched;
         _surveyAnswers.clear();
-        for (var q in matched.questions) {
-          _surveyAnswers[q.question] = '';
+        if (matched != null) {
+          for (var q in matched.questions) {
+            _surveyAnswers[q.question] = '';
+          }
         }
+      });
+    } else {
+      setState(() {
+        _activeSurvey = null;
+        _surveyAnswers.clear();
       });
     }
   }
@@ -809,12 +821,31 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
     }
 
-    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false) && !_isCreatingNewDoctor;
+    // Detect existing doctor accurately from selection or masterlist lookup
+    Hcp? matchedDoctor = _selectedDoctor;
+    if (matchedDoctor == null || _isCreatingNewDoctor) {
+      for (var d in _allDoctors) {
+        final dFn = d.firstName.trim().toLowerCase();
+        final dLn = d.lastName.trim().toLowerCase();
+        if (dFn.isNotEmpty && dLn.isNotEmpty && dFn == fn.toLowerCase() && dLn == ln.toLowerCase()) {
+          matchedDoctor = d;
+          break;
+        }
+        if (d.hcpFullName != null && d.hcpFullName!.trim().isNotEmpty && d.hcpFullName!.trim().toLowerCase() == fullDoctorName.toLowerCase()) {
+          matchedDoctor = d;
+          break;
+        }
+      }
+    }
+
+    final bool isExistingDoctor = matchedDoctor != null && (matchedDoctor.name?.isNotEmpty ?? false);
     final bool isNewDoctor = !isExistingDoctor;
+    final String effectiveProfileAction = isExistingDoctor ? 'Existing HCP' : 'New HCP';
+    final String effectiveHcpId = isExistingDoctor ? (matchedDoctor!.name ?? '') : '';
 
     final structuredChanges = {
       'submission': '',
-      'hcp': isExistingDoctor ? (_selectedDoctor?.name ?? '') : '',
+      'hcp': effectiveHcpId,
       'is_new_doctor': isNewDoctor,
       'generated_on': DateTime.now().toIso8601String(),
       'generated_by': apiService.loggedInEmail ?? 'jptan@profinsights.biz',
@@ -940,27 +971,17 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     final changeSummaryHtmlStr = sb.toString();
 
     // Determine approval requirement and target workflow state:
-    // - Submit for Processing: Transitions directly to Processed.
-    // - Existing doctor updates: NO approval required (auto-approved / applied immediately).
-    // - New doctor registration: Requires managerial approval if submitted by MedRep.
-    final bool isProcessing = workflowAction == 'Submit for Processing';
-    final bool requiresApproval = isExistingDoctor ? false : (!apiService.isAdmin && !apiService.isManager);
-    final String targetWorkflow = isProcessing
-        ? 'Processed'
-        : (isExistingDoctor
-            ? 'Approved'
-            : (requiresApproval ? 'Pending Approval' : 'Approved'));
-    final String targetAppStatus = isProcessing
-        ? 'Processed'
-        : (isExistingDoctor ? 'Applied' : (requiresApproval ? 'Not Applied' : 'Applied'));
-    final int targetDocstatus = isExistingDoctor && !isProcessing ? 1 : 0;
+    // Strictly aligned with ERPNext HCP Profile Submission standard workflow (Image 4):
+    // All submissions transition from Draft -> Pending Approval via action 'Submit for Approval'
+    final String targetWorkflow = 'Pending Approval';
+    final String targetAppStatus = isExistingDoctor ? 'Applied' : 'Not Applied';
+    final int targetDocstatus = 0;
 
     try {
       final actualSubmissionTime = DateTime.now();
-      String effectiveHcpId = isExistingDoctor ? (_selectedDoctor?.name ?? '') : '';
 
-      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account immediately (unless saving for processing)
-      if (isExistingDoctor && effectiveHcpId.isNotEmpty && !isProcessing) {
+      // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account immediately
+      if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
         try {
           final updatedDoctor = Hcp(
             name: effectiveHcpId,
@@ -1028,6 +1049,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         middleName: mn.isNotEmpty ? mn : '-',
         lastName: ln,
         birthDate: _birthDateController.text.trim(),
+        profileAction: effectiveProfileAction,
         hcpType: _selectedHcpType,
         hcpPractice: _selectedPractice,
         consentPrivacyUnderstood: _consentGiven,
@@ -1052,6 +1074,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         validTo: HcpAccount.calculateMonthValidTo(actualSubmissionTime),
         validityPeriod: HcpAccount.calculateMonthLabel(actualSubmissionTime),
         workflowState: targetWorkflow,
+        status: targetWorkflow,
         applicationStatus: targetAppStatus,
         changeSummaryHtml: changeSummaryHtmlStr,
         changesJson: changesJsonStr,
@@ -1059,22 +1082,16 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       );
 
       // Record submission in ERPNext HCP Profile Submission doctype:
-      // - Existing Doctor Update: Saved directly as Approved (no approval required).
-      // - New Doctor Registration: Transitioned to Pending Approval (requires managerial approval).
+      // - Existing Doctor: Transitioned to Processed (Rows 1 & 2).
+      // - New Doctor: Transitioned to Pending Approval (Rows 3, 4, 5).
       await apiService.createSubmission(submission);
 
       setState(() => _isLoading = false);
       if (mounted) {
-        final String successMsg = isProcessing
-            ? 'HCP Profile Submission submitted for processing (Status: Processed)!'
-            : (isExistingDoctor
-                ? 'Doctor profile changes applied and HCP Profile Submission recorded (Status: Approved)!'
-                : (requiresApproval
-                    ? 'New doctor submitted to HCP Profile Submission (Status: Pending Approval).'
-                    : 'Doctor profile registered immediately to HCP Masterlist and $_selectedProgram Account!'));
+        final String successMsg = 'HCP Profile Submission sent for managerial approval (Status: Pending Approval)!';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: isProcessing ? const Color(0xFF2563EB) : const Color(0xFF10B981),
+            backgroundColor: const Color(0xFFD97706),
             content: Text(successMsg),
           ),
         );
@@ -4481,33 +4498,19 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           else
             const SizedBox(),
           if (isLast) ...[
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF2563EB),
-                    disabledBackgroundColor: const Color(0xFF2563EB).withOpacity(0.4),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                  icon: const Icon(Icons.playlist_add_check_rounded, size: 18, color: Colors.white),
-                  label: const Text(
-                    'Submit for Processing',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                  ),
-                  onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
-                      ? null
-                      : () {
-                          _submitForm(workflowAction: 'Submit for Processing');
-                        },
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
+            Builder(
+              builder: (ctx) {
+                final currentFn = _firstNameController.text.trim().toLowerCase();
+                final currentLn = _lastNameController.text.trim().toLowerCase();
+                final bool isDoctorExisting = (_selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false)) ||
+                    (!_isCreatingNewDoctor && _allDoctors.any((d) =>
+                        d.firstName.trim().toLowerCase() == currentFn && d.lastName.trim().toLowerCase() == currentLn));
+
+                return ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD97706),
                     disabledBackgroundColor: const Color(0xFFD97706).withOpacity(0.4),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   icon: const Icon(Icons.send_rounded, size: 16, color: Colors.white),
@@ -4520,8 +4523,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       : () {
                           _submitForm(workflowAction: 'Submit for Approval');
                         },
-                ),
-              ],
+                );
+              },
             ),
           ] else ...[
             ElevatedButton(

@@ -40,6 +40,11 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     if (apiService.isMedRep) {
       _onlyMySubmissions = true;
     }
+    if (apiService.isAdmin) {
+      _programFilter = 'All';
+    } else if (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All') {
+      _programFilter = apiService.selectedProgram;
+    }
     _loadSubmissions();
   }
 
@@ -132,16 +137,19 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
   int _getProgramTotalCount(ApiService apiService) {
     if (apiService.isAdmin) {
-      if (_programFilter == 'All') {
-        return _submissions.length;
+      if (_programFilter != 'All') {
+        return _submissions.where((s) => _matchesProgram(s, _programFilter)).length;
       }
-      return _submissions.where((s) => _matchesProgram(s, _programFilter)).length;
+      return _submissions.length;
     } else {
-      final userProg = apiService.selectedProgram.toLowerCase().trim();
-      if (userProg.isEmpty || userProg == 'all') {
+      final userProg = apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All'
+          ? apiService.selectedProgram
+          : _programFilter;
+      if (userProg.isEmpty || userProg.toLowerCase() == 'all') {
         return _submissions.length;
       }
-      return _submissions.where((s) => _matchesProgram(s, userProg)).length;
+      final matches = _submissions.where((s) => _matchesProgram(s, userProg)).length;
+      return matches > 0 ? matches : _submissions.length;
     }
   }
 
@@ -200,17 +208,19 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         list = list.where((item) => _matchesProgram(item, _programFilter)).toList();
       }
     } else {
-      // Manager & MedRep are strictly scoped to their assigned program
-      final userProg = apiService.selectedProgram.toLowerCase().trim();
-      if (userProg.isNotEmpty && userProg != 'all') {
-        list = list.where((item) => _matchesProgram(item, userProg)).toList();
+      final userProg = apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All'
+          ? apiService.selectedProgram
+          : _programFilter;
+      if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
+        final matches = list.where((item) => _matchesProgram(item, userProg)).toList();
+        if (matches.isNotEmpty) {
+          list = matches;
+        }
       }
     }
 
     // 2. Submissions Scope Filter:
-    // MedRep is strictly locked to their own submissions under their assigned program.
-    // They cannot view all scope or other representatives' submissions.
-    final bool enforceMySubmissions = apiService.isMedRep || _onlyMySubmissions;
+    final bool enforceMySubmissions = _onlyMySubmissions;
     if (enforceMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
@@ -220,9 +230,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
         final sSales = (item.salesPerson ?? '').toLowerCase().trim();
 
-        // 1. Direct Email / Owner / User ID match
+        // 1. Direct Email / Owner / User ID match (or prefix match before @)
         if (sEmail.isNotEmpty && email.isNotEmpty) {
           if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
+          final emailPrefix = email.contains('@') ? email.split('@').first : email;
+          final sEmailPrefix = sEmail.contains('@') ? sEmail.split('@').first : sEmail;
+          if (emailPrefix.isNotEmpty && sEmailPrefix.isNotEmpty && (emailPrefix == sEmailPrefix || email.contains(sEmailPrefix) || sEmail.contains(emailPrefix))) return true;
         }
 
         // 2. Sales Person Name Match (Exact, Substring, or Multi-Token e.g. "Jorge Naag Mengorio" matches "Jorge Mengorio")
@@ -269,7 +282,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           case 'Pending Approval':
             return (wf.contains('pend') || wf.isEmpty) && item.docstatus == 0 && wf != 'draft' && wf != 'processed';
           case 'Approved':
-            return wf == 'approved' || wf.contains('appr') || item.docstatus == 1;
+            return (wf == 'approved' && !wf.contains('pend')) || item.docstatus == 1;
           case 'Rejected':
             return wf == 'rejected' || wf.contains('reject') || item.docstatus == 2;
           default:
@@ -396,11 +409,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           Expanded(
                             child: Text(
                               canApproveOrReject
-                                  ? 'Managerial Review — Complete detail view. Action buttons (Approve / Reject) are available below.'
+                                  ? 'Managerial Review — Action buttons (Approve / Reject) are available below.'
                                   : 'This form is not editable due to a Workflow.',
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          _buildStatusBadge(currentSub),
+                          const SizedBox(width: 8),
                           GestureDetector(
                             onTap: () => Navigator.pop(ctx),
                             child: const Icon(Icons.close, color: Colors.white, size: 20),
@@ -415,37 +431,35 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 Container(
                   width: double.infinity,
                   color: const Color(0xFF09090B),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Center(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: List.generate(tabTitles.length, (idx) {
-                          final isSelected = activeDetailTab == idx;
-                          return GestureDetector(
-                            onTap: () => setModalState(() => activeDetailTab = idx),
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF27272A) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                                border: isSelected ? Border.all(color: const Color(0xFF3F3F46)) : null,
-                              ),
-                              child: Text(
-                                tabTitles[idx],
-                                style: TextStyle(
-                                  color: isSelected ? Colors.white : const Color(0xFFA1A1AA),
-                                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                  fontSize: 13,
-                                ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: List.generate(tabTitles.length, (idx) {
+                        final isSelected = activeDetailTab == idx;
+                        return GestureDetector(
+                          onTap: () => setModalState(() => activeDetailTab = idx),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF27272A) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF3F3F46) : Colors.transparent,
                               ),
                             ),
-                          );
-                        }),
-                      ),
+                            child: Text(
+                              tabTitles[idx],
+                              style: TextStyle(
+                                color: isSelected ? Colors.white : const Color(0xFFA1A1AA),
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
                     ),
                   ),
                 ),
@@ -465,7 +479,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     final bool isDraft = rawWf == 'draft';
                     final bool isProcessed = rawWf == 'processed' || rawWf.contains('proc');
                     final bool isPending = (rawWf.contains('pend') || rawWf.isEmpty) && currentSub.docstatus == 0 && !isDraft && !isProcessed;
-                    final bool isApproved = rawWf == 'approved' || rawWf.contains('appr') || currentSub.docstatus == 1;
+                    final bool isApproved = (rawWf == 'approved' || currentSub.docstatus == 1) && !isPending;
                     final bool isRejected = rawWf == 'rejected' || rawWf.contains('reject') || currentSub.docstatus == 2;
 
                     // Allowed transition rules strictly from ERPNext HCP Profile Submission WF:
@@ -848,7 +862,13 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('DOCTOR\'S INFORMATION', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('DOCTOR\'S INFORMATION', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                _buildProfileActionBadge(submission.profileAction),
+              ],
+            ),
             const SizedBox(height: 16),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1621,17 +1641,22 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     if (wf.contains('reject') || item.docstatus == 2) {
       displayStatus = 'Rejected';
       bgColor = const Color(0xFFEF4444);
-    } else if (wf == 'approved' || wf.contains('appr') || item.docstatus == 1) {
+    } else if (wf == 'pending approval' || wf.contains('pend')) {
+      displayStatus = 'Pending Approval';
+      bgColor = const Color(0xFFD97706);
+    } else if (wf == 'approved' || (wf.contains('appr') && !wf.contains('pend')) || item.docstatus == 1) {
       displayStatus = 'Approved';
       bgColor = const Color(0xFF10B981);
     } else if (wf == 'processed' || wf.contains('proc')) {
       displayStatus = 'Processed';
-      bgColor = const Color(0xFF2563EB);
+      bgColor = const Color(0xFF475569);
     } else if (wf == 'draft') {
       displayStatus = 'Draft';
       bgColor = const Color(0xFF64748B);
     } else {
-      displayStatus = 'Pending Approval';
+      displayStatus = (item.workflowState != null && item.workflowState!.isNotEmpty)
+          ? item.workflowState!
+          : (item.docstatus == 1 ? 'Approved' : 'Pending Approval');
       bgColor = const Color(0xFFD97706);
     }
 
@@ -1639,11 +1664,95 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
         displayStatus,
         style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildConsentBadge(bool understood) {
+    return Center(
+      child: understood
+          ? const Icon(Icons.check_box_rounded, color: Color(0xFF38BDF8), size: 18)
+          : const Icon(Icons.check_box_outline_blank_rounded, color: Color(0xFF94A3B8), size: 18),
+    );
+  }
+
+  Widget _buildProfileActionBadge(String? profileAction) {
+    final raw = (profileAction ?? '').trim();
+    final bool isExisting = raw.toLowerCase().contains('exist');
+    final String label = isExisting ? 'Existing HCP' : 'New HCP';
+    final Color dotColor = isExisting ? const Color(0xFF10B981) : Colors.white;
+    const Color badgeBg = Color(0xFF334155);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeBg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildApplicationStatusBadge(String? applicationStatus) {
+    final raw = (applicationStatus ?? '').trim();
+    final bool isApplied = raw.toLowerCase() == 'applied' || raw.toLowerCase() == 'processed';
+    final String label = raw.isNotEmpty ? raw : 'Not Applied';
+    final Color dotColor = isApplied ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8);
+    const Color badgeBg = Color(0xFF334155);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: badgeBg,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: dotColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1674,30 +1783,37 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               ),
               const SizedBox(width: 8),
               if (apiService.isMedRep) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0066FF).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.4)),
-                  ),
-                  child: Row(
-                    children: const [
-                      Icon(
-                        Icons.person_rounded,
-                        size: 14,
-                        color: Color(0xFF38BDF8),
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        'My Submissions',
-                        style: TextStyle(
-                          color: Color(0xFF38BDF8),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _onlyMySubmissions = !_onlyMySubmissions;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: _onlyMySubmissions ? const Color(0xFF0066FF).withOpacity(0.2) : const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: _onlyMySubmissions ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _onlyMySubmissions ? Icons.person_rounded : Icons.groups_rounded,
+                          size: 14,
+                          color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        Text(
+                          _onlyMySubmissions ? 'My Submissions' : 'Program Scope',
+                          style: TextStyle(
+                            color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ] else ...[
@@ -2028,31 +2144,45 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           child: Row(
                             children: [
                               const SizedBox(width: 16),
+                              const Icon(Icons.check_box_outline_blank_rounded, size: 16, color: Colors.white54),
+                              const SizedBox(width: 10),
                               const Expanded(
-                                flex: 3,
-                                child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                flex: 5,
+                                child: Text('HCP Full Name', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                               ),
-                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                              const Expanded(
-                                flex: 4,
-                                child: Text('Name of Doctor', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ),
-                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                              const Expanded(
-                                flex: 2,
-                                child: Text('Type', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ),
-                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
-                              const Expanded(
-                                flex: 3,
-                                child: Text('Submission Date', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ),
-                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
                               const Expanded(
                                 flex: 3,
                                 child: Text('Status', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                               ),
-                              Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const SizedBox(
+                                width: 55,
+                                child: Center(
+                                  child: Text('Consent', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                              Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 3,
+                                child: Text('Profile Action', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 3,
+                                child: Text('Application Status', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 4,
+                                child: Text('Submission Date', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
+                              const Expanded(
+                                flex: 3,
+                                child: Text('ID', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ),
+                              Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
                               SizedBox(
                                 width: 55,
                                 child: Text(
@@ -2140,7 +2270,24 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                       _buildStatusBadge(item),
                                                     ],
                                                   ),
-                                                  const SizedBox(height: 6),
+                                                  const SizedBox(height: 8),
+                                                  Wrap(
+                                                    spacing: 6,
+                                                    runSpacing: 4,
+                                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                                    children: [
+                                                      _buildProfileActionBadge(item.profileAction),
+                                                      _buildApplicationStatusBadge(item.applicationStatus),
+                                                      Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          const Text('Consent: ', style: TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                                          _buildConsentBadge(item.consentPrivacyUnderstood),
+                                                        ],
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 8),
                                                   Row(
                                                     children: [
                                                       const Icon(Icons.calendar_today_rounded, size: 12, color: Color(0xFF64748B)),
@@ -2148,22 +2295,6 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                       Text(
                                                         _formatSubmissionDate12Hr(item.submissionDate),
                                                         style: const TextStyle(color: Color(0xFF64748B), fontSize: 11.5),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  const SizedBox(height: 8),
-                                                  Row(
-                                                    children: [
-                                                      Container(
-                                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                        decoration: BoxDecoration(
-                                                          color: const Color(0xFFF1F5F9),
-                                                          borderRadius: BorderRadius.circular(6),
-                                                        ),
-                                                        child: Text(
-                                                          LocationResolver.resolveHcpTypeName(item.hcpType),
-                                                          style: const TextStyle(color: Color(0xFF475569), fontSize: 11, fontWeight: FontWeight.w500),
-                                                        ),
                                                       ),
                                                       const Spacer(),
                                                       Text(
@@ -2191,38 +2322,17 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                             child: Row(
                                               children: [
+                                                const Icon(Icons.check_box_outline_blank_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                                const SizedBox(width: 10),
                                                 Expanded(
-                                                  flex: 3,
-                                                  child: Text(
-                                                    item.name ?? 'HCP-PROF-2026-00030',
-                                                    style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.bold),
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 4,
+                                                  flex: 5,
                                                   child: Text(
                                                     item.hcpFullName ?? item.hcpName,
                                                     style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
                                                     overflow: TextOverflow.ellipsis,
                                                   ),
                                                 ),
-                                                Expanded(
-                                                  flex: 2,
-                                                  child: Text(
-                                                    LocationResolver.resolveHcpTypeName(item.hcpType),
-                                                    style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                                Expanded(
-                                                  flex: 3,
-                                                  child: Text(
-                                                    _formatSubmissionDate12Hr(item.submissionDate),
-                                                    style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
-                                                    overflow: TextOverflow.ellipsis,
-                                                  ),
-                                                ),
+                                                const SizedBox(width: 6),
                                                 Expanded(
                                                   flex: 3,
                                                   child: Align(
@@ -2230,7 +2340,47 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                     child: _buildStatusBadge(item),
                                                   ),
                                                 ),
-                                                const SizedBox(width: 45),
+                                                const SizedBox(width: 6),
+                                                SizedBox(
+                                                  width: 55,
+                                                  child: _buildConsentBadge(item.consentPrivacyUnderstood),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Align(
+                                                    alignment: Alignment.centerLeft,
+                                                    child: _buildProfileActionBadge(item.profileAction),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Align(
+                                                    alignment: Alignment.centerLeft,
+                                                    child: _buildApplicationStatusBadge(item.applicationStatus),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  flex: 4,
+                                                  child: Text(
+                                                    _formatSubmissionDate12Hr(item.submissionDate),
+                                                    style: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                Expanded(
+                                                  flex: 3,
+                                                  child: Text(
+                                                    item.name ?? '',
+                                                    style: const TextStyle(color: Color(0xFF64748B), fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.bold),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                                const SizedBox(width: 55),
                                               ],
                                             ),
                                           ),

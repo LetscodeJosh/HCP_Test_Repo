@@ -9,6 +9,11 @@
       "HCP_Profiling_V.0.1.0.ipa",
       "HCP_Profiling.ipa",
       "PIMS_HCP_V.0.1.0.ipa"
+    ],
+    "android": [
+      "HCP_Profiling_V.0.1.0.apk",
+      "HCP_Profiling.apk",
+      "HCP_Profiling_Release.apk"
     ]
   },
   "modules": [
