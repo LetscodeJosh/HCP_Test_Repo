@@ -336,10 +336,83 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   void _startNewSubmission() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const HcpWizardScreen()),
-    ).then((_) => _loadSubmissions());
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(20),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text(
+              'Select Profiling Action',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F172A),
+              ),
+            ),
+            const SizedBox(height: 16),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0B192C).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF0B192C)),
+              ),
+              title: const Text('Add New Doctor', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+              subtitle: const Text('Register a new doctor not in masterlist (Requires Managerial Approval)', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HcpWizardScreen(isNewDoctor: true)),
+                ).then((_) => _loadSubmissions());
+              },
+            ),
+            const Divider(),
+            ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.edit_note_rounded, color: Color(0xFF2563EB)),
+              ),
+              title: const Text('Update Existing Doctor', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
+              subtitle: const Text('Update doctor data & preferences (Processed automatically)', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+              onTap: () {
+                Navigator.pop(ctx);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HcpWizardScreen()),
+                ).then((_) => _loadSubmissions());
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showSubmissionDetail(HcpProfileSubmission submission) {

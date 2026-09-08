@@ -12,8 +12,9 @@ import 'hcp_dashboard_screen.dart';
 
 class HcpWizardScreen extends StatefulWidget {
   final Hcp? doctor;
+  final bool isNewDoctor;
 
-  const HcpWizardScreen({Key? key, this.doctor}) : super(key: key);
+  const HcpWizardScreen({Key? key, this.doctor, this.isNewDoctor = false}) : super(key: key);
 
   @override
   State<HcpWizardScreen> createState() => _HcpWizardScreenState();
@@ -29,7 +30,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   XFile? _consentPhotoFile;
   Uint8List? _consentPhotoBytes;
 
-  // Step 2: Doctor Info & Selection State
+  // Step 2: Doctor Info State
   Hcp? _selectedDoctor;
   bool _isCreatingNewDoctor = false;
   String? _doctorPhotoUrl;
@@ -40,10 +41,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   late TextEditingController _middleNameController;
   late TextEditingController _lastNameController;
   late TextEditingController _birthDateController;
-  
   String? _selectedHcpType;
-  String _selectedPractice = 'Both';
-  
+  String _selectedPractice = 'Dispensing';
   final List<SubmissionSpecialty> _selectedSpecialties = [];
   final List<SubmissionWorkplace> _selectedWorkplaces = [];
   final List<SubmissionContact> _contacts = [];
@@ -71,20 +70,28 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   @override
   void initState() {
     super.initState();
-    _selectedDoctor = widget.doctor;
-    _isCreatingNewDoctor = false;
+    if (widget.isNewDoctor) {
+      _selectedDoctor = null;
+      _isCreatingNewDoctor = true;
+      _selectedHcpType = 'HCP-TYPE-01';
+      _selectedPractice = 'Dispensing';
+    } else {
+      _selectedDoctor = widget.doctor;
+      _isCreatingNewDoctor = false;
+      _selectedHcpType = widget.doctor?.hcpType;
+      _selectedPractice = widget.doctor?.hcpPractice ?? 'Both';
+    }
+
     _territoryManagerController = TextEditingController(text: 'Jorge Mengorio');
     _hcpFullNameController = TextEditingController(
-      text: widget.doctor != null ? '${widget.doctor!.firstName} ${widget.doctor!.middleName != null && widget.doctor!.middleName != '-' ? widget.doctor!.middleName! + ' ' : ''}${widget.doctor!.lastName}' : '',
+      text: (widget.doctor != null && !widget.isNewDoctor) ? '${widget.doctor!.firstName} ${widget.doctor!.middleName != null && widget.doctor!.middleName != '-' ? widget.doctor!.middleName! + ' ' : ''}${widget.doctor!.lastName}' : '',
     );
-    _firstNameController = TextEditingController(text: widget.doctor?.firstName ?? '');
-    _middleNameController = TextEditingController(text: widget.doctor?.middleName ?? '');
-    _lastNameController = TextEditingController(text: widget.doctor?.lastName ?? '');
-    _birthDateController = TextEditingController(text: widget.doctor?.birthDate ?? '');
-    _selectedHcpType = widget.doctor?.hcpType;
-    _selectedPractice = widget.doctor?.hcpPractice ?? 'Both';
+    _firstNameController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.firstName ?? '') : '');
+    _middleNameController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.middleName ?? '') : '');
+    _lastNameController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.lastName ?? '') : '');
+    _birthDateController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.birthDate ?? '') : '');
 
-    if (widget.doctor != null) {
+    if (widget.doctor != null && !widget.isNewDoctor) {
       _prepopulateDoctorData(widget.doctor!);
     }
 
@@ -578,11 +585,68 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   Future<void> _submitForm({String workflowAction = 'Submit for Approval'}) async {
-    if (_firstNameController.text.isEmpty || _lastNameController.text.isEmpty) {
+    if (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('First Name and Last Name are required.')),
+        const SnackBar(
+          backgroundColor: Color(0xFFDC2626),
+          content: Text('First Name and Last Name are required.'),
+        ),
       );
       return;
+    }
+
+    if (_isCreatingNewDoctor) {
+      if (_selectedSpecialties.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFFDC2626),
+            content: Text('Please add at least one Specialization for the new doctor.'),
+          ),
+        );
+        return;
+      }
+      if (_selectedWorkplaces.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFFDC2626),
+            content: Text('Please add at least one Workplace for the new doctor.'),
+          ),
+        );
+        return;
+      }
+      // Ensure at least one specialty is marked preferred
+      if (!_selectedSpecialties.any((s) => s.preferred)) {
+        final first = _selectedSpecialties.removeAt(0);
+        _selectedSpecialties.insert(0, SubmissionSpecialty(
+          preferred: true,
+          hcpSpecialty: first.hcpSpecialty,
+          specialtyName: first.specialtyName,
+          subSpecialty: first.subSpecialty,
+          subSpecialtyName: first.subSpecialtyName,
+        ));
+      }
+      // Ensure at least one workplace is marked preferred
+      if (!_selectedWorkplaces.any((w) => w.preferred)) {
+        final first = _selectedWorkplaces.removeAt(0);
+        _selectedWorkplaces.insert(0, SubmissionWorkplace(
+          preferred: true,
+          hcpWorkplace: first.hcpWorkplace,
+          workplaceName: first.workplaceName,
+          cityMunicipality: first.cityMunicipality,
+          cityTitle: first.cityTitle,
+          provinceName: first.provinceName,
+          provinceTitle: first.provinceTitle,
+        ));
+      }
+      // If contacts exist, ensure at least one contact is marked preferred
+      if (_contacts.isNotEmpty && !_contacts.any((c) => c.preferred)) {
+        final first = _contacts.removeAt(0);
+        _contacts.insert(0, SubmissionContact(
+          preferred: true,
+          contactNumber: first.contactNumber,
+          emailAddress: first.emailAddress,
+        ));
+      }
     }
 
     setState(() => _isLoading = true);
@@ -822,8 +886,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     }
 
     // Detect existing doctor accurately from selection or masterlist lookup
-    Hcp? matchedDoctor = _selectedDoctor;
-    if (matchedDoctor == null || _isCreatingNewDoctor) {
+    Hcp? matchedDoctor = _isCreatingNewDoctor ? null : _selectedDoctor;
+    if (!_isCreatingNewDoctor && matchedDoctor == null) {
       for (var d in _allDoctors) {
         final dFn = d.firstName.trim().toLowerCase();
         final dLn = d.lastName.trim().toLowerCase();
@@ -838,7 +902,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
     }
 
-    final bool isExistingDoctor = matchedDoctor != null && (matchedDoctor.name?.isNotEmpty ?? false);
+    final bool isExistingDoctor = !_isCreatingNewDoctor && matchedDoctor != null && (matchedDoctor.name?.isNotEmpty ?? false);
     final bool isNewDoctor = !isExistingDoctor;
     final String effectiveProfileAction = isExistingDoctor ? 'Existing HCP' : 'New HCP';
     final String effectiveHcpId = isExistingDoctor ? (matchedDoctor!.name ?? '') : '';
@@ -4510,9 +4574,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               builder: (ctx) {
                 final currentFn = _firstNameController.text.trim().toLowerCase();
                 final currentLn = _lastNameController.text.trim().toLowerCase();
-                final bool isDoctorExisting = (_selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false)) ||
-                    (!_isCreatingNewDoctor && _allDoctors.any((d) =>
-                        d.firstName.trim().toLowerCase() == currentFn && d.lastName.trim().toLowerCase() == currentLn));
+                final bool isDoctorExisting = !_isCreatingNewDoctor &&
+                    ((_selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false)) ||
+                        _allDoctors.any((d) =>
+                            d.firstName.trim().toLowerCase() == currentFn && d.lastName.trim().toLowerCase() == currentLn));
 
                 return isDoctorExisting
                     ? ElevatedButton.icon(

@@ -2614,6 +2614,16 @@ class ApiService extends ChangeNotifier {
               : (targetWorkflow == 'Processed' || submission.hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP'));
       payload['profile_action'] = effectiveProfileAction;
 
+      // Ensure mandatory fields required by ERPNext are set with valid defaults
+      final mn = (payload['middle_name'] ?? submission.middleName ?? '').toString().trim();
+      payload['middle_name'] = (mn.isNotEmpty && mn != '-') ? mn : '-';
+
+      final ht = (payload['hcp_type'] ?? submission.hcpType ?? '').toString().trim();
+      payload['hcp_type'] = ht.isNotEmpty ? LocationResolver.resolveHcpTypeId(ht) : 'HCP-TYPE-01';
+
+      final hp = (payload['hcp_practice'] ?? submission.hcpPractice ?? '').toString().trim();
+      payload['hcp_practice'] = (hp == 'Dispensing' || hp == 'Prescribing' || hp == 'Both') ? hp : 'Dispensing';
+
       // Remove non-schema / temporary / mock keys before sending to ERPNext, ensuring all valid doctype fields are preserved
       final allowedDoctypeFields = {
         'doctype',
@@ -2755,7 +2765,9 @@ class ApiService extends ChangeNotifier {
         // Apply exact Workflow State & Status as defined by ERPNext HCP Profile Submission WF
         final actionToApply = (targetWorkflow == 'Approved')
             ? 'Approve'
-            : (targetWorkflow == 'Processed' ? 'Submit for Processing' : 'Submit for Approval');
+            : (effectiveProfileAction == 'Existing HCP' || targetWorkflow == 'Processed'
+                ? 'Submit for Processing'
+                : 'Submit for Approval');
 
         try {
           final wfResp = await http.post(

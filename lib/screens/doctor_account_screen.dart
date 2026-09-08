@@ -1627,6 +1627,27 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                   ),
                 ],
               ),
+      floatingActionButton: FloatingActionButton.extended(
+        backgroundColor: const Color(0xFF0B192C),
+        foregroundColor: Colors.white,
+        elevation: 4,
+        icon: const Icon(Icons.person_add_alt_1_rounded, size: 20, color: Colors.white),
+        label: const Text(
+          'Add New Doctor',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        onPressed: () async {
+          final result = await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const HcpWizardScreen(isNewDoctor: true),
+            ),
+          );
+          if (result == true) {
+            _loadAccounts();
+          }
+        },
+      ),
     );
   }
 }
