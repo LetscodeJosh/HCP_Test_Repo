@@ -3216,7 +3216,7 @@ class ApiService extends ChangeNotifier {
         break;
       case 'Reject':
         targetState = 'Rejected';
-        targetDocStatus = 2;
+        targetDocStatus = 0;
         effectiveAction = 'Reject';
         break;
     }
@@ -3236,7 +3236,7 @@ class ApiService extends ChangeNotifier {
 
     if (action == 'Reject') {
       await rejectSubmission(subName, remarks: remarks);
-      return submission.copyWith(workflowState: 'Rejected', status: 'Rejected', docstatus: 2);
+      return submission.copyWith(workflowState: 'Rejected', status: 'Rejected', docstatus: 0);
     }
 
     // For "Submit for Processing" and "Submit for Approval":
@@ -3691,6 +3691,11 @@ class ApiService extends ChangeNotifier {
         }
       } catch (_) {}
 
+      // Ensure doc is linked to the created/updated Doctor ID
+      if (effectiveHcpId.isNotEmpty && effectiveHcpId != 'NEW-HCP') {
+        liveDoc['hcp_name'] = effectiveHcpId;
+      }
+
       // Try workflow actions with the live document
       bool workflowApplied = false;
       final possibleActions = ['Approve', 'Approved', 'Approve Submission'];
@@ -3815,7 +3820,7 @@ class ApiService extends ChangeNotifier {
           headers: _headers,
           body: jsonEncode({
             'workflow_state': 'Rejected',
-            'docstatus': 2,
+            'docstatus': 0,
             'status': 'Rejected',
             if (remarks.isNotEmpty) 'rejection_remarks': remarks,
           }),
