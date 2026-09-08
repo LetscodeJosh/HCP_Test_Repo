@@ -310,25 +310,32 @@ class HcpSurveyAnswer {
 }
 
 class TerritoryInfo {
-  final String name; // e.g. "AD0110"
-  final String territoryName; // e.g. "AD0110 - Manila North"
-  final String territoryManager; // e.g. "Jorge Mengorio"
+  final String name; // e.g. "BA2-05", "AD0110"
+  final String territoryName; // e.g. "BA2-05", "AD0110 - Manila North"
+  final String territoryManager; // e.g. "Ivy Marie Mateo (BA2-05)"
+  final String? parentTerritory;
+  final bool isGroup;
   final String? program;
 
   TerritoryInfo({
     required this.name,
     required this.territoryName,
     required this.territoryManager,
+    this.parentTerritory,
+    this.isGroup = false,
     this.program,
   });
 
   factory TerritoryInfo.fromJson(Map<String, dynamic> json) {
     final tName = (json['territory_name'] ?? json['name'] ?? '').toString().trim();
     final manager = (json['territory_manager'] ?? json['sales_person'] ?? json['manager'] ?? json['custom_territory_manager'] ?? '').toString().trim();
+    final isGrp = json['is_group'] == 1 || json['is_group'] == true || json['is_group'] == '1';
     return TerritoryInfo(
       name: json['name'] ?? '',
       territoryName: tName.isNotEmpty ? tName : (json['name'] ?? ''),
-      territoryManager: manager.isNotEmpty ? manager : 'Jorge Mengorio',
+      territoryManager: manager,
+      parentTerritory: json['parent_territory']?.toString(),
+      isGroup: isGrp,
       program: json['program'] ?? json['account_or_program'],
     );
   }
@@ -338,10 +345,28 @@ class TerritoryInfo {
       'name': name,
       'territory_name': territoryName,
       'territory_manager': territoryManager,
+      if (parentTerritory != null) 'parent_territory': parentTerritory,
+      'is_group': isGroup ? 1 : 0,
       if (program != null) 'program': program,
     };
   }
 }
+
+class ResolvedTerritory {
+  final String territoryCode;
+  final String territoryName;
+  final String territoryManager;
+
+  const ResolvedTerritory({
+    required this.territoryCode,
+    required this.territoryName,
+    required this.territoryManager,
+  });
+
+  @override
+  String toString() => '$territoryCode ($territoryManager)';
+}
+
 
 class GeographicUnit {
   final String name;
