@@ -1878,6 +1878,7 @@ class ApiService extends ChangeNotifier {
         if (cleanContacts.isNotEmpty) {
           payload['contacts'] = cleanContacts;
           payload['contact_info'] = cleanContacts;
+          payload['hcp_contact_info'] = cleanContacts;
         }
       }
 
