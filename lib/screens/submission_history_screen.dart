@@ -336,83 +336,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   void _startNewSubmission() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        padding: const EdgeInsets.all(20),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFCBD5E1),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const Text(
-              'Select Profiling Action',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0B192C).withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.person_add_alt_1_rounded, color: Color(0xFF0B192C)),
-              ),
-              title: const Text('Add New Doctor', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-              subtitle: const Text('Register a new doctor not in masterlist (Requires Managerial Approval)', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HcpWizardScreen(isNewDoctor: true)),
-                ).then((_) => _loadSubmissions());
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2563EB).withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.edit_note_rounded, color: Color(0xFF2563EB)),
-              ),
-              title: const Text('Update Existing Doctor', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-              subtitle: const Text('Update doctor data & preferences (Processed automatically)', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-              onTap: () {
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const HcpWizardScreen()),
-                ).then((_) => _loadSubmissions());
-              },
-            ),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
-    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const HcpWizardScreen()),
+    ).then((_) => _loadSubmissions());
   }
 
   void _showSubmissionDetail(HcpProfileSubmission submission) {
@@ -426,11 +353,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setModalState) {
-          final isNewDoc = currentSub.hcpName.isEmpty ||
-              currentSub.hcpName == 'NEW-HCP' ||
-              (currentSub.changesJson != null && currentSub.changesJson!.contains('"is_new_doctor":true')) ||
-              (currentSub.changesJson != null && currentSub.changesJson!.contains('"is_new_doctor": true'));
-          final tabTitles = ['Step 1', 'Step 2', 'Step 3', 'Others', isNewDoc ? 'New Doctor Information' : 'Changes'];
+          final tabTitles = ['Step 1', 'Step 2', 'Step 3', 'Others', 'Changes'];
 
           if (isFetchingFull && submission.name != null) {
             final apiService = Provider.of<ApiService>(context, listen: false);
@@ -1233,17 +1156,42 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('New Doctor Information', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: submission.applicationStatus == 'Applied' ? const Color(0xFF059669) : const Color(0xFF3F3F46),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      'Application: ${submission.applicationStatus ?? "Not Applied"}',
-                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                    ),
+                  const Text('Summary of Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withOpacity(0.18),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFF59E0B)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: const [
+                            Icon(Icons.person_add_alt_1_rounded, color: Color(0xFFF59E0B), size: 14),
+                            SizedBox(width: 4),
+                            Text(
+                              'New Doctor',
+                              style: TextStyle(color: Color(0xFFF59E0B), fontSize: 11, fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: submission.applicationStatus == 'Applied' ? const Color(0xFF059669) : const Color(0xFF3F3F46),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Application: ${submission.applicationStatus ?? "Not Applied"}',
+                          style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1459,16 +1407,41 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text('Summary of Changes', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: submission.applicationStatus == 'Applied' ? const Color(0xFF059669) : const Color(0xFF3F3F46),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    'Application: ${submission.applicationStatus ?? "Not Applied"}',
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2563EB).withOpacity(0.18),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF2563EB)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.verified_user_rounded, color: Color(0xFF60A5FA), size: 14),
+                          SizedBox(width: 4),
+                          Text(
+                            'Existing Doctor',
+                            style: TextStyle(color: Color(0xFF60A5FA), fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: submission.applicationStatus == 'Applied' ? const Color(0xFF059669) : const Color(0xFF3F3F46),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        'Application: ${submission.applicationStatus ?? "Not Applied"}',
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

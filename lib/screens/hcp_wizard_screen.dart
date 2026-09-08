@@ -2355,12 +2355,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   List<String> _getTabTitles() {
-    final bool isExistingDoctor = _selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false) && !_isCreatingNewDoctor;
     return [
       'Step 1',
       if (_consentGiven) 'Step 2',
       if (_consentGiven) 'Step 3',
-      if (_consentGiven) (isExistingDoctor ? 'Changes' : 'New Doctor Information'),
+      if (_consentGiven) 'Changes',
     ];
   }
 
@@ -2837,12 +2836,84 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     ),
                   ),
                 ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Doctor not in masterlist?',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () {
+                          Navigator.pop(ctx);
+                          _setupForNewDoctor();
+                        },
+                        child: const Text(
+                          '+ Add as New Doctor',
+                          style: TextStyle(color: Color(0xFF0066FF), fontWeight: FontWeight.bold, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
                 Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: filtered.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 8),
-                    itemBuilder: (ctx, idx) {
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: SingleChildScrollView(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFF1F5F9),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.person_search_outlined, size: 36, color: Color(0xFF64748B)),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  searchQuery.trim().isNotEmpty
+                                      ? 'No doctor found for "${searchQuery.trim()}"'
+                                      : 'No doctors found in masterlist',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F172A)),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'This doctor does not exist in the HCP masterlist yet. You can register them directly as a New Doctor.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12, height: 1.4),
+                                ),
+                                const SizedBox(height: 16),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0B192C),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                                  label: const Text('Add as New Doctor', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  onPressed: () {
+                                    Navigator.pop(ctx);
+                                    _setupForNewDoctor();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: filtered.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: 8),
+                          itemBuilder: (ctx, idx) {
                       final doc = filtered[idx];
                       final computedParts = [
                         if (doc.firstName.trim().isNotEmpty) doc.firstName.trim(),
@@ -3043,31 +3114,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF1F5F9),
+              color: const Color(0xFFFEF3C7),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFCBD5E1)),
+              border: Border.all(color: const Color(0xFFFDE68A)),
             ),
-            child: const Text(
-              'New HCP',
-              style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+            child: Row(
+              children: const [
+                Icon(Icons.person_add_alt_1_rounded, size: 16, color: Color(0xFFB45309)),
+                SizedBox(width: 8),
+                Text(
+                  'New HCP',
+                  style: TextStyle(color: Color(0xFF92400E), fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFF1F2),
+              color: const Color(0xFFFFFBEB),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFFECDD3)),
+              border: Border.all(color: const Color(0xFFFDE68A)),
             ),
             child: Row(
               children: const [
-                Icon(Icons.info_outline_rounded, color: Color(0xFFE11D48), size: 16),
+                Icon(Icons.info_outline_rounded, color: Color(0xFFD97706), size: 16),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Please enter the doctor\'s information below.',
-                    style: TextStyle(color: Color(0xFFBE123C), fontSize: 11, fontWeight: FontWeight.w600),
+                    'Doctor not in masterlist. Registering new doctor (Requires Managerial Approval).',
+                    style: TextStyle(color: Color(0xFFB45309), fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -3099,31 +3176,40 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
+              color: const Color(0xFFEFF6FF),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFBBF7D0)),
+              border: Border.all(color: const Color(0xFFBFDBFE)),
             ),
-            child: Text(
-              'Existing HCP (${_selectedDoctor!.name ?? ''})',
-              style: const TextStyle(color: Color(0xFF166534), fontWeight: FontWeight.bold, fontSize: 13),
+            child: Row(
+              children: [
+                const Icon(Icons.verified_user_rounded, size: 16, color: Color(0xFF1D4ED8)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Existing HCP (${_selectedDoctor!.name ?? ''})',
+                    style: const TextStyle(color: Color(0xFF1E40AF), fontWeight: FontWeight.bold, fontSize: 13),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: const Color(0xFFF0F9FF),
+              color: const Color(0xFFF0FDF4),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFBAE6FD)),
+              border: Border.all(color: const Color(0xFFBBF7D0)),
             ),
             child: Row(
               children: const [
-                Icon(Icons.check_circle_outline_rounded, color: Color(0xFF0284C7), size: 16),
+                Icon(Icons.check_circle_outline_rounded, color: Color(0xFF16A34A), size: 16),
                 SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Doctor record loaded. Review or update fields below.',
-                    style: TextStyle(color: Color(0xFF0369A1), fontSize: 11, fontWeight: FontWeight.w600),
+                    'Doctor verified in universal masterlist. Updating profile (Processed automatically).',
+                    style: TextStyle(color: Color(0xFF15803D), fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -3180,7 +3266,40 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('DOCTOR\'S INFORMATION', style: TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('DOCTOR\'S INFORMATION', style: TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold)),
+              if (_selectedDoctor != null || _isCreatingNewDoctor)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _isCreatingNewDoctor ? const Color(0xFFFEF3C7) : const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: _isCreatingNewDoctor ? const Color(0xFFF59E0B) : const Color(0xFF3B82F6)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isCreatingNewDoctor ? Icons.person_add_alt_1_rounded : Icons.verified_user_rounded,
+                        size: 13,
+                        color: _isCreatingNewDoctor ? const Color(0xFFD97706) : const Color(0xFF2563EB),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _isCreatingNewDoctor ? 'New Doctor' : 'Existing Doctor',
+                        style: TextStyle(
+                          color: _isCreatingNewDoctor ? const Color(0xFFD97706) : const Color(0xFF2563EB),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 12),
           
           Container(
@@ -4266,24 +4385,38 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                isExistingDoctor ? 'Summary of Changes' : 'New Doctor Information',
-                style: const TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
+              const Text(
+                'Summary of Changes',
+                style: TextStyle(color: Color(0xFF0F172A), fontSize: 18, fontWeight: FontWeight.bold),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
-                  color: isExistingDoctor ? const Color(0xFF0066FF).withOpacity(0.1) : const Color(0xFF10B981).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: isExistingDoctor ? const Color(0xFF0066FF).withOpacity(0.3) : const Color(0xFF10B981).withOpacity(0.3)),
-                ),
-                child: Text(
-                  isExistingDoctor ? 'EXISTING DOCTOR' : 'NEW DOCTOR REGISTRATION',
-                  style: TextStyle(
-                    color: isExistingDoctor ? const Color(0xFF0066FF) : const Color(0xFF059669),
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
+                  color: isExistingDoctor ? const Color(0xFF2563EB).withOpacity(0.12) : const Color(0xFFF59E0B).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isExistingDoctor ? const Color(0xFF2563EB) : const Color(0xFFF59E0B),
+                    width: 1.2,
                   ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isExistingDoctor ? Icons.verified_user_rounded : Icons.person_add_alt_1_rounded,
+                      size: 15,
+                      color: isExistingDoctor ? const Color(0xFF2563EB) : const Color(0xFFD97706),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      isExistingDoctor ? 'Existing Doctor' : 'New Doctor',
+                      style: TextStyle(
+                        color: isExistingDoctor ? const Color(0xFF2563EB) : const Color(0xFFD97706),
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
