@@ -4467,6 +4467,42 @@ class ApiService extends ChangeNotifier {
       if (core.isNotEmpty) return core;
     }
 
+    if (pLower.contains('taisho')) {
+      final tai = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('TAI') || n.startsWith('TP') || n.startsWith('TS') || parent.contains('taisho');
+      }).toList();
+      if (tai.isNotEmpty) return tai;
+    }
+
+    if (pLower.contains('fonterra')) {
+      final fon = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('FON') || parent.contains('fonterra');
+      }).toList();
+      if (fon.isNotEmpty) return fon;
+    }
+
+    if (pLower.contains('biomerieux')) {
+      final bio = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('BIO') || parent.contains('biomerieux');
+      }).toList();
+      if (bio.isNotEmpty) return bio;
+    }
+
+    if (pLower.contains('exeltis')) {
+      final exe = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('EXE') || parent.contains('exeltis');
+      }).toList();
+      if (exe.isNotEmpty) return exe;
+    }
+
     // Default to all leaf territories if program not specifically matched
     return leaves;
   }
@@ -4640,11 +4676,22 @@ class ApiService extends ChangeNotifier {
       );
     }
 
-    // Ultimate fallback
+    // Ultimate fallback (dynamic non-group territory)
+    final nonGroup = _territoryInfos.where((t) => !t.isGroup && t.name.isNotEmpty && t.name.toLowerCase() != 'all territories').toList();
+    final defaultLeaf = (progLeaves.isNotEmpty)
+        ? progLeaves.first
+        : (nonGroup.isNotEmpty ? nonGroup.first : null);
+
+    final isAbbott = effectiveProgram.toLowerCase().contains('abbott');
+    final fallbackCode = defaultLeaf?.name ?? (isAbbott ? 'AD0110' : 'TERR-01');
+    final fallbackMgr = defaultLeaf != null && defaultLeaf.territoryManager.isNotEmpty
+        ? defaultLeaf.territoryManager
+        : (effectiveName.isNotEmpty ? effectiveName : (isAbbott ? 'Jorge Mengorio' : ''));
+
     return ResolvedTerritory(
-      territoryCode: 'AD0110',
-      territoryName: 'AD0110',
-      territoryManager: effectiveName.isNotEmpty ? effectiveName : 'Jorge Mengorio',
+      territoryCode: fallbackCode,
+      territoryName: defaultLeaf?.territoryName ?? fallbackCode,
+      territoryManager: fallbackMgr,
     );
   }
 
