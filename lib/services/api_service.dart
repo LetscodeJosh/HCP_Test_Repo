@@ -1053,7 +1053,7 @@ class ApiService extends ChangeNotifier {
       } else {
         selectedProgram = 'Bayer Consumer Health - Team 1';
       }
-    } else if (combined.contains('ritemed') || lowerEmail.contains('alvino') || lowerEmail.contains('smolejon')) {
+    } else if (combined.contains('ritemed') || combined.contains('rtmd') || lowerEmail.contains('alvino') || lowerEmail.contains('smolejon')) {
       selectedProgram = 'RiteMed';
     } else if (combined.contains('vivaro') || lowerEmail.contains('cruzkaren') || lowerEmail.contains('skabigting')) {
       selectedProgram = 'Vivaro';
@@ -4444,11 +4444,12 @@ class ApiService extends ChangeNotifier {
       if (rnd.isNotEmpty) return rnd;
     }
 
-    if (pLower.contains('ritemed')) {
+    if (pLower.contains('ritemed') || pLower.contains('rtmd')) {
       final rm = leaves.where((t) {
         final n = t.name.toUpperCase();
         final parent = (t.parentTerritory ?? '').toLowerCase();
-        return n.startsWith('RM') || parent.contains('ritemed') || parent.contains('ngma') || parent.contains('sgma');
+        final cprog = (t.customAccountOrProgram ?? '').toLowerCase();
+        return n.startsWith('RM') || parent.contains('ritemed') || parent.contains('ngma') || parent.contains('sgma') || cprog.contains('rtmd') || cprog.contains('ritemed');
       }).toList();
       if (rm.isNotEmpty) return rm;
     }
