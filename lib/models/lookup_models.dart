@@ -316,6 +316,8 @@ class TerritoryInfo {
   final String? parentTerritory;
   final bool isGroup;
   final String? program;
+  final String? customUserId;
+  final String? customAccountOrProgram;
 
   TerritoryInfo({
     required this.name,
@@ -324,19 +326,25 @@ class TerritoryInfo {
     this.parentTerritory,
     this.isGroup = false,
     this.program,
+    this.customUserId,
+    this.customAccountOrProgram,
   });
 
   factory TerritoryInfo.fromJson(Map<String, dynamic> json) {
     final tName = (json['territory_name'] ?? json['name'] ?? '').toString().trim();
     final manager = (json['territory_manager'] ?? json['sales_person'] ?? json['manager'] ?? json['custom_territory_manager'] ?? '').toString().trim();
     final isGrp = json['is_group'] == 1 || json['is_group'] == true || json['is_group'] == '1';
+    final uid = json['custom_user_id']?.toString().trim();
+    final prog = (json['custom_account_or_program'] ?? json['program'] ?? json['account_or_program'])?.toString().trim();
     return TerritoryInfo(
       name: json['name'] ?? '',
       territoryName: tName.isNotEmpty ? tName : (json['name'] ?? ''),
       territoryManager: manager,
       parentTerritory: json['parent_territory']?.toString(),
       isGroup: isGrp,
-      program: json['program'] ?? json['account_or_program'],
+      program: prog,
+      customUserId: (uid != null && uid.isNotEmpty) ? uid : null,
+      customAccountOrProgram: (prog != null && prog.isNotEmpty) ? prog : null,
     );
   }
 
@@ -348,6 +356,8 @@ class TerritoryInfo {
       if (parentTerritory != null) 'parent_territory': parentTerritory,
       'is_group': isGroup ? 1 : 0,
       if (program != null) 'program': program,
+      if (customUserId != null) 'custom_user_id': customUserId,
+      if (customAccountOrProgram != null) 'custom_account_or_program': customAccountOrProgram,
     };
   }
 }

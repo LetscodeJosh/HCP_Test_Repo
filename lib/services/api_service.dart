@@ -4186,7 +4186,7 @@ class ApiService extends ChangeNotifier {
 
     if (!_isOffline && _sessionCookie != null) {
       final url = Uri.parse(
-        '$baseUrl/api/resource/Territory?fields=["name","territory_name","territory_manager","parent_territory","is_group"]&limit=1000',
+        '$baseUrl/api/resource/Territory?fields=["name","territory_name","territory_manager","parent_territory","is_group","custom_user_id","custom_account_or_program"]&limit=1000',
       );
       try {
         final response = await http.get(url, headers: _headers);
@@ -4364,6 +4364,21 @@ class ApiService extends ChangeNotifier {
     final effectiveProgram = (program != null && program.trim().isNotEmpty)
         ? program.trim()
         : selectedProgram;
+
+    // 0. Direct match via custom_user_id on Territory (configured directly in ERPNext Territory tree)
+    if (effectiveEmail.isNotEmpty) {
+      final tByEmail = _territoryInfos.firstWhere(
+        (t) => (t.customUserId ?? '').trim().toLowerCase() == effectiveEmail,
+        orElse: () => TerritoryInfo(name: '', territoryName: '', territoryManager: ''),
+      );
+      if (tByEmail.name.isNotEmpty) {
+        return ResolvedTerritory(
+          territoryCode: tByEmail.name,
+          territoryName: tByEmail.territoryName,
+          territoryManager: tByEmail.territoryManager.isNotEmpty ? tByEmail.territoryManager : effectiveName,
+        );
+      }
+    }
 
     // 1. Check Sales Person records by linked Employee ID
     if (empId.isNotEmpty) {
