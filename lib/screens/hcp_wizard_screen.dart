@@ -1107,6 +1107,19 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     try {
       final actualSubmissionTime = DateTime.now();
 
+      // Automatically ensure accurate territory and territory manager are detected and set
+      if (_selectedTerritory.isEmpty || _territoryManagerController.text.trim().isEmpty) {
+        try {
+          final resTerr = await apiService.resolveUserTerritory(program: _selectedProgram);
+          if (_selectedTerritory.isEmpty) {
+            _selectedTerritory = resTerr.territoryCode;
+          }
+          if (_territoryManagerController.text.trim().isEmpty) {
+            _territoryManagerController.text = resTerr.territoryManager;
+          }
+        } catch (_) {}
+      }
+
       // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account immediately
       if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
         try {
@@ -4233,54 +4246,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 }
               }
             },
-          ),
-          const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: DropdownButtonFormField<String>(
-                  value: _territories.contains(_selectedTerritory)
-                      ? _selectedTerritory
-                      : (_territories.isNotEmpty ? _territories.first : null),
-                  dropdownColor: Colors.white,
-                  style: const TextStyle(color: Color(0xFF0F172A)),
-                  decoration: InputDecoration(
-                    labelText: 'Territory Code',
-                    labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                    filled: true,
-                    fillColor: Colors.white,
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                  ),
-                  items: _territories.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedTerritory = val;
-                        final mgr = apiService.getTerritoryManagerForTerritory(val);
-                        _territoryManagerController.text = mgr.isNotEmpty ? mgr : (apiService.loggedInFullName ?? val);
-                      });
-                    }
-                  },
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: TextFormField(
-                  controller: _territoryManagerController,
-                  readOnly: true,
-                  style: const TextStyle(color: Color(0xFF0F172A)),
-                  decoration: InputDecoration(
-                    labelText: 'Territory Manager',
-                    labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                    filled: true,
-                    fillColor: const Color(0xFFF8FAFC),
-                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ],
           ),
           const SizedBox(height: 20),
           if (_activeSurvey == null || _activeSurvey!.questions.isEmpty)

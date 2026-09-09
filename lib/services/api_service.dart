@@ -2745,6 +2745,29 @@ class ApiService extends ChangeNotifier {
         payload['account_or_program'] = LocationResolver.resolveProgramBranch(rawProg);
       }
 
+      // Automatically detect and set accurate Territory Code and Territory Manager upon submission
+      if (payload['territory'] == null || payload['territory'].toString().trim().isEmpty ||
+          payload['sales_person'] == null || payload['sales_person'].toString().trim().isEmpty) {
+        try {
+          final targetProg = rawProg.isNotEmpty ? rawProg : selectedProgram;
+          final submittingUser = (payload['user_id'] ?? payload['medrep_email'] ?? loggedInEmail ?? '').toString().trim();
+          final resolvedTerritory = await resolveUserTerritory(
+            userEmail: submittingUser,
+            program: targetProg,
+            currentTerritory: payload['territory']?.toString(),
+            currentSalesPerson: payload['sales_person']?.toString(),
+          );
+          if (payload['territory'] == null || payload['territory'].toString().trim().isEmpty) {
+            payload['territory'] = resolvedTerritory.territoryCode;
+          }
+          if (payload['sales_person'] == null || payload['sales_person'].toString().trim().isEmpty) {
+            payload['sales_person'] = resolvedTerritory.territoryManager;
+          }
+        } catch (e) {
+          print('[SUBMISSION] Territory auto-detection fallback error: $e');
+        }
+      }
+
       // Remove non-schema / temporary / mock keys before sending to ERPNext, ensuring all valid doctype fields are preserved
       final allowedDoctypeFields = {
         'doctype',
