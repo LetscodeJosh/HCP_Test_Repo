@@ -4561,17 +4561,21 @@ class ApiService extends ChangeNotifier {
         ? program.trim()
         : selectedProgram;
 
-    // 0. Direct match via custom_user_id on Territory (configured directly in ERPNext Territory tree)
+    // 0. Direct match via custom_user_id and custom_account_or_program on Territory
     if (effectiveEmail.isNotEmpty) {
-      final tByEmail = _territoryInfos.firstWhere(
-        (t) => (t.customUserId ?? '').trim().toLowerCase() == effectiveEmail,
-        orElse: () => TerritoryInfo(name: '', territoryName: '', territoryManager: ''),
+      final tByEmailAndProg = _territoryInfos.firstWhere(
+        (t) => (t.customUserId ?? '').trim().toLowerCase() == effectiveEmail &&
+               (t.customAccountOrProgram != null && t.customAccountOrProgram!.trim().isNotEmpty && t.customAccountOrProgram!.trim().toLowerCase() == effectiveProgram.toLowerCase()),
+        orElse: () => _territoryInfos.firstWhere(
+          (t) => (t.customUserId ?? '').trim().toLowerCase() == effectiveEmail,
+          orElse: () => TerritoryInfo(name: '', territoryName: '', territoryManager: ''),
+        ),
       );
-      if (tByEmail.name.isNotEmpty) {
+      if (tByEmailAndProg.name.isNotEmpty) {
         return ResolvedTerritory(
-          territoryCode: tByEmail.name,
-          territoryName: tByEmail.territoryName,
-          territoryManager: tByEmail.territoryManager.isNotEmpty ? tByEmail.territoryManager : effectiveName,
+          territoryCode: tByEmailAndProg.name,
+          territoryName: tByEmailAndProg.territoryName,
+          territoryManager: tByEmailAndProg.territoryManager.isNotEmpty ? tByEmailAndProg.territoryManager : effectiveName,
         );
       }
     }
