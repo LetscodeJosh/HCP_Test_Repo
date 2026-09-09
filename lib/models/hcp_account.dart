@@ -17,9 +17,16 @@ class HcpAccount {
   final String? validityPeriod; // e.g. "August 2026"
   final String? hcp; // Doctor ID Link -> HCP
   final String? hcpName; // Doctor Full Name (e.g. Joshua Pambuena Tan)
+  final String? specialty;
+  final String? subSpecialty;
+  final String? workplaceId;
+  final String? contactNumber;
+  final String? contactEmail;
   final List<HcpAccountSpecialization> specialties;
   final List<HcpAccountWorkplace> workplaces;
   final List<HcpAccountContact> contacts;
+
+  String get accountOrProgram => accountName;
 
   HcpAccount({
     this.name,
@@ -38,6 +45,11 @@ class HcpAccount {
     this.validityPeriod,
     this.hcp,
     this.hcpName,
+    this.specialty,
+    this.subSpecialty,
+    this.workplaceId,
+    this.contactNumber,
+    this.contactEmail,
     this.specialties = const [],
     this.workplaces = const [],
     this.contacts = const [],
@@ -114,6 +126,11 @@ class HcpAccount {
       validityPeriod: json['validity_period'] ?? json['month_period'] ?? calculateMonthLabel(),
       hcp: json['hcp'] ?? json['hcp_doctor_unique_id'],
       hcpName: json['hcp_name'] ?? json['doctor_name'] ?? json['hcp_full_name'] ?? json['hcp'],
+      specialty: json['specialty'] ?? json['hcp_specialty'],
+      subSpecialty: json['sub_specialty'],
+      workplaceId: json['workplace_id'] ?? json['hcp_workplace'] ?? json['workplace'],
+      contactNumber: json['contact_number'] ?? json['mobile_number'] ?? json['phone_number'],
+      contactEmail: json['contact_email'] ?? json['email_address'],
       specialties: (json['specialization'] as List? ?? json['specialties'] as List?)
               ?.map((e) => HcpAccountSpecialization.fromJson(e))
               .toList() ?? [],
@@ -147,6 +164,11 @@ class HcpAccount {
       if (validityPeriod != null) 'validity_period': validityPeriod,
       if (hcp != null) 'hcp': hcp,
       if (hcpName != null) 'hcp_name': hcpName,
+      if (specialty != null) 'specialty': specialty,
+      if (subSpecialty != null) 'sub_specialty': subSpecialty,
+      if (workplaceId != null) 'workplace_id': workplaceId,
+      if (contactNumber != null) 'contact_number': contactNumber,
+      if (contactEmail != null) 'contact_email': contactEmail,
       if (specialties.isNotEmpty) 'specialization': specialties.map((e) => e.toJson()).toList(),
       if (workplaces.isNotEmpty) 'workplace_info': workplaces.map((e) => e.toJson()).toList(),
       if (contacts.isNotEmpty) 'contact_info': contacts.map((e) => e.toJson()).toList(),

@@ -130,7 +130,7 @@ class Hcp {
       'doctor_name': computedFullName,
       'hcp_name': computedFullName,
       'name_of_doctor': computedFullName,
-      if (birthDate != null) 'birth_date': birthDate,
+      if (birthDate != null && birthDate!.trim().isNotEmpty) 'birth_date': birthDate!.trim(),
       if (hcpPhoto != null) 'hcp_photo': hcpPhoto,
       'hcp_type': hcpType,
       'hcp_practice': hcpPractice,

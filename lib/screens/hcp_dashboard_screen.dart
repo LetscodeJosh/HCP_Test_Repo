@@ -291,6 +291,12 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               (userProg.contains('bayer') && subProg.contains('bayer')) ||
               (userProg.contains('bch') && subProg.contains('bayer')) ||
               (userProg.contains('corenergy') && subProg.contains('corenergy')) ||
+              (userProg.contains('ritemed') && subProg.contains('ritemed')) ||
+              (userProg.contains('vivaro') && subProg.contains('vivaro')) ||
+              (userProg.contains('exeltis') && subProg.contains('exeltis')) ||
+              (userProg.contains('taisho') && subProg.contains('taisho')) ||
+              (userProg.contains('fonterra') && subProg.contains('fonterra')) ||
+              (userProg.contains('biomerieux') && subProg.contains('biomerieux')) ||
               (userProg.contains('nes') && subProg.contains('nes')) ||
               (userProg.contains('nurturemed') && subProg.contains('nurturemed')) ||
               (userProg.contains('pch') && subProg.contains('pch')) ||

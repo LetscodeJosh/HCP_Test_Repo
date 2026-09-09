@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/engagement.dart';
 import '../models/hcp.dart';
 import '../models/submission.dart';
@@ -21,6 +22,7 @@ enum UserPosition {
 
 class ApiService extends ChangeNotifier {
   ApiService() {
+    initServerConfig();
     checkOnlineStatus();
     _startAutoSyncTimer();
   }
@@ -122,13 +124,28 @@ class ApiService extends ChangeNotifier {
     'Bayer Consumer Health - Team 2',
     'Bayer Consumer Health - Team 3',
     'Bayer',
+    'Biomerieux',
     'COREnergy',
+    'Exeltis (Philippines)',
+    'FLEUR',
+    'Fonterra',
+    'FONTERRA ANMUM',
+    'FONTERRA ANLENE',
+    'iGROW - Pediasure',
     'NES',
     'Nurturemed',
+    'PBEAT',
     'PCH 1',
+    'PFIZER',
     'Pharmabest',
+    'RiteMed',
+    'Taisho Hospital Team - Pedia',
+    'Taisho Hospital Team - Primary Care (Adult)',
+    'Taisho PH-MDRP',
+    'Taisho Trade Merchandising Program',
     'TSTACCO',
     'TSTACC1',
+    'Vivaro',
   ];
 
   // Offline Mode variables
@@ -481,7 +498,34 @@ class ApiService extends ChangeNotifier {
       print('Error fetching available programs: $e');
     }
   }
-  final String baseUrl = 'https://dev.pmii-marketing.com';
+
+  static const String devServerUrl = 'https://dev.pmii-marketing.com';
+  static const String _keyServerUrl = 'hcp_saved_server_url';
+
+  String _baseUrl = devServerUrl;
+  String get baseUrl => _baseUrl;
+
+  Future<void> initServerConfig() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyServerUrl);
+      _baseUrl = devServerUrl;
+    } catch (_) {}
+  }
+
+  Future<void> setBaseUrl(String url) async {
+    if (_baseUrl != url) {
+      _baseUrl = url;
+      _sessionCookie = null;
+      _csrfToken = null;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_keyServerUrl, url);
+      } catch (_) {}
+      notifyListeners();
+    }
+  }
+
   String? _sessionCookie;
   String? loggedInEmail;
   String? loggedInFullName;
@@ -1005,6 +1049,26 @@ class ApiService extends ChangeNotifier {
       } else {
         selectedProgram = 'Bayer Consumer Health - Team 1';
       }
+    } else if (combined.contains('ritemed') || lowerEmail.contains('alvino') || lowerEmail.contains('smolejon')) {
+      selectedProgram = 'RiteMed';
+    } else if (combined.contains('vivaro') || lowerEmail.contains('cruzkaren') || lowerEmail.contains('skabigting')) {
+      selectedProgram = 'Vivaro';
+    } else if (combined.contains('exeltis') || lowerEmail.contains('exeltis')) {
+      selectedProgram = 'Exeltis (Philippines)';
+    } else if (combined.contains('taisho') || combined.contains('tppi')) {
+      if (combined.contains('pedia')) {
+        selectedProgram = 'Taisho Hospital Team - Pedia';
+      } else if (combined.contains('mdrp')) {
+        selectedProgram = 'Taisho PH-MDRP';
+      } else if (combined.contains('merchandising') || combined.contains('tmp')) {
+        selectedProgram = 'Taisho Trade Merchandising Program';
+      } else {
+        selectedProgram = 'Taisho Hospital Team - Primary Care (Adult)';
+      }
+    } else if (combined.contains('fonterra') || combined.contains('anmum') || combined.contains('anlene')) {
+      selectedProgram = 'Fonterra';
+    } else if (combined.contains('biomerieux')) {
+      selectedProgram = 'Biomerieux';
     } else if (combined.contains('corenergy') || combined.contains('cor energy')) {
       selectedProgram = 'COREnergy';
     } else if (combined.contains('nes')) {
@@ -1083,6 +1147,8 @@ class ApiService extends ChangeNotifier {
              lowerDesignation.contains('rsm') ||
              lowerDesignation.contains('asm') ||
              lowerDesignation.contains('phss') ||
+             lowerDesignation.contains('program head') ||
+             lowerDesignation.contains('team leader') ||
              lowerEmail == 'admendoza@profinsights.biz') {
       _userPosition = UserPosition.manager;
       _isRoleAuthorized = true;
@@ -1723,6 +1789,9 @@ class ApiService extends ChangeNotifier {
       payload['hcp_name'] = effectiveName;
       payload['name_of_doctor'] = effectiveName;
       payload['is_active'] = hcp.isActive ? 1 : 0;
+      if (payload['birth_date'] == null || payload['birth_date'].toString().trim().isEmpty) {
+        payload.remove('birth_date');
+      }
 
       // Map hcp_type Link field to valid ERPNext key
       final rawType = (payload['hcp_type'] ?? hcp.hcpType ?? '').toString().trim();
@@ -2081,6 +2150,9 @@ class ApiService extends ChangeNotifier {
         }
         payload['hcp_specialty'] = cleanSpecs;
       }
+      if (payload['birth_date'] == null || payload['birth_date'].toString().trim().isEmpty) {
+        payload.remove('birth_date');
+      }
 
       // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
       if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
@@ -2225,6 +2297,41 @@ class ApiService extends ChangeNotifier {
     } catch (_) {}
 
     throw Exception('Failed to load HCP Account details: $name');
+  }
+
+  /// Find the specific HCP Account for a given doctor under a specific program.
+  /// Strictly isolates "preferred" data on a per-program basis.
+  Future<HcpAccount?> getAccountForDoctorAndProgram(String hcpId, {String? program}) async {
+    final effectiveProgram = (program != null && program.isNotEmpty && program != 'All')
+        ? program
+        : selectedProgram;
+    final cleanProg = LocationResolver.resolveProgramBranch(effectiveProgram).toLowerCase().trim();
+    if (cleanProg.isEmpty || cleanProg == 'all') return null;
+
+    try {
+      final accounts = await fetchHcpAccounts();
+      final matched = accounts.where((a) {
+        final matchesHcp = (a.hcp == hcpId || a.name == hcpId || (a.hcpName != null && a.hcpName!.toLowerCase() == hcpId.toLowerCase()));
+        if (!matchesHcp) return false;
+        final aProg = a.accountOrProgram.toLowerCase().trim();
+        return aProg == cleanProg || aProg.contains(cleanProg) || cleanProg.contains(aProg);
+      }).firstOrNull;
+
+      if (matched != null) {
+        // If child tables are not populated in summary list, fetch full details
+        if (matched.name != null && (matched.workplaces.isEmpty || matched.specialties.isEmpty)) {
+          try {
+            return await fetchHcpAccountDetail(matched.name!);
+          } catch (_) {
+            return matched;
+          }
+        }
+        return matched;
+      }
+    } catch (e) {
+      print('getAccountForDoctorAndProgram error: $e');
+    }
+    return null;
   }
 
   /// Retrieve list of HCP Profile Submissions
@@ -2623,6 +2730,15 @@ class ApiService extends ChangeNotifier {
 
       final hp = (payload['hcp_practice'] ?? submission.hcpPractice ?? '').toString().trim();
       payload['hcp_practice'] = (hp == 'Dispensing' || hp == 'Prescribing' || hp == 'Both') ? hp : 'Dispensing';
+      if (payload['birth_date'] == null || payload['birth_date'].toString().trim().isEmpty) {
+        payload.remove('birth_date');
+      }
+
+      // Ensure account_or_program resolves to exact ERPNext Branch primary key (e.g. RTMD, FONTERRA ANMUM, etc.)
+      final rawProg = (payload['account_or_program'] ?? submission.accountOrProgram ?? '').toString().trim();
+      if (rawProg.isNotEmpty) {
+        payload['account_or_program'] = LocationResolver.resolveProgramBranch(rawProg);
+      }
 
       // Remove non-schema / temporary / mock keys before sending to ERPNext, ensuring all valid doctype fields are preserved
       final allowedDoctypeFields = {
@@ -3065,6 +3181,9 @@ class ApiService extends ChangeNotifier {
         payload['institution'] = instId.isNotEmpty ? instId : raw;
         payload['institution_name'] = instName.isNotEmpty ? instName : raw;
       }
+      if (payload['birth_date'] == null || payload['birth_date'].toString().trim().isEmpty) {
+        payload.remove('birth_date');
+      }
 
       final allowedDoctypeFields = {
         'doctype',
@@ -3326,6 +3445,47 @@ class ApiService extends ChangeNotifier {
     } catch (_) {}
 
     return submission.copyWith(workflowState: targetState, status: targetState, docstatus: targetDocStatus);
+  }
+
+  /// Bulk approve multiple HCP Profile Submissions sequentially.
+  /// Calls [applyWorkflowAction] with 'Approve' for each submission.
+  /// Returns a map with 'successCount', 'failureCount', and 'errors'.
+  Future<Map<String, dynamic>> bulkApproveSubmissions(
+    List<HcpProfileSubmission> submissions, {
+    void Function(int current, int total, String doctorName)? onProgress,
+  }) async {
+    int successCount = 0;
+    int failureCount = 0;
+    final List<String> errors = [];
+
+    for (int i = 0; i < submissions.length; i++) {
+      final sub = submissions[i];
+      final docName = (sub.hcpFullName != null && sub.hcpFullName!.isNotEmpty)
+          ? sub.hcpFullName!
+          : (sub.hcpName.isNotEmpty ? sub.hcpName : (sub.name ?? 'Doctor'));
+      if (onProgress != null) {
+        onProgress(i + 1, submissions.length, docName);
+      }
+      try {
+        await applyWorkflowAction(sub, 'Approve');
+        successCount++;
+      } catch (e) {
+        failureCount++;
+        errors.add('$docName: $e');
+        print('[BULK APPROVE ERROR] Failed to approve ${sub.name}: $e');
+      }
+    }
+
+    // Refresh masterlists and submissions cache
+    await fetchDoctors().catchError((_) => <Hcp>[]);
+    await fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
+    await fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
+
+    return {
+      'successCount': successCount,
+      'failureCount': failureCount,
+      'errors': errors,
+    };
   }
 
   /// Sync HCP Account in ERPNext for the doctor under active program

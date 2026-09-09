@@ -1694,13 +1694,40 @@ class LocationResolver {
       return 'COREnergy';
     }
     if (lower.contains('bayer')) {
+      if (lower.contains('team 3')) return 'Bayer Consumer Health - Team 3';
+      if (lower.contains('team 2')) return 'Bayer Consumer Health - Team 2';
+      if (lower.contains('team 1')) return 'Bayer Consumer Health - Team 1';
+      if (lower.contains('free clinician') || lower.contains('fcp')) return 'Bayer Free Clinician Program';
+      if (lower.contains('pharma')) return 'Bayer Pharma';
       return 'Bayer Consumer Health - Team 1';
     }
-    if (lower.contains('fonterra anlene')) {
-      return 'FONTERRA ANLENE';
+    if (lower.contains('ritemed') || lower == 'rtmd') {
+      if (lower.contains('dental')) return 'RITEMED DENTAL';
+      return 'RTMD';
     }
-    if (lower.contains('fonterra anmum')) {
+    if (lower.contains('vivaro')) {
+      return 'VIVARO';
+    }
+    if (lower.contains('exeltis')) {
+      return 'Exeltis (Philippines)';
+    }
+    if (lower.contains('taisho')) {
+      if (lower.contains('pedia')) return 'Taisho Hospital Team - Pedia';
+      if (lower.contains('primary') || lower.contains('adult')) return 'Taisho Hospital Team - Primary Care (Adult)';
+      if (lower.contains('mdrp')) return 'Taisho PH-MDRP';
+      if (lower.contains('merchandising') || lower.contains('tmp')) return 'Taisho Trade Merchandising Program';
+      return 'Taisho Hospital Team - Primary Care (Adult)';
+    }
+    if (lower.contains('fonterra') || lower.contains('fon ')) {
+      if (lower.contains('anlene')) return 'FONTERRA ANLENE';
+      if (lower.contains('anmum') || lower.contains('hcap')) return 'FONTERRA ANMUM';
       return 'FONTERRA ANMUM';
+    }
+    if (lower.contains('biomerieux')) {
+      return 'BIOMERIEUX';
+    }
+    if (lower.contains('pascual')) {
+      return 'Pascual Dental Program';
     }
     if (lower.contains('gsk')) {
       return 'GSK HCP Profiling';

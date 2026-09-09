@@ -106,6 +106,12 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
         (p.contains('bayer') && accP.contains('bayer')) ||
         (p.contains('bch') && accP.contains('bayer')) ||
         (p.contains('corenergy') && accP.contains('corenergy')) ||
+        (p.contains('ritemed') && accP.contains('ritemed')) ||
+        (p.contains('vivaro') && accP.contains('vivaro')) ||
+        (p.contains('exeltis') && accP.contains('exeltis')) ||
+        (p.contains('taisho') && accP.contains('taisho')) ||
+        (p.contains('fonterra') && accP.contains('fonterra')) ||
+        (p.contains('biomerieux') && accP.contains('biomerieux')) ||
         (p.contains('nes') && accP.contains('nes')) ||
         (p.contains('nurturemed') && accP.contains('nurturemed')) ||
         (p.contains('pch') && accP.contains('pch')) ||

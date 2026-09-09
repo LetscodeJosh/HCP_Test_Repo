@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/hcp.dart';
+import '../models/hcp_account.dart';
 import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../services/api_service.dart';
@@ -18,6 +19,7 @@ class DoctorProfileScreen extends StatefulWidget {
 
 class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   Hcp? _fullDoctor;
+  HcpAccount? _programAccount;
   List<HcpProfileSubmission> _profilingHistory = [];
   List<HcpType> _hcpTypes = [];
   bool _isLoading = true;
@@ -34,6 +36,8 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     try {
       // Fetch full doctor details including all child tables
       final fullDoc = await apiService.fetchDoctorDetail(widget.doctor.name!);
+      // Fetch HCP Account strictly for the user's active program
+      final progAccount = await apiService.getAccountForDoctorAndProgram(widget.doctor.name!);
       // Fetch HCP Types for label resolution
       final types = await apiService.fetchHcpTypes();
       // Fetch profiling history for this doctor
@@ -45,6 +49,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
 
       setState(() {
         _fullDoctor = fullDoc;
+        _programAccount = progAccount;
         _hcpTypes = types;
         _profilingHistory = history;
         _isLoading = false;
@@ -326,7 +331,20 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   Widget _buildSpecialtiesTable(Hcp doctor) {
     final apiService = Provider.of<ApiService>(context, listen: false);
     final isMedRep = apiService.isMedRep;
-    final preferredList = doctor.specialties.where((s) => s.isPrimary).toList();
+
+    // Strict program-scoped preferred matching
+    final List<HcpSpecialty> preferredList;
+    if (_programAccount != null) {
+      preferredList = doctor.specialties.where((s) {
+        final sId = LocationResolver.resolveSpecialtyId(s.hcpSpecialty);
+        return (_programAccount!.specialty == s.hcpSpecialty || _programAccount!.specialty == sId ||
+            _programAccount!.specialties.any((as) => (as.preferred || as.isPrimary) &&
+                (as.hcpSpecialty == s.hcpSpecialty || as.hcpSpecialty == sId || as.specialty == s.hcpSpecialty)));
+      }).toList();
+    } else {
+      preferredList = [];
+    }
+
     final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.specialties;
 
     if (displayList.isEmpty) {
@@ -353,7 +371,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             ),
           ),
         ...displayList.map((s) {
-          final isPref = s.isPrimary;
+          final isPref = preferredList.contains(s);
           return Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
@@ -407,7 +425,20 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   Widget _buildWorkplacesTable(Hcp doctor) {
     final apiService = Provider.of<ApiService>(context, listen: false);
     final isMedRep = apiService.isMedRep;
-    final preferredList = doctor.workplaces.where((w) => w.isPrimary).toList();
+
+    // Strict program-scoped preferred matching
+    final List<HcpWorkplace> preferredList;
+    if (_programAccount != null) {
+      preferredList = doctor.workplaces.where((w) {
+        final wId = LocationResolver.resolveInstitutionId(w.workplace);
+        return (_programAccount!.workplaceId == w.workplace || _programAccount!.workplaceId == wId ||
+            _programAccount!.workplaces.any((aw) => (aw.preferred || aw.isPrimary) &&
+                (aw.hcpWorkplace == w.workplace || aw.hcpWorkplace == wId || aw.workplace == w.workplace)));
+      }).toList();
+    } else {
+      preferredList = [];
+    }
+
     final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.workplaces;
 
     if (displayList.isEmpty) {
@@ -434,7 +465,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             ),
           ),
         ...displayList.map((w) {
-          final isPref = w.isPrimary;
+          final isPref = preferredList.contains(w);
           final locInfo = LocationResolver.formatLocation(
             streetAddress: (w.address != null && w.address!.isNotEmpty && w.address != w.workplace) ? w.address : null,
             cityMunicipality: w.cityMunicipality,
@@ -505,7 +536,19 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   Widget _buildContactsTable(Hcp doctor) {
     final apiService = Provider.of<ApiService>(context, listen: false);
     final isMedRep = apiService.isMedRep;
-    final preferredList = doctor.contacts.where((c) => c.isPrimary).toList();
+
+    // Strict program-scoped preferred matching
+    final List<HcpContact> preferredList;
+    if (_programAccount != null) {
+      preferredList = doctor.contacts.where((c) {
+        return _programAccount!.contacts.any((ac) => (ac.preferred || ac.isPrimary) &&
+            ((ac.contactNumber != null && ac.contactNumber == c.contactNumber) ||
+             (ac.emailAddress != null && ac.emailAddress == c.emailAddress)));
+      }).toList();
+    } else {
+      preferredList = [];
+    }
+
     final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.contacts;
 
     if (displayList.isEmpty) {
@@ -532,7 +575,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             ),
           ),
         ...displayList.map((c) {
-          final isPref = c.isPrimary;
+          final isPref = preferredList.contains(c);
           IconData contactIcon;
           switch (c.contactType.toLowerCase()) {
             case 'mobile':

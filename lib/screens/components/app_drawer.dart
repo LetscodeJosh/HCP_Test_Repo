@@ -27,7 +27,7 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final apiService = Provider.of<ApiService>(context, listen: false);
+    final apiService = Provider.of<ApiService>(context);
     final userEmail = apiService.loggedInEmail ?? 'medrep@pims-marketing.com';
 
     return Drawer(
@@ -151,6 +151,112 @@ class AppDrawer extends StatelessWidget {
                                     ),
                                   ),
                                 ),
+                                const SizedBox(height: 6),
+                                if (apiService.isAdmin)
+                                  InkWell(
+                                    onTap: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (dialogCtx) => AlertDialog(
+                                          backgroundColor: const Color(0xFF0F172A),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          title: Row(
+                                            children: const [
+                                              Icon(Icons.swap_horiz_rounded, color: Color(0xFF38BDF8)),
+                                              SizedBox(width: 8),
+                                              Text('Switch Program', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                                            ],
+                                          ),
+                                          content: SizedBox(
+                                            width: double.maxFinite,
+                                            height: 380,
+                                            child: ListView.builder(
+                                              shrinkWrap: true,
+                                              itemCount: apiService.availablePrograms.length,
+                                              itemBuilder: (ctx, idx) {
+                                                final prog = apiService.availablePrograms[idx];
+                                                final isSelected = prog == apiService.selectedProgram;
+                                                return ListTile(
+                                                  dense: true,
+                                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                                  tileColor: isSelected ? const Color(0xFF0066FF).withOpacity(0.2) : Colors.transparent,
+                                                  title: Text(
+                                                    prog,
+                                                    style: TextStyle(
+                                                      color: isSelected ? const Color(0xFF38BDF8) : Colors.white,
+                                                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                                      fontSize: 13,
+                                                    ),
+                                                  ),
+                                                  trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: Color(0xFF38BDF8), size: 18) : null,
+                                                  onTap: () {
+                                                    apiService.setProgram(prog);
+                                                    Navigator.of(dialogCtx).pop();
+                                                  },
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF0F172A),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFF0066FF).withOpacity(0.7), width: 0.8),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.business_center_rounded, size: 12, color: Color(0xFF38BDF8)),
+                                          const SizedBox(width: 5),
+                                          Flexible(
+                                            child: Text(
+                                              apiService.selectedProgram,
+                                              style: const TextStyle(
+                                                color: Color(0xFF38BDF8),
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          const Icon(Icons.arrow_drop_down, size: 16, color: Color(0xFF38BDF8)),
+                                        ],
+                                      ),
+                                    ),
+                                  )
+                                else
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF0F172A),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: const Color(0xFF334155), width: 0.8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.business_center_rounded, size: 12, color: Color(0xFF94A3B8)),
+                                        const SizedBox(width: 5),
+                                        Flexible(
+                                          child: Text(
+                                            apiService.selectedProgram,
+                                            style: const TextStyle(
+                                              color: Color(0xFFE2E8F0),
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                               ],
                             ),
                           ),

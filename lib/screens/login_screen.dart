@@ -311,7 +311,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             letterSpacing: -0.5,
                           ),
                         ),
-                        const SizedBox(height: 36),
+                        const SizedBox(height: 32),
                         
                         // Username Field
                         const Text(

@@ -162,6 +162,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
     }
 
+    // Program-scoped preferred isolation:
+    // Look up if this doctor already has an HCP Account under the active program
+    final effectiveProg = (_selectedProgram.isNotEmpty && _selectedProgram != 'All')
+        ? _selectedProgram
+        : apiService.selectedProgram;
+    HcpAccount? progAccount;
+    if (doctor.name != null) {
+      try {
+        progAccount = await apiService.getAccountForDoctorAndProgram(doctor.name!, program: effectiveProg);
+      } catch (_) {}
+    }
+
     final Map<String, String> specLookup = {};
     for (var s in _specializations) {
       specLookup[s.name] = s.specialty;
@@ -191,13 +203,31 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           : (_hcpTypes.isNotEmpty ? _hcpTypes.first.name : 'HCP-TYPE-01');
       _selectedPractice = fullDoctor.hcpPractice.isNotEmpty ? fullDoctor.hcpPractice : 'Dispensing';
 
+      final acc = progAccount;
       if (fullDoctor.specialties.isNotEmpty) {
-        final hasAnyPref = fullDoctor.specialties.any((s) => s.isPrimary);
+        final bool anyAccountPref = acc != null && fullDoctor.specialties.any((spec) {
+          final sId = LocationResolver.resolveSpecialtyId(spec.hcpSpecialty, _specializations);
+          return (acc.specialty == sId || acc.specialty == spec.hcpSpecialty ||
+              acc.specialties.any((as) => (as.preferred || as.isPrimary) &&
+                  (as.hcpSpecialty == spec.hcpSpecialty || as.hcpSpecialty == sId || as.specialty == spec.hcpSpecialty)));
+        });
+
         for (int i = 0; i < fullDoctor.specialties.length; i++) {
           final spec = fullDoctor.specialties[i];
           final specTitle = LocationResolver.resolveSpecialtyName(spec.hcpSpecialty, _specializations);
           final subSpecTitle = spec.subSpecialty != null ? LocationResolver.resolveSpecialtyName(spec.subSpecialty!, _specializations) : null;
-          final isPref = hasAnyPref ? spec.isPrimary : (i == 0);
+          
+          bool isPref = false;
+          if (acc != null) {
+            final sId = LocationResolver.resolveSpecialtyId(spec.hcpSpecialty, _specializations);
+            final isAccPref = (acc.specialty == sId || acc.specialty == spec.hcpSpecialty ||
+                acc.specialties.any((as) => (as.preferred || as.isPrimary) &&
+                    (as.hcpSpecialty == spec.hcpSpecialty || as.hcpSpecialty == sId || as.specialty == spec.hcpSpecialty)));
+            isPref = anyAccountPref ? isAccPref : (i == 0);
+          } else {
+            isPref = (i == 0);
+          }
+
           _selectedSpecialties.add(SubmissionSpecialty(
             preferred: isPref,
             hcpSpecialty: specTitle.isNotEmpty ? specTitle : spec.hcpSpecialty,
@@ -217,11 +247,16 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
 
       if (fullDoctor.workplaces.isNotEmpty) {
-        final hasAnyPref = fullDoctor.workplaces.any((w) => w.isPrimary);
+        final bool anyAccountPref = acc != null && fullDoctor.workplaces.any((work) {
+          final wId = LocationResolver.resolveInstitutionId(work.workplace, _institutions);
+          return (acc.workplaceId == wId || acc.workplaceId == work.workplace ||
+              acc.workplaces.any((aw) => (aw.preferred || aw.isPrimary) &&
+                  (aw.hcpWorkplace == work.workplace || aw.hcpWorkplace == wId || aw.workplace == work.workplace)));
+        });
+
         for (int i = 0; i < fullDoctor.workplaces.length; i++) {
           final work = fullDoctor.workplaces[i];
           final instTitle = LocationResolver.resolveInstitutionName(work.workplace, _institutions);
-          final isPref = hasAnyPref ? work.isPrimary : (i == 0);
           final instMatch = _institutions.firstWhere(
             (inst) => inst.name == work.workplace || inst.institutionName == instTitle || inst.name.toLowerCase() == work.workplace.toLowerCase(),
             orElse: () => Institution(name: work.workplace, institutionName: instTitle.isNotEmpty ? instTitle : work.workplace),
@@ -230,6 +265,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           final resolvedProv = LocationResolver.resolveProvinceName(work.provinceName ?? fullDoctor.provinceName ?? instMatch.provinceName);
           final finalCity = resolvedCity.isNotEmpty ? resolvedCity : (instMatch.cityMunicipality ?? 'Manila City');
           final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (instMatch.provinceName ?? 'Metro Manila-Manila');
+
+          bool isPref = false;
+          if (acc != null) {
+            final wId = LocationResolver.resolveInstitutionId(work.workplace, _institutions);
+            final isAccPref = (acc.workplaceId == wId || acc.workplaceId == work.workplace ||
+                acc.workplaces.any((aw) => (aw.preferred || aw.isPrimary) &&
+                    (aw.hcpWorkplace == work.workplace || aw.hcpWorkplace == wId || aw.workplace == work.workplace)));
+            isPref = anyAccountPref ? isAccPref : (i == 0);
+          } else {
+            isPref = (i == 0);
+          }
+
           _selectedWorkplaces.add(SubmissionWorkplace(
             preferred: isPref,
             hcpWorkplace: instTitle.isNotEmpty ? instTitle : work.workplace,
@@ -256,10 +303,24 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
 
       if (fullDoctor.contacts.isNotEmpty) {
-        final hasAnyPref = fullDoctor.contacts.any((c) => c.isPrimary);
+        final bool anyAccountPref = acc != null && fullDoctor.contacts.any((c) {
+          return acc.contacts.any((ac) => (ac.preferred || ac.isPrimary) &&
+              ((ac.contactNumber != null && ac.contactNumber == c.contactNumber) ||
+               (ac.emailAddress != null && ac.emailAddress == c.emailAddress)));
+        });
+
         for (int i = 0; i < fullDoctor.contacts.length; i++) {
           final contact = fullDoctor.contacts[i];
-          final isPref = hasAnyPref ? contact.isPrimary : (i == 0);
+          bool isPref = false;
+          if (acc != null) {
+            final isAccPref = acc.contacts.any((ac) => (ac.preferred || ac.isPrimary) &&
+                ((ac.contactNumber != null && ac.contactNumber == contact.contactNumber) ||
+                 (ac.emailAddress != null && ac.emailAddress == contact.emailAddress)));
+            isPref = anyAccountPref ? isAccPref : (i == 0);
+          } else {
+            isPref = (i == 0);
+          }
+
           _contacts.add(SubmissionContact(
             preferred: isPref,
             contactNumber: contact.contactValue.isNotEmpty ? contact.contactValue : '123435',
@@ -905,7 +966,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     final bool isExistingDoctor = !_isCreatingNewDoctor && matchedDoctor != null && (matchedDoctor.name?.isNotEmpty ?? false);
     final bool isNewDoctor = !isExistingDoctor;
     final String effectiveProfileAction = isExistingDoctor ? 'Existing HCP' : 'New HCP';
-    final String effectiveHcpId = isExistingDoctor ? (matchedDoctor!.name ?? '') : '';
+    final String effectiveHcpId = isExistingDoctor ? (matchedDoctor.name ?? '') : '';
 
     final structuredChanges = {
       'submission': '',
@@ -948,7 +1009,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       sb.write('<h3>New Doctor Information</h3><br><hr><br>');
       sb.write('<b>Doctor Name:</b> $fullDoctorName<br>');
       if (_selectedHcpType != null) sb.write('<b>Classification:</b> $_selectedHcpType<br>');
-      if (_selectedPractice != null) sb.write('<b>Practice:</b> $_selectedPractice<br>');
+      if (_selectedPractice.isNotEmpty) sb.write('<b>Practice:</b> $_selectedPractice<br>');
       if (_birthDateController.text.trim().isNotEmpty) sb.write('<b>Birth Date:</b> ${_birthDateController.text.trim()}<br>');
       if (_selectedSpecialties.isNotEmpty) {
         sb.write('<br><h4>Specializations</h4>');
@@ -1129,7 +1190,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         specialties: _selectedSpecialties,
         workplaces: _selectedWorkplaces,
         contacts: _contacts,
-        accountOrProgram: _selectedProgram,
+        accountOrProgram: LocationResolver.resolveProgramBranch(_selectedProgram),
         territory: _selectedTerritory,
         salesPerson: _territoryManagerController.text.trim().isNotEmpty
             ? _territoryManagerController.text.trim()
@@ -3383,8 +3444,24 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             ),
           ] else ...[
             const SizedBox(height: 20),
-            const Text('BASIC INFO', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 10),
+            const Text(
+              'BASIC INFO',
+              style: TextStyle(
+                color: Color(0xFF0F172A),
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              '* indicates information that are mandatory',
+              style: TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 12,
+              ),
+            ),
+            const SizedBox(height: 12),
 
             if (isMobile) ...[
               Row(
@@ -3448,7 +3525,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: InkWell(
+                    child: TextFormField(
+                      controller: _birthDateController,
+                      readOnly: true,
+                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
                       onTap: () async {
                         DateTime initial = DateTime(1985, 1, 1);
                         if (_birthDateController.text.isNotEmpty) {
@@ -3469,23 +3549,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           });
                         }
                       },
-                      child: IgnorePointer(
-                        child: TextFormField(
-                          controller: _birthDateController,
-                          readOnly: true,
-                          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                          decoration: InputDecoration(
-                            labelText: 'Birth Date',
-                            labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                            suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 18),
-                            filled: true,
-                            fillColor: Colors.white,
-                            isDense: true,
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                          ),
+                      decoration: InputDecoration(
+                        labelText: 'Birth Date (Optional)',
+                        labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                        helperText: 'Optional per DPA of 2012',
+                        helperStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_birthDateController.text.isNotEmpty)
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 16),
+                                onPressed: () {
+                                  setState(() {
+                                    _birthDateController.text = '';
+                                  });
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                tooltip: 'Clear Birth Date',
+                              ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 18),
+                            const SizedBox(width: 8),
+                          ],
                         ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
@@ -3543,7 +3637,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: InkWell(
+                    child: TextFormField(
+                      controller: _birthDateController,
+                      readOnly: true,
+                      style: const TextStyle(color: Color(0xFF0F172A)),
                       onTap: () async {
                         DateTime initial = DateTime(1985, 1, 1);
                         if (_birthDateController.text.isNotEmpty) {
@@ -3564,21 +3661,35 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           });
                         }
                       },
-                      child: IgnorePointer(
-                        child: TextFormField(
-                          controller: _birthDateController,
-                          readOnly: true,
-                          style: const TextStyle(color: Color(0xFF0F172A)),
-                          decoration: InputDecoration(
-                            labelText: 'Birth Date',
-                            labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                            suffixIcon: const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
-                            filled: true,
-                            fillColor: Colors.white,
-                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                            focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
-                          ),
+                      decoration: InputDecoration(
+                        labelText: 'Birth Date (Optional)',
+                        labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                        helperText: 'Optional per DPA of 2012',
+                        helperStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_birthDateController.text.isNotEmpty)
+                              IconButton(
+                                icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 18),
+                                onPressed: () {
+                                  setState(() {
+                                    _birthDateController.text = '';
+                                  });
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                                tooltip: 'Clear Birth Date',
+                              ),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
+                            const SizedBox(width: 8),
+                          ],
                         ),
+                        filled: true,
+                        fillColor: Colors.white,
+                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
@@ -3611,7 +3722,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             child: Row(
                               children: const [
                                 SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                Expanded(child: Text('Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
+                                Expanded(child: Text('Specialty Name *', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
                                 Text('Sub Specialty Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold)),
                                 SizedBox(width: 44),
                               ],
@@ -3815,7 +3926,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             child: Row(
                               children: const [
                                 SizedBox(width: 24, child: Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14)),
-                                Expanded(child: Text('Workplace Name', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
+                                Expanded(child: Text('Workplace Name *', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold))),
                                 Text('City / Province', style: TextStyle(color: Color(0xFF475569), fontSize: 12, fontWeight: FontWeight.bold)),
                                 SizedBox(width: 44),
                               ],
@@ -4112,6 +4223,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 });
                 apiService.setProgram(val);
                 _updateActiveSurveyForProgram(val);
+                if (_selectedDoctor != null && !_isCreatingNewDoctor) {
+                  _prepopulateDoctorData(_selectedDoctor!);
+                }
               }
             },
           ),

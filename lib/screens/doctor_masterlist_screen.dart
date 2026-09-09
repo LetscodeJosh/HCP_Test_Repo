@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/hcp.dart';
+import '../models/hcp_account.dart';
 import '../models/lookup_models.dart';
 import '../models/submission.dart';
 import '../services/api_service.dart';
@@ -123,11 +124,17 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   Future<void> _openDoctorProfile(Hcp doctor) async {
     final apiService = Provider.of<ApiService>(context, listen: false);
     Hcp fullDoctor = doctor;
+    HcpAccount? progAccount;
     if (doctor.name != null) {
       try {
         fullDoctor = await apiService.fetchDoctorDetail(doctor.name!);
       } catch (e) {
         print('Error fetching doctor detail for masterlist view: $e');
+      }
+      try {
+        progAccount = await apiService.getAccountForDoctorAndProgram(doctor.name!);
+      } catch (e) {
+        print('Error fetching account for masterlist view: $e');
       }
     }
 
@@ -375,10 +382,30 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         final apiService = Provider.of<ApiService>(context, listen: false);
                         final isMedRep = apiService.isMedRep;
 
-                        final prefWorkplaces = fullDoctor.workplaces.where((w) => w.isPrimary).toList();
+                        final List<HcpWorkplace> prefWorkplaces;
+                        final acc = progAccount;
+                        if (acc != null) {
+                          prefWorkplaces = fullDoctor.workplaces.where((w) {
+                            final wId = LocationResolver.resolveInstitutionId(w.workplace, _institutions);
+                            return (acc.workplaceId == w.workplace || acc.workplaceId == wId ||
+                                acc.workplaces.any((aw) => (aw.preferred || aw.isPrimary) &&
+                                    (aw.hcpWorkplace == w.workplace || aw.hcpWorkplace == wId || aw.workplace == w.workplace)));
+                          }).toList();
+                        } else {
+                          prefWorkplaces = [];
+                        }
                         final displayWorkplaces = (isMedRep && prefWorkplaces.isNotEmpty) ? prefWorkplaces : fullDoctor.workplaces;
 
-                        final prefContacts = fullDoctor.contacts.where((c) => c.isPrimary).toList();
+                        final List<HcpContact> prefContacts;
+                        if (acc != null) {
+                          prefContacts = fullDoctor.contacts.where((c) {
+                            return acc.contacts.any((ac) => (ac.preferred || ac.isPrimary) &&
+                                ((ac.contactNumber != null && ac.contactNumber == c.contactNumber) ||
+                                 (ac.emailAddress != null && ac.emailAddress == c.emailAddress)));
+                          }).toList();
+                        } else {
+                          prefContacts = [];
+                        }
                         final displayContacts = (isMedRep && prefContacts.isNotEmpty) ? prefContacts : fullDoctor.contacts;
 
                         final workplacesWidget = Container(
@@ -410,7 +437,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               ),
                               if (displayWorkplaces.isNotEmpty)
                                 ...displayWorkplaces.map((w) {
-                                  final isPref = w.isPrimary;
+                                  final isPref = prefWorkplaces.contains(w);
                                   final wpName = LocationResolver.resolveInstitutionName(w.workplace, _institutions);
                                   final locParts = LocationResolver.formatLocation(
                                     streetAddress: (w.address != null && w.address!.isNotEmpty && w.address != w.workplace && w.address != w.cityMunicipality && w.address != w.provinceName) ? w.address : null,
@@ -497,7 +524,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               ),
                               if (displayContacts.isNotEmpty)
                                 ...displayContacts.map((c) {
-                                  final isPref = c.isPrimary;
+                                  final isPref = prefContacts.contains(c);
                                   return Padding(
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                     child: Row(
@@ -843,7 +870,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         hcpPractice: selectedPractice,
                         specialties: reqSpec.isNotEmpty ? [SubmissionSpecialty(hcpSpecialty: reqSpec, preferred: true)] : [],
                         workplaces: reqWork.isNotEmpty ? [SubmissionWorkplace(hcpWorkplace: reqWork, preferred: true)] : [],
-                        accountOrProgram: apiService.selectedProgram,
+                        accountOrProgram: LocationResolver.resolveProgramBranch(apiService.selectedProgram),
                         territory: 'AD0110',
                         salesPerson: apiService.getTerritoryManagerForTerritory('AD0110'),
                         userId: apiService.loggedInEmail,

@@ -33,6 +33,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   String _programFilter = 'All';
   bool _onlyMySubmissions = false;
 
+  // Selection & Bulk Approval State
+  final Set<String> _selectedSubmissionNames = {};
+  bool _isBulkApproving = false;
+
   @override
   void initState() {
     super.initState();
@@ -56,9 +60,187 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       setState(() {
         _submissions = items;
         _isLoading = false;
+        // Prune any selected items that no longer exist or are not pending approval
+        _selectedSubmissionNames.removeWhere((id) =>
+            !items.any((s) => s.name == id && (s.workflowState == 'Pending Approval' || s.status == 'Pending Approval')));
       });
     } catch (e) {
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleBulkApprove(List<HcpProfileSubmission> selectedItems) async {
+    if (selectedItems.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDCFCE7),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.check_circle_outline, color: Color(0xFF16A34A), size: 24),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Bulk Approve Submissions',
+                style: TextStyle(color: Color(0xFF0F172A), fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to approve ${selectedItems.length} selected submission(s)?',
+              style: const TextStyle(color: Color(0xFF1E293B), fontSize: 14, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'This will approve the profiles, commit any new doctors to the universal HCP Masterlist, and sync their HCP Accounts for their respective programs.',
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 140),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: selectedItems.length,
+                separatorBuilder: (_, __) => const Divider(height: 8, thickness: 0.5),
+                itemBuilder: (_, i) {
+                  final s = selectedItems[i];
+                  return Row(
+                    children: [
+                      const Icon(Icons.person_outline, size: 14, color: Color(0xFF64748B)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          (s.hcpFullName != null && s.hcpFullName!.isNotEmpty) ? s.hcpFullName! : (s.hcpName.isNotEmpty ? s.hcpName : s.name ?? ''),
+                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500, color: Color(0xFF0F172A)),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('Pending Approval', style: TextStyle(fontSize: 10, color: Color(0xFFD97706), fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dlgCtx, false),
+            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF16A34A),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.check, size: 18),
+            label: Text('Approve All (${selectedItems.length})', style: const TextStyle(fontWeight: FontWeight.bold)),
+            onPressed: () => Navigator.pop(dlgCtx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    setState(() => _isBulkApproving = true);
+
+    String progressMessage = 'Preparing bulk approval...';
+    StateSetter? dialogSetState;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (loadingCtx) => StatefulBuilder(
+        builder: (ctx, setModalState) {
+          dialogSetState = setModalState;
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            content: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(
+                children: [
+                  const CircularProgressIndicator(color: Color(0xFF16A34A)),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: Text(
+                      progressMessage,
+                      style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500, color: Color(0xFF0F172A)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    final result = await apiService.bulkApproveSubmissions(
+      selectedItems,
+      onProgress: (cur, tot, docName) {
+        if (mounted && dialogSetState != null) {
+          dialogSetState!(() {
+            progressMessage = 'Approving ($cur/$tot): $docName...';
+          });
+        }
+      },
+    );
+
+    if (mounted) {
+      Navigator.pop(context); // Close loading dialog
+      setState(() {
+        _isBulkApproving = false;
+        _selectedSubmissionNames.clear();
+      });
+      await _loadSubmissions();
+
+      final int successCount = result['successCount'] ?? 0;
+      final int failureCount = result['failureCount'] ?? 0;
+      if (failureCount == 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF16A34A),
+            content: Text('Successfully approved $successCount doctor profile submission(s)!'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFFD97706),
+            content: Text('Approved $successCount submission(s). $failureCount encountered an error.'),
+          ),
+        );
+      }
     }
   }
 
@@ -132,7 +314,19 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         (prog.contains('adc') && subProg.contains('abbott')) ||
         (prog.contains('bayer') && subProg.contains('bayer')) ||
         (prog.contains('bch') && subProg.contains('bayer')) ||
-        (prog.contains('corenergy') && subProg.contains('corenergy'));
+        (prog.contains('corenergy') && subProg.contains('corenergy')) ||
+        (prog.contains('ritemed') && subProg.contains('ritemed')) ||
+        (prog.contains('vivaro') && subProg.contains('vivaro')) ||
+        (prog.contains('exeltis') && subProg.contains('exeltis')) ||
+        (prog.contains('taisho') && subProg.contains('taisho')) ||
+        (prog.contains('fonterra') && subProg.contains('fonterra')) ||
+        (prog.contains('biomerieux') && subProg.contains('biomerieux')) ||
+        (prog.contains('nes') && subProg.contains('nes')) ||
+        (prog.contains('nurturemed') && subProg.contains('nurturemed')) ||
+        (prog.contains('pch') && subProg.contains('pch')) ||
+        (prog.contains('pharmabest') && subProg.contains('pharmabest')) ||
+        (prog.contains('tstacco') && subProg.contains('tstacco')) ||
+        (prog.contains('tstacc1') && subProg.contains('tstacc1'));
   }
 
   int _getProgramTotalCount(ApiService apiService) {
@@ -220,7 +414,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     }
 
     // 2. Submissions Scope Filter:
-    final bool enforceMySubmissions = _onlyMySubmissions;
+    // MedRep is strictly locked to their own submissions and cannot toggle.
+    // Managers view all submissions within their program/territory scope for review and approvals.
+    // ONLY Admin accounts/users can toggle _onlyMySubmissions.
+    final bool enforceMySubmissions = apiService.isMedRep ? true : (apiService.isAdmin ? _onlyMySubmissions : false);
     if (enforceMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
@@ -1828,13 +2025,15 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 },
               ),
               const SizedBox(width: 8),
-              if (apiService.isMedRep) ...[
+              if (apiService.isAdmin) ...[
+                // ONLY Admin accounts can toggle between My Submissions and All Scope
                 InkWell(
                   onTap: () {
                     setState(() {
                       _onlyMySubmissions = !_onlyMySubmissions;
                     });
                   },
+                  borderRadius: BorderRadius.circular(8),
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
@@ -1851,7 +2050,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          _onlyMySubmissions ? 'My Submissions' : 'Program Scope',
+                          _onlyMySubmissions ? 'My Submissions' : 'All Scope',
                           style: TextStyle(
                             color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
                             fontSize: 11,
@@ -1862,38 +2061,60 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     ),
                   ),
                 ),
+              ] else if (apiService.isMedRep) ...[
+                // MedRep view is permanently locked to My Submissions (no toggle allowed)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0066FF).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF38BDF8).withOpacity(0.4)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.person_rounded,
+                        size: 14,
+                        color: Color(0xFF38BDF8),
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'My Submissions',
+                        style: TextStyle(
+                          color: Color(0xFF38BDF8),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ] else ...[
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _onlyMySubmissions = !_onlyMySubmissions;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: _onlyMySubmissions ? const Color(0xFF0066FF).withOpacity(0.2) : const Color(0xFF1E293B),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: _onlyMySubmissions ? const Color(0xFF38BDF8) : const Color(0xFF334155)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _onlyMySubmissions ? Icons.person_rounded : Icons.groups_rounded,
-                          size: 14,
-                          color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
+                // Manager view is locked to Program Scope for reviews & approvals
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1E293B),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFF334155)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.groups_rounded,
+                        size: 14,
+                        color: Colors.white70,
+                      ),
+                      SizedBox(width: 4),
+                      Text(
+                        'Program Scope',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          _onlyMySubmissions ? 'My Submissions' : (apiService.isAdmin ? 'All Scope' : 'Program Scope'),
-                          style: TextStyle(
-                            color: _onlyMySubmissions ? const Color(0xFF38BDF8) : Colors.white70,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -2109,6 +2330,15 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   Widget build(BuildContext context) {
     final apiService = Provider.of<ApiService>(context);
     final filteredList = _getFilteredAndSortedSubmissions(apiService);
+    final canApprove = (apiService.isManager || apiService.isAdmin);
+    final eligiblePendingList = filteredList.where((s) =>
+        (s.workflowState == 'Pending Approval' || s.status == 'Pending Approval') &&
+        s.name != null &&
+        s.name!.isNotEmpty
+    ).toList();
+    final isAllEligibleSelected = eligiblePendingList.isNotEmpty &&
+        eligiblePendingList.every((s) => _selectedSubmissionNames.contains(s.name));
+    final hasSomeSelected = eligiblePendingList.any((s) => _selectedSubmissionNames.contains(s.name));
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9),
@@ -2190,7 +2420,32 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           child: Row(
                             children: [
                               const SizedBox(width: 16),
-                              const Icon(Icons.check_box_outline_blank_rounded, size: 16, color: Colors.white54),
+                              InkWell(
+                                onTap: (canApprove && eligiblePendingList.isNotEmpty)
+                                    ? () {
+                                        setState(() {
+                                          if (isAllEligibleSelected) {
+                                            for (var s in eligiblePendingList) {
+                                              _selectedSubmissionNames.remove(s.name);
+                                            }
+                                          } else {
+                                            for (var s in eligiblePendingList) {
+                                              _selectedSubmissionNames.add(s.name!);
+                                            }
+                                          }
+                                        });
+                                      }
+                                    : null,
+                                child: Icon(
+                                  isAllEligibleSelected
+                                      ? Icons.check_box_rounded
+                                      : (hasSomeSelected ? Icons.indeterminate_check_box_rounded : Icons.check_box_outline_blank_rounded),
+                                  size: 16,
+                                  color: (isAllEligibleSelected || hasSomeSelected)
+                                      ? const Color(0xFF60A5FA)
+                                      : ((canApprove && eligiblePendingList.isNotEmpty) ? Colors.white70 : Colors.white24),
+                                ),
+                              ),
                               const SizedBox(width: 10),
                               const Expanded(
                                 flex: 5,
@@ -2251,7 +2506,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           children: [
                             const Text('SUBMISSIONS', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                             Text(
-                              apiService.isMedRep && _onlyMySubmissions
+                              apiService.isMedRep
                                   ? 'Showing ${filteredList.length} (My Submissions) · Total: ${_getProgramTotalCount(apiService)}'
                                   : 'Showing ${filteredList.length} of ${_getProgramTotalCount(apiService)}',
                               style: const TextStyle(color: Colors.white70, fontSize: 11),
@@ -2285,13 +2540,17 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                     separatorBuilder: (_, __) => const SizedBox(height: 2),
                                     itemBuilder: (ctx, idx) {
                                       final item = filteredList[idx];
+                                      final isPending = item.workflowState == 'Pending Approval' || item.status == 'Pending Approval';
+                                      final canSelect = canApprove && isPending && item.name != null && item.name!.isNotEmpty;
+                                      final isSelected = item.name != null && _selectedSubmissionNames.contains(item.name);
+
                                       if (isMobile) {
                                         return Container(
                                           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
                                           decoration: BoxDecoration(
                                             color: Colors.white,
                                             borderRadius: BorderRadius.circular(10),
-                                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                                            border: Border.all(color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFE2E8F0)),
                                             boxShadow: const [
                                               BoxShadow(color: Color(0x04000000), blurRadius: 3, offset: Offset(0, 1)),
                                             ],
@@ -2306,6 +2565,29 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                 children: [
                                                   Row(
                                                     children: [
+                                                      if (canSelect || isSelected) ...[
+                                                        InkWell(
+                                                          onTap: canSelect
+                                                              ? () {
+                                                                  setState(() {
+                                                                    if (isSelected) {
+                                                                      _selectedSubmissionNames.remove(item.name);
+                                                                    } else {
+                                                                      _selectedSubmissionNames.add(item.name!);
+                                                                    }
+                                                                  });
+                                                                }
+                                                              : null,
+                                                          child: Padding(
+                                                            padding: const EdgeInsets.only(right: 8),
+                                                            child: Icon(
+                                                              isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                                              size: 20,
+                                                              color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF94A3B8),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
                                                       Expanded(
                                                         child: Text(
                                                           item.hcpFullName ?? item.hcpName,
@@ -2358,9 +2640,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                         );
                                       }
                                       return Container(
-                                        decoration: const BoxDecoration(
-                                          color: Colors.white,
-                                          border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                                        decoration: BoxDecoration(
+                                          color: isSelected ? const Color(0xFFEFF6FF) : Colors.white,
+                                          border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
                                         ),
                                         child: InkWell(
                                           onTap: () => _showSubmissionDetail(item),
@@ -2368,7 +2650,29 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                                             child: Row(
                                               children: [
-                                                const Icon(Icons.check_box_outline_blank_rounded, size: 16, color: Color(0xFF94A3B8)),
+                                                InkWell(
+                                                  onTap: canSelect
+                                                      ? () {
+                                                          setState(() {
+                                                            if (isSelected) {
+                                                              _selectedSubmissionNames.remove(item.name);
+                                                            } else {
+                                                              _selectedSubmissionNames.add(item.name!);
+                                                            }
+                                                          });
+                                                        }
+                                                      : null,
+                                                  child: Padding(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                                                    child: Icon(
+                                                      isSelected ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                                      size: 16,
+                                                      color: isSelected
+                                                          ? const Color(0xFF2563EB)
+                                                          : (canSelect ? const Color(0xFF94A3B8) : const Color(0xFFCBD5E1)),
+                                                    ),
+                                                  ),
+                                                ),
                                                 const SizedBox(width: 10),
                                                 Expanded(
                                                   flex: 5,
@@ -2443,11 +2747,93 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: const Color(0xFF0B192C),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Add HCP Profile Submission', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        onPressed: _startNewSubmission,
+      bottomNavigationBar: (_selectedSubmissionNames.isNotEmpty && canApprove)
+          ? _buildBulkActionBar(apiService)
+          : null,
+      floatingActionButton: _selectedSubmissionNames.isNotEmpty
+          ? null
+          : FloatingActionButton.extended(
+              backgroundColor: const Color(0xFF0B192C),
+              icon: const Icon(Icons.add, color: Colors.white),
+              label: const Text('Add HCP Profile Submission', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              onPressed: _startNewSubmission,
+            ),
+    );
+  }
+
+  Widget _buildBulkActionBar(ApiService apiService) {
+    final selectedCount = _selectedSubmissionNames.length;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B192C),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 10,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2563EB),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '$selectedCount',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              '$selectedCount selected for approval',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5),
+            ),
+            const Spacer(),
+            TextButton(
+              onPressed: _isBulkApproving
+                  ? null
+                  : () {
+                      setState(() => _selectedSubmissionNames.clear());
+                    },
+              child: const Text('Deselect All', style: TextStyle(color: Colors.white70)),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF16A34A),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                elevation: 2,
+              ),
+              icon: _isBulkApproving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.check_circle_outline, size: 18),
+              label: Text(
+                _isBulkApproving ? 'Approving...' : 'Approve Selected ($selectedCount)',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              ),
+              onPressed: _isBulkApproving
+                  ? null
+                  : () {
+                      final selectedList = _submissions
+                          .where((s) => _selectedSubmissionNames.contains(s.name))
+                          .toList();
+                      _handleBulkApprove(selectedList);
+                    },
+            ),
+          ],
+        ),
       ),
     );
   }
