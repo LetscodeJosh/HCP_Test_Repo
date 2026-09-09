@@ -1004,6 +1004,10 @@ class ApiService extends ChangeNotifier {
           // Auto-detect selectedProgram from employee department/branch
           _autoDetectProgram();
 
+          // Pre-warm Territory and Sales Person caches
+          fetchTerritoryInfos();
+          fetchSalesPersons();
+
           notifyListeners();
         }
       }
@@ -1943,6 +1947,7 @@ class ApiService extends ChangeNotifier {
         if (cleanContacts.isNotEmpty) {
           payload['contacts'] = cleanContacts;
           payload['contact_info'] = cleanContacts;
+          payload['hcp_contact_info'] = cleanContacts;
         }
       }
 
@@ -3788,15 +3793,50 @@ class ApiService extends ChangeNotifier {
 
     if (effectiveHcpId.isNotEmpty && effectiveHcpId != 'NEW-HCP') {
       try {
+        final submittingUser = (fullSub.userId != null && fullSub.userId!.trim().isNotEmpty)
+            ? fullSub.userId!.trim()
+            : ((fullSub.medrepEmail != null && fullSub.medrepEmail!.trim().isNotEmpty)
+                ? fullSub.medrepEmail!.trim()
+                : (fullSub.owner ?? loggedInEmail ?? ''));
+
+        final targetProg = (fullSub.accountOrProgram != null && fullSub.accountOrProgram!.trim().isNotEmpty)
+            ? fullSub.accountOrProgram!.trim()
+            : selectedProgram;
+
+        // Dynamically resolve accurate territory code and territory manager
+        final resolvedTerritory = await resolveUserTerritory(
+          userEmail: submittingUser,
+          program: targetProg,
+          currentTerritory: fullSub.territory,
+          currentSalesPerson: fullSub.salesPerson,
+        );
+
+        // Keep HCP Profile Submission synchronized with accurate territory & manager
+        if (fullSub.name != null &&
+            (fullSub.territory != resolvedTerritory.territoryCode ||
+             fullSub.salesPerson != resolvedTerritory.territoryManager)) {
+          try {
+            final patchUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(fullSub.name!)}');
+            await http.put(
+              patchUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'territory': resolvedTerritory.territoryCode,
+                'sales_person': resolvedTerritory.territoryManager,
+              }),
+            );
+          } catch (e) {
+            print('[APPROVE] Non-blocking submission territory sync error: $e');
+          }
+        }
+
         await syncHcpAccount(
           hcpId: effectiveHcpId,
           hcpFullName: docFullName.isNotEmpty ? docFullName : 'Doctor',
-          program: (fullSub.accountOrProgram != null && fullSub.accountOrProgram!.isNotEmpty) ? fullSub.accountOrProgram! : selectedProgram,
-          territory: fullSub.territory ?? 'AD0110',
-          salesPerson: (fullSub.salesPerson != null && fullSub.salesPerson!.trim().isNotEmpty)
-              ? fullSub.salesPerson!.trim()
-              : getTerritoryManagerForTerritory(fullSub.territory ?? 'AD0110'),
-          userId: fullSub.userId ?? fullSub.medrepEmail ?? loggedInEmail,
+          program: targetProg,
+          territory: resolvedTerritory.territoryCode,
+          salesPerson: resolvedTerritory.territoryManager,
+          userId: submittingUser.isNotEmpty ? submittingUser : loggedInEmail,
           specialties: fullSub.specialties
               .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty && s.preferred)
               .map((s) => HcpAccountSpecialization(
@@ -4250,64 +4290,375 @@ class ApiService extends ChangeNotifier {
   List<TerritoryInfo> _territoryInfos = [];
   List<TerritoryInfo> get territoryInfos => _territoryInfos;
 
-  /// Retrieve list of rich Territory Info with Territory Managers from ERPNext
-  Future<List<TerritoryInfo>> fetchTerritoryInfos() async {
-    final url = Uri.parse(
-      '$baseUrl/api/resource/Territory?fields=["name","territory_name","territory_manager","sales_person","manager"]&limit=500',
-    );
-    try {
-      final response = await http.get(url, headers: _headers);
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final List<dynamic> dataList = body['data'] ?? [];
-        final List<TerritoryInfo> list = [];
-        for (var item in dataList) {
-          final tInfo = TerritoryInfo.fromJson(item);
-          if (tInfo.name.isNotEmpty && !list.any((t) => t.name == tInfo.name)) {
-            list.add(tInfo);
+  List<Map<String, dynamic>> _salesPersons = [];
+  List<Map<String, dynamic>> get salesPersons => _salesPersons;
+
+  /// Retrieve list of Sales Persons from ERPNext with local caching
+  Future<List<Map<String, dynamic>>> fetchSalesPersons({bool forceRefresh = false}) async {
+    if (!forceRefresh && _salesPersons.isNotEmpty) {
+      return _salesPersons;
+    }
+
+    if (!_isOffline && _sessionCookie != null) {
+      try {
+        final url = Uri.parse(
+          '$baseUrl/api/resource/Sales%20Person?fields=["name","sales_person_name","parent_sales_person","employee","is_group"]&limit=1000',
+        );
+        final response = await http.get(url, headers: _headers);
+        if (response.statusCode == 200) {
+          final body = jsonDecode(response.body);
+          final List<dynamic> dataList = body['data'] ?? [];
+          final List<Map<String, dynamic>> list = [];
+          for (var item in dataList) {
+            if (item is Map<String, dynamic>) {
+              list.add(item);
+            }
+          }
+          if (list.isNotEmpty) {
+            _salesPersons = list;
+            await _writeToCache('sales_persons_cache.json', jsonEncode(list));
+            return list;
           }
         }
-        if (list.isNotEmpty) {
-          _territoryInfos = list;
-          return list;
-        }
+      } catch (e) {
+        print('Fetch sales persons error: $e');
       }
-    } catch (e) {
-      print('Fetch territory infos error: $e');
+    }
+
+    // Cache fallback
+    final cached = await _readFromCache('sales_persons_cache.json');
+    if (cached != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(cached);
+        _salesPersons = decoded.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+        return _salesPersons;
+      } catch (_) {}
+    }
+
+    return _salesPersons;
+  }
+
+  /// Retrieve list of rich Territory Info with Territory Managers from ERPNext
+  Future<List<TerritoryInfo>> fetchTerritoryInfos({bool forceRefresh = false}) async {
+    if (!forceRefresh && _territoryInfos.isNotEmpty) {
+      return _territoryInfos;
+    }
+
+    if (!_isOffline && _sessionCookie != null) {
+      final url = Uri.parse(
+        '$baseUrl/api/resource/Territory?fields=["name","territory_name","territory_manager","parent_territory","is_group"]&limit=1000',
+      );
+      try {
+        final response = await http.get(url, headers: _headers);
+        if (response.statusCode == 200) {
+          final body = jsonDecode(response.body);
+          final List<dynamic> dataList = body['data'] ?? [];
+          final List<TerritoryInfo> list = [];
+          for (var item in dataList) {
+            final tInfo = TerritoryInfo.fromJson(item);
+            if (tInfo.name.isNotEmpty && !list.any((t) => t.name == tInfo.name)) {
+              list.add(tInfo);
+            }
+          }
+          if (list.isNotEmpty) {
+            _territoryInfos = list;
+            await _writeToCache('territory_infos_cache.json', jsonEncode(list.map((t) => t.toJson()).toList()));
+            return list;
+          }
+        }
+      } catch (e) {
+        print('Fetch territory infos error: $e');
+      }
+    }
+
+    // Cache fallback
+    final cached = await _readFromCache('territory_infos_cache.json');
+    if (cached != null) {
+      try {
+        final List<dynamic> decoded = jsonDecode(cached);
+        _territoryInfos = decoded.map((e) => TerritoryInfo.fromJson(e as Map<String, dynamic>)).toList();
+        if (_territoryInfos.isNotEmpty) {
+          return _territoryInfos;
+        }
+      } catch (_) {}
     }
 
     final fallback = [
-      TerritoryInfo(name: 'AD0110', territoryName: 'AD0110 - Manila North', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'AD0120', territoryName: 'AD0120 - Manila South', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'AD0130', territoryName: 'AD0130 - North Luzon', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'AD0140', territoryName: 'AD0140 - South Luzon', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'AD0150', territoryName: 'AD0150 - VisMin', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'CORE01', territoryName: 'CORE01 - Central Operations', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'CORE02', territoryName: 'CORE02 - Regional Operations', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'NCR-01', territoryName: 'NCR-01 - District 1', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'NCR-02', territoryName: 'NCR-02 - District 2', territoryManager: 'Jorge Mengorio'),
-      TerritoryInfo(name: 'All Territories', territoryName: 'All Territories', territoryManager: 'Jorge Mengorio'),
+      TerritoryInfo(name: 'BA1-01', territoryName: 'BA1-01', territoryManager: 'KC Cassandra Enriquez (BA1-01)', parentTerritory: 'BA1 - SOUTH GMA/BACOLOD/ILOILO'),
+      TerritoryInfo(name: 'BA2-05', territoryName: 'BA2-05', territoryManager: 'Ivy Marie Mateo (BA2-05)', parentTerritory: 'BA2 - WEST GMA'),
+      TerritoryInfo(name: 'AD0101', territoryName: 'AD0101', territoryManager: 'GRAZIEL RIVO (AD0101)', parentTerritory: 'AD1 - GMA/NORTH LUZON/CENTRAL LUZON'),
+      TerritoryInfo(name: 'AD0107', territoryName: 'AD0107', territoryManager: 'LOUIE GLENN MINABES (AD0107)', parentTerritory: 'AD0105 (COOR)'),
+      TerritoryInfo(name: 'AD0110', territoryName: 'AD0110', territoryManager: 'JORGE MENGORIO (AD0110)', parentTerritory: 'AD2 - GMA/SOUTH LUZON'),
+      TerritoryInfo(name: 'AA1ADC', territoryName: 'AA1ADC', territoryManager: 'MARY GRACE DIPASUPIL (ADC Samples PHSR AA - AA1ADC)', parentTerritory: 'Abbott Samples PHSR'),
+      TerritoryInfo(name: 'RND02', territoryName: 'RND02', territoryManager: '', parentTerritory: 'Abbott Samples RND'),
+      TerritoryInfo(name: 'RM101', territoryName: 'RM101', territoryManager: '', parentTerritory: 'RiteMed Territories'),
+      TerritoryInfo(name: 'VIV-01', territoryName: 'VIV-01', territoryManager: '', parentTerritory: 'Vivaro Territories'),
+      TerritoryInfo(name: 'CORE01', territoryName: 'CORE01', territoryManager: '', parentTerritory: 'All Territories'),
+      TerritoryInfo(name: 'CORE02', territoryName: 'CORE02', territoryManager: '', parentTerritory: 'All Territories'),
     ];
     _territoryInfos = fallback;
     return fallback;
   }
 
+  /// Get leaf territories filtered for a given program/branch
+  List<TerritoryInfo> getLeafTerritoriesForProgram(String program) {
+    if (_territoryInfos.isEmpty) {
+      return [];
+    }
+    final pLower = program.toLowerCase().trim();
+    final leaves = _territoryInfos.where((t) => !t.isGroup && t.name.isNotEmpty && t.name.toLowerCase() != 'all territories').toList();
+
+    if (pLower.contains('bayer')) {
+      final bayer = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('BA') || n.startsWith('BAS') || parent.contains('bayer') || parent.startsWith('ba');
+      }).toList();
+      if (bayer.isNotEmpty) return bayer;
+    }
+
+    if (pLower.contains('abbott diabetes') || pLower.contains('abbott dc') || pLower == 'adc') {
+      final adc = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('AD') || parent.contains('abbott dc');
+      }).toList();
+      if (adc.isNotEmpty) return adc;
+    }
+
+    if (pLower.contains('phsr')) {
+      final phsr = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('AA') || parent.contains('phsr');
+      }).toList();
+      if (phsr.isNotEmpty) return phsr;
+    }
+
+    if (pLower.contains('rnd')) {
+      final rnd = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('RND') || parent.contains('rnd');
+      }).toList();
+      if (rnd.isNotEmpty) return rnd;
+    }
+
+    if (pLower.contains('ritemed')) {
+      final rm = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('RM') || parent.contains('ritemed') || parent.contains('ngma') || parent.contains('sgma');
+      }).toList();
+      if (rm.isNotEmpty) return rm;
+    }
+
+    if (pLower.contains('vivaro')) {
+      final viv = leaves.where((t) {
+        final n = t.name.toUpperCase();
+        final parent = (t.parentTerritory ?? '').toLowerCase();
+        return n.startsWith('VIV') || parent.contains('vivaro');
+      }).toList();
+      if (viv.isNotEmpty) return viv;
+    }
+
+    if (pLower.contains('corenergy')) {
+      final core = leaves.where((t) => t.name.toUpperCase().startsWith('CORE')).toList();
+      if (core.isNotEmpty) return core;
+    }
+
+    // Default to all leaf territories if program not specifically matched
+    return leaves;
+  }
+
   /// Get the assigned territory manager for a given territory code
   String getTerritoryManagerForTerritory(String territoryCode) {
+    if (territoryCode.trim().isEmpty) return '';
     if (_territoryInfos.isEmpty) {
       fetchTerritoryInfos(); // fire-and-forget population
     }
     final match = _territoryInfos.firstWhere(
-      (t) => t.name.toLowerCase() == territoryCode.toLowerCase() || t.territoryName.toLowerCase() == territoryCode.toLowerCase(),
-      orElse: () => TerritoryInfo(name: territoryCode, territoryName: territoryCode, territoryManager: 'Jorge Mengorio'),
+      (t) => t.name.toLowerCase() == territoryCode.toLowerCase().trim() || t.territoryName.toLowerCase() == territoryCode.toLowerCase().trim(),
+      orElse: () => TerritoryInfo(name: territoryCode, territoryName: territoryCode, territoryManager: ''),
     );
-    return match.territoryManager.isNotEmpty ? match.territoryManager : 'Jorge Mengorio';
+    return match.territoryManager;
   }
 
-  /// Retrieve list of Territories from ERPNext
-  Future<List<String>> fetchTerritories() async {
+  /// Dynamically resolve the accurate Territory Code and Territory Manager for a user and program
+  Future<ResolvedTerritory> resolveUserTerritory({
+    String? userEmail,
+    String? userName,
+    String? program,
+    String? currentTerritory,
+    String? currentSalesPerson,
+  }) async {
+    if (_territoryInfos.isEmpty) {
+      await fetchTerritoryInfos();
+    }
+    if (_salesPersons.isEmpty) {
+      await fetchSalesPersons();
+    }
+
+    final effectiveEmail = (userEmail != null && userEmail.trim().isNotEmpty)
+        ? userEmail.trim().toLowerCase()
+        : (loggedInEmail ?? '').toLowerCase();
+
+    // Fetch Employee profile if we have an email but not full name
+    String effectiveName = (userName != null && userName.trim().isNotEmpty)
+        ? userName.trim()
+        : (loggedInFullName ?? '');
+
+    String empId = (employeeId ?? '').trim();
+    if (effectiveEmail.isNotEmpty && (effectiveName.isEmpty || empId.isEmpty)) {
+      final empDoc = await fetchEmployeeDesignation(effectiveEmail);
+      if (empDoc != null) {
+        if (empDoc['employee_name'] != null && effectiveName.isEmpty) {
+          effectiveName = empDoc['employee_name'].toString().trim();
+        }
+        if (empDoc['name'] != null && empId.isEmpty) {
+          empId = empDoc['name'].toString().trim();
+        }
+      }
+    }
+
+    final effectiveProgram = (program != null && program.trim().isNotEmpty)
+        ? program.trim()
+        : selectedProgram;
+
+    // 1. Check Sales Person records by linked Employee ID
+    if (empId.isNotEmpty) {
+      final spByEmp = _salesPersons.firstWhere(
+        (sp) => sp['employee']?.toString().trim().toLowerCase() == empId.toLowerCase(),
+        orElse: () => <String, dynamic>{},
+      );
+      if (spByEmp.isNotEmpty) {
+        final spName = (spByEmp['name'] ?? spByEmp['sales_person_name'] ?? '').toString().trim();
+        final match = RegExp(r'\(([^)]+)\)').firstMatch(spName);
+        if (match != null) {
+          final terrCode = match.group(1)!.trim();
+          final tInfo = _territoryInfos.firstWhere(
+            (t) => t.name.toLowerCase() == terrCode.toLowerCase(),
+            orElse: () => TerritoryInfo(name: terrCode, territoryName: terrCode, territoryManager: spName),
+          );
+          return ResolvedTerritory(
+            territoryCode: tInfo.name,
+            territoryName: tInfo.territoryName,
+            territoryManager: tInfo.territoryManager.isNotEmpty ? tInfo.territoryManager : spName,
+          );
+        }
+      }
+    }
+
+    // 2. Check Sales Person records by User Full Name
+    if (effectiveName.isNotEmpty) {
+      final nameLower = effectiveName.toLowerCase();
+      final nameTokens = nameLower.split(RegExp(r'[\s\-]+')).where((t) => t.length >= 3).toList();
+
+      for (final sp in _salesPersons) {
+        final spName = (sp['name'] ?? sp['sales_person_name'] ?? '').toString().trim();
+        final spLower = spName.toLowerCase();
+
+        bool isMatch = false;
+        if (spLower.contains(nameLower) || nameLower.contains(spLower)) {
+          isMatch = true;
+        } else if (nameTokens.isNotEmpty && nameTokens.where((tok) => spLower.contains(tok)).length >= 2) {
+          isMatch = true;
+        }
+
+        if (isMatch) {
+          final match = RegExp(r'\(([^)]+)\)').firstMatch(spName);
+          if (match != null) {
+            final terrCode = match.group(1)!.trim();
+            final tInfo = _territoryInfos.firstWhere(
+              (t) => t.name.toLowerCase() == terrCode.toLowerCase(),
+              orElse: () => TerritoryInfo(name: terrCode, territoryName: terrCode, territoryManager: spName),
+            );
+            return ResolvedTerritory(
+              territoryCode: tInfo.name,
+              territoryName: tInfo.territoryName,
+              territoryManager: tInfo.territoryManager.isNotEmpty ? tInfo.territoryManager : spName,
+            );
+          }
+        }
+      }
+
+      // Check Territory records where territory_manager matches effectiveName
+      for (final t in _territoryInfos) {
+        if (t.isGroup) continue;
+        final tmLower = t.territoryManager.toLowerCase();
+        if (tmLower.contains(nameLower) || (nameTokens.isNotEmpty && nameTokens.where((tok) => tmLower.contains(tok)).length >= 2)) {
+          return ResolvedTerritory(
+            territoryCode: t.name,
+            territoryName: t.territoryName,
+            territoryManager: t.territoryManager,
+          );
+        }
+      }
+    }
+
+    // 3. Check existing territory from submission/account
+    if (currentTerritory != null && currentTerritory.trim().isNotEmpty) {
+      final cCode = currentTerritory.trim();
+      final pLower = effectiveProgram.toLowerCase();
+      final isAbbottProg = pLower.contains('abbott');
+
+      // Detect if currentTerritory was a stale default bug (AD0110 on any non-Abbott program)
+      bool isStaleDefault = false;
+      if (cCode.toUpperCase() == 'AD0110' && !isAbbottProg) {
+        isStaleDefault = true;
+      }
+
+      if (!isStaleDefault) {
+        final matched = _territoryInfos.firstWhere(
+          (t) => t.name.toLowerCase() == cCode.toLowerCase() && !t.isGroup,
+          orElse: () => TerritoryInfo(name: '', territoryName: '', territoryManager: ''),
+        );
+        if (matched.name.isNotEmpty) {
+          final mgr = (currentSalesPerson != null && currentSalesPerson.trim().isNotEmpty && currentSalesPerson.trim() != 'Jorge Mengorio')
+              ? currentSalesPerson.trim()
+              : (matched.territoryManager.isNotEmpty ? matched.territoryManager : effectiveName);
+          return ResolvedTerritory(
+            territoryCode: matched.name,
+            territoryName: matched.territoryName,
+            territoryManager: mgr.isNotEmpty ? mgr : effectiveName,
+          );
+        }
+      }
+    }
+
+    // 4. Fallback by Program Branch
+    final progLeaves = getLeafTerritoriesForProgram(effectiveProgram);
+    if (progLeaves.isNotEmpty) {
+      final firstLeaf = progLeaves.first;
+      final mgr = firstLeaf.territoryManager.isNotEmpty
+          ? firstLeaf.territoryManager
+          : (effectiveName.isNotEmpty ? effectiveName : firstLeaf.name);
+      return ResolvedTerritory(
+        territoryCode: firstLeaf.name,
+        territoryName: firstLeaf.territoryName,
+        territoryManager: mgr,
+      );
+    }
+
+    // Ultimate fallback
+    return ResolvedTerritory(
+      territoryCode: 'AD0110',
+      territoryName: 'AD0110',
+      territoryManager: effectiveName.isNotEmpty ? effectiveName : 'Jorge Mengorio',
+    );
+  }
+
+  /// Retrieve list of Territories from ERPNext (optionally filtered by program)
+  Future<List<String>> fetchTerritories({String? program}) async {
     final infos = await fetchTerritoryInfos();
-    return infos.map((t) => t.name).toList();
+    if (program != null && program.trim().isNotEmpty && program != 'All') {
+      final filtered = getLeafTerritoriesForProgram(program);
+      if (filtered.isNotEmpty) {
+        return filtered.map((t) => t.name).toList();
+      }
+    }
+    final leaves = infos.where((t) => !t.isGroup && t.name.isNotEmpty && t.name.toLowerCase() != 'all territories').toList();
+    return leaves.isNotEmpty ? leaves.map((t) => t.name).toList() : infos.map((t) => t.name).toList();
   }
 
   /// Retrieve list of Programs / Branches from ERPNext

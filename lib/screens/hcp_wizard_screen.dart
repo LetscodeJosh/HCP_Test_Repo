@@ -54,7 +54,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
   // Others Tab State
   late TextEditingController _territoryManagerController;
-  String _selectedTerritory = 'AD0110';
+  String _selectedTerritory = '';
   List<String> _territories = [];
   DateTime _submissionDate = DateTime.now();
   String _applicationStatus = 'Not Applied';
@@ -82,7 +82,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _selectedPractice = widget.doctor?.hcpPractice ?? 'Both';
     }
 
-    _territoryManagerController = TextEditingController(text: 'Jorge Mengorio');
+    _territoryManagerController = TextEditingController();
     _hcpFullNameController = TextEditingController(
       text: (widget.doctor != null && !widget.isNewDoctor) ? '${widget.doctor!.firstName} ${widget.doctor!.middleName != null && widget.doctor!.middleName != '-' ? widget.doctor!.middleName! + ' ' : ''}${widget.doctor!.lastName}' : '',
     );
@@ -374,8 +374,16 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       final specs = await apiService.fetchSpecializations().catchError((_) => <Specialization>[]);
       final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
       final templates = await apiService.fetchSurveyTemplates().catchError((_) => <HcpSurveyTemplate>[]);
-      final territories = await apiService.fetchTerritories().catchError((_) => <String>[]);
       final programs = await apiService.fetchPrograms().catchError((_) => <String>[]);
+
+      // Automatically populate program based on user's affiliation / role
+      final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
+          ? apiService.selectedProgram
+          : (_programs.isNotEmpty ? _programs.first : 'Abbott Diabetes Care');
+
+      // Dynamically resolve territory and manager based on user and program
+      final resolvedTerritory = await apiService.resolveUserTerritory(program: userProg);
+      final progTerritories = await apiService.fetchTerritories(program: userProg).catchError((_) => <String>[]);
 
       setState(() {
         _allDoctors = doctors;
@@ -383,24 +391,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         _specializations = specs;
         _hcpTypes = types;
         _allSurveyTemplates = templates;
-        _territories = territories;
         _programs = programs;
-
-        // Automatically populate program based on user's affiliation / role
-        final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
-            ? apiService.selectedProgram
-            : (_programs.isNotEmpty ? _programs.first : 'Abbott Diabetes Care');
         _selectedProgram = userProg;
 
-        // Automatically populate territory based on program
-        if (_selectedProgram.toLowerCase().contains('corenergy')) {
-          _selectedTerritory = _territories.firstWhere((t) => t.toLowerCase().contains('core'), orElse: () => 'CORE01');
-        } else {
-          _selectedTerritory = _territories.firstWhere((t) => t.startsWith('AD') || t.startsWith('NCR'), orElse: () => (_territories.isNotEmpty ? _territories.first : 'AD0110'));
-        }
-
-        // Automatically populate territory manager
-        _territoryManagerController.text = apiService.getTerritoryManagerForTerritory(_selectedTerritory);
+        _territories = progTerritories.isNotEmpty ? progTerritories : [resolvedTerritory.territoryCode];
+        _selectedTerritory = resolvedTerritory.territoryCode;
+        _territoryManagerController.text = resolvedTerritory.territoryManager;
 
         if (_hcpTypes.isNotEmpty && (_selectedHcpType == null || _selectedHcpType!.isEmpty)) {
           _selectedHcpType = _hcpTypes.first.name;
@@ -4216,18 +4212,75 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
             ),
             items: progList.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-            onChanged: (val) {
+            onChanged: (val) async {
               if (val != null) {
                 setState(() {
                   _selectedProgram = val;
                 });
                 apiService.setProgram(val);
                 _updateActiveSurveyForProgram(val);
+                final resolved = await apiService.resolveUserTerritory(program: val);
+                final progTerrs = await apiService.fetchTerritories(program: val);
+                if (mounted) {
+                  setState(() {
+                    _territories = progTerrs.isNotEmpty ? progTerrs : [resolved.territoryCode];
+                    _selectedTerritory = resolved.territoryCode;
+                    _territoryManagerController.text = resolved.territoryManager;
+                  });
+                }
                 if (_selectedDoctor != null && !_isCreatingNewDoctor) {
                   _prepopulateDoctorData(_selectedDoctor!);
                 }
               }
             },
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: DropdownButtonFormField<String>(
+                  value: _territories.contains(_selectedTerritory)
+                      ? _selectedTerritory
+                      : (_territories.isNotEmpty ? _territories.first : null),
+                  dropdownColor: Colors.white,
+                  style: const TextStyle(color: Color(0xFF0F172A)),
+                  decoration: InputDecoration(
+                    labelText: 'Territory Code',
+                    labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                    filled: true,
+                    fillColor: Colors.white,
+                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                  ),
+                  items: _territories.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _selectedTerritory = val;
+                        final mgr = apiService.getTerritoryManagerForTerritory(val);
+                        _territoryManagerController.text = mgr.isNotEmpty ? mgr : (apiService.loggedInFullName ?? val);
+                      });
+                    }
+                  },
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: _territoryManagerController,
+                  readOnly: true,
+                  style: const TextStyle(color: Color(0xFF0F172A)),
+                  decoration: InputDecoration(
+                    labelText: 'Territory Manager',
+                    labelStyle: const TextStyle(color: Color(0xFF64748B)),
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
+                    focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 20),
           if (_activeSurvey == null || _activeSurvey!.questions.isEmpty)

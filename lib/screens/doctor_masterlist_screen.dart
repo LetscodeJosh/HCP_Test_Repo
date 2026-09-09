@@ -858,6 +858,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                       }
                     }
 
+                    final resolvedTerritory = await apiService.resolveUserTerritory(program: apiService.selectedProgram);
+
                     if (apiService.isMedRep) {
                       final submission = HcpProfileSubmission(
                         hcpName: '',
@@ -871,8 +873,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         specialties: reqSpec.isNotEmpty ? [SubmissionSpecialty(hcpSpecialty: reqSpec, preferred: true)] : [],
                         workplaces: reqWork.isNotEmpty ? [SubmissionWorkplace(hcpWorkplace: reqWork, preferred: true)] : [],
                         accountOrProgram: LocationResolver.resolveProgramBranch(apiService.selectedProgram),
-                        territory: 'AD0110',
-                        salesPerson: apiService.getTerritoryManagerForTerritory('AD0110'),
+                        territory: resolvedTerritory.territoryCode,
+                        salesPerson: resolvedTerritory.territoryManager,
                         userId: apiService.loggedInEmail,
                         medrepEmail: apiService.loggedInEmail,
                         submissionDate: DateTime.now().toIso8601String().split('.').first,
@@ -908,8 +910,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         hcpId: savedDoctor.name ?? 'NEW-HCP',
                         hcpFullName: computedFullName,
                         program: apiService.selectedProgram,
-                        territory: 'AD0110',
-                        salesPerson: apiService.getTerritoryManagerForTerritory('AD0110'),
+                        territory: resolvedTerritory.territoryCode,
+                        salesPerson: resolvedTerritory.territoryManager,
                         userId: apiService.loggedInEmail,
                       );
 
