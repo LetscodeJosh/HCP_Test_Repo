@@ -22,6 +22,18 @@ class Hcp {
   final String? institution;
   final String? profileLastUpdated;
 
+  String get fullName {
+    if (hcpFullName != null && hcpFullName!.trim().isNotEmpty && !hcpFullName!.trim().startsWith('HCP-')) {
+      return hcpFullName!.trim();
+    }
+    final parts = [
+      if (firstName.trim().isNotEmpty) firstName.trim(),
+      if (middleName != null && middleName!.trim().isNotEmpty && middleName!.trim() != '-') middleName!.trim(),
+      if (lastName.trim().isNotEmpty) lastName.trim(),
+    ];
+    return parts.isNotEmpty ? parts.join(' ') : (name ?? '');
+  }
+
   Hcp({
     this.name,
     this.hcpFullName,

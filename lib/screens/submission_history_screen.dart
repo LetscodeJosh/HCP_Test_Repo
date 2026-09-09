@@ -304,29 +304,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   bool _matchesProgram(HcpProfileSubmission item, String progFilter) {
-    if (progFilter.isEmpty || progFilter.toLowerCase() == 'all') return true;
-    final prog = progFilter.toLowerCase().trim();
-    final subProg = (item.accountOrProgram ?? '').toLowerCase().trim();
-    if (subProg.isEmpty) return true;
-    return subProg.contains(prog) ||
-        prog.contains(subProg) ||
-        (prog.contains('abbott') && subProg.contains('abbott')) ||
-        (prog.contains('adc') && subProg.contains('abbott')) ||
-        (prog.contains('bayer') && subProg.contains('bayer')) ||
-        (prog.contains('bch') && subProg.contains('bayer')) ||
-        (prog.contains('corenergy') && subProg.contains('corenergy')) ||
-        (prog.contains('ritemed') && subProg.contains('ritemed')) ||
-        (prog.contains('vivaro') && subProg.contains('vivaro')) ||
-        (prog.contains('exeltis') && subProg.contains('exeltis')) ||
-        (prog.contains('taisho') && subProg.contains('taisho')) ||
-        (prog.contains('fonterra') && subProg.contains('fonterra')) ||
-        (prog.contains('biomerieux') && subProg.contains('biomerieux')) ||
-        (prog.contains('nes') && subProg.contains('nes')) ||
-        (prog.contains('nurturemed') && subProg.contains('nurturemed')) ||
-        (prog.contains('pch') && subProg.contains('pch')) ||
-        (prog.contains('pharmabest') && subProg.contains('pharmabest')) ||
-        (prog.contains('tstacco') && subProg.contains('tstacco')) ||
-        (prog.contains('tstacc1') && subProg.contains('tstacc1'));
+    return LocationResolver.isSameProgram(item.accountOrProgram, progFilter);
   }
 
   int _getProgramTotalCount(ApiService apiService) {
@@ -342,8 +320,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       if (userProg.isEmpty || userProg.toLowerCase() == 'all') {
         return _submissions.length;
       }
-      final matches = _submissions.where((s) => _matchesProgram(s, userProg)).length;
-      return matches > 0 ? matches : _submissions.length;
+      return _submissions.where((s) => _matchesProgram(s, userProg)).length;
     }
   }
 
@@ -406,10 +383,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
           ? apiService.selectedProgram
           : _programFilter;
       if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
-        final matches = list.where((item) => _matchesProgram(item, userProg)).toList();
-        if (matches.isNotEmpty) {
-          list = matches;
-        }
+        list = list.where((item) => _matchesProgram(item, userProg)).toList();
       }
     }
 

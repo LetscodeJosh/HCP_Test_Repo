@@ -94,30 +94,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
   }
 
   bool _matchesProgram(HcpAccount acc, String progFilter) {
-    if (progFilter.isEmpty || progFilter.toLowerCase() == 'all') return true;
-    final p = progFilter.toLowerCase().trim();
-    final accP = acc.accountName.toLowerCase().trim();
-    if (accP.isEmpty) return true;
-    return accP == p ||
-        accP.contains(p) ||
-        p.contains(accP) ||
-        (p.contains('abbott') && accP.contains('abbott')) ||
-        (p.contains('adc') && accP.contains('abbott')) ||
-        (p.contains('bayer') && accP.contains('bayer')) ||
-        (p.contains('bch') && accP.contains('bayer')) ||
-        (p.contains('corenergy') && accP.contains('corenergy')) ||
-        (p.contains('ritemed') && accP.contains('ritemed')) ||
-        (p.contains('vivaro') && accP.contains('vivaro')) ||
-        (p.contains('exeltis') && accP.contains('exeltis')) ||
-        (p.contains('taisho') && accP.contains('taisho')) ||
-        (p.contains('fonterra') && accP.contains('fonterra')) ||
-        (p.contains('biomerieux') && accP.contains('biomerieux')) ||
-        (p.contains('nes') && accP.contains('nes')) ||
-        (p.contains('nurturemed') && accP.contains('nurturemed')) ||
-        (p.contains('pch') && accP.contains('pch')) ||
-        (p.contains('pharmabest') && accP.contains('pharmabest')) ||
-        (p.contains('tstacco') && accP.contains('tstacco')) ||
-        (p.contains('tstacc1') && accP.contains('tstacc1'));
+    return LocationResolver.isSameProgram(acc.accountOrProgram, progFilter);
   }
 
   int _getProgramTotalCount(ApiService apiService) {
@@ -128,9 +105,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
       return _allAccounts.where((acc) => _matchesProgram(acc, _programFilter)).length;
     } else {
       final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
-          ? apiService.selectedProgram.toLowerCase().trim()
-          : _programFilter.toLowerCase().trim();
-      if (userProg.isEmpty || userProg == 'all') {
+          ? apiService.selectedProgram
+          : _programFilter;
+      if (userProg.isEmpty || userProg.toLowerCase() == 'all') {
         return _allAccounts.length;
       }
       return _allAccounts.where((acc) => _matchesProgram(acc, userProg)).length;
@@ -149,9 +126,9 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
         } else {
           // Manager and MedRep are strictly locked to their program
           final userProg = (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All')
-              ? apiService.selectedProgram.toLowerCase().trim()
-              : _programFilter.toLowerCase().trim();
-          if (userProg.isNotEmpty && userProg != 'all' && !_matchesProgram(acc, userProg)) {
+              ? apiService.selectedProgram
+              : _programFilter;
+          if (userProg.isNotEmpty && userProg.toLowerCase() != 'all' && !_matchesProgram(acc, userProg)) {
             return false;
           }
         }

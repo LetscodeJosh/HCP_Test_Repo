@@ -26,12 +26,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   List<Institution> _institutions = [];
   List<Specialization> _specializations = [];
   List<HcpProfileSubmission> _submissions = [];
-
-  Map<String, int> _specialtyCounts = {};
-  Map<String, int> _subSpecialtyCounts = {};
-  int _ncrCount = 0;
-  int _luzonCount = 0;
-  int _visminCount = 0;
+  List<HcpAccount> _hcpAccounts = [];
 
   @override
   void initState() {
@@ -153,102 +148,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         }),
       );
 
-      final Map<String, String> specLookup = {};
-      for (var s in specializations) {
-        specLookup[s.name] = s.specialty;
-      }
 
-      final Map<String, int> specMap = {};
-      final Map<String, int> subSpecMap = {};
-
-      for (var d in doctors) {
-        if (d.specialties.isNotEmpty) {
-          for (var s in d.specialties) {
-            final rawSpec = s.hcpSpecialty.isNotEmpty ? s.hcpSpecialty : 'General Practice';
-            final specName = specLookup[rawSpec] ?? rawSpec;
-            specMap[specName] = (specMap[specName] ?? 0) + 1;
-
-            if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') {
-              final subSpecName = specLookup[s.subSpecialty!] ?? s.subSpecialty!;
-              subSpecMap[subSpecName] = (subSpecMap[subSpecName] ?? 0) + 1;
-            }
-          }
-        } else {
-          specMap['General Practice'] = (specMap['General Practice'] ?? 0) + 1;
-        }
-      }
-
-      final Map<String, Institution> instLookup = {};
-      for (var inst in institutions) {
-        instLookup[inst.name] = inst;
-      }
-
-      int ncr = 0;
-      int luzon = 0;
-      int vismin = 0;
-
-      for (var d in doctors) {
-        final Set<String> doctorTerritories = {};
-
-        if (d.provinceName != null && d.provinceName!.isNotEmpty) {
-          doctorTerritories.add(_determineTerritoryGroup(d.provinceName!));
-        }
-        if (d.regionName != null && d.regionName!.isNotEmpty) {
-          doctorTerritories.add(_determineTerritoryGroup(d.regionName!));
-        }
-
-        if (d.workplaces.isNotEmpty) {
-          for (var w in d.workplaces) {
-            if (w.address != null && w.address!.isNotEmpty) {
-              doctorTerritories.add(_determineTerritoryGroup(w.address!));
-            }
-            if (w.workplace.isNotEmpty) {
-              doctorTerritories.add(_determineTerritoryGroup(w.workplace));
-              final inst = instLookup[w.workplace];
-              if (inst != null) {
-                if (inst.provinceName != null && inst.provinceName!.isNotEmpty) {
-                  doctorTerritories.add(_determineTerritoryGroup(inst.provinceName!));
-                }
-                if (inst.regionName != null && inst.regionName!.isNotEmpty) {
-                  doctorTerritories.add(_determineTerritoryGroup(inst.regionName!));
-                }
-                if (inst.cityMunicipality != null && inst.cityMunicipality!.isNotEmpty) {
-                  doctorTerritories.add(_determineTerritoryGroup(inst.cityMunicipality!));
-                }
-              }
-            }
-          }
-        }
-
-        if (doctorTerritories.isEmpty) {
-          doctorTerritories.add('NCR');
-        }
-
-        if (doctorTerritories.contains('NCR')) ncr++;
-        if (doctorTerritories.contains('LUZON')) luzon++;
-        if (doctorTerritories.contains('VISMIN')) vismin++;
-      }
-
-      if (doctors.isEmpty && submissions.isNotEmpty) {
-        for (var sub in submissions) {
-          final Set<String> subTerritories = {};
-          if (sub.provinceName != null && sub.provinceName!.isNotEmpty) {
-            subTerritories.add(_determineTerritoryGroup(sub.provinceName!));
-          }
-          if (sub.workplaces.isNotEmpty) {
-            for (var w in sub.workplaces) {
-              if (w.workplaceName != null && w.workplaceName!.isNotEmpty) {
-                subTerritories.add(_determineTerritoryGroup(w.workplaceName!));
-              }
-            }
-          }
-          if (subTerritories.isEmpty) subTerritories.add('NCR');
-
-          if (subTerritories.contains('NCR')) ncr++;
-          if (subTerritories.contains('LUZON')) luzon++;
-          if (subTerritories.contains('VISMIN')) vismin++;
-        }
-      }
 
       if (mounted) {
         setState(() {
@@ -256,11 +156,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
           _institutions = institutions;
           _specializations = specializations.where((s) => !s.isGroup).toList();
           _submissions = submissions;
-          _specialtyCounts = specMap;
-          _subSpecialtyCounts = subSpecMap;
-          _ncrCount = ncr;
-          _luzonCount = luzon;
-          _visminCount = vismin;
+          _hcpAccounts = hcpAccounts;
           _isLoading = false;
         });
       }
@@ -276,59 +172,72 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   Widget build(BuildContext context) {
     final apiService = Provider.of<ApiService>(context);
 
-    // Scope submissions to program for MedRep and Manager; Admin sees all
+    // 1. Strict Program-Scoped Submissions
     List<HcpProfileSubmission> progSubmissions = List.from(_submissions);
     if (!apiService.isAdmin) {
-      final userProg = apiService.selectedProgram.toLowerCase().trim();
-      if (userProg.isNotEmpty && userProg != 'all') {
+      final userProg = apiService.selectedProgram.trim();
+      if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
         progSubmissions = progSubmissions.where((s) {
-          final subProg = (s.accountOrProgram ?? '').toLowerCase().trim();
-          if (subProg.isEmpty) return true;
-          return subProg.contains(userProg) ||
-              userProg.contains(subProg) ||
-              (userProg.contains('abbott') && subProg.contains('abbott')) ||
-              (userProg.contains('adc') && subProg.contains('abbott')) ||
-              (userProg.contains('bayer') && subProg.contains('bayer')) ||
-              (userProg.contains('bch') && subProg.contains('bayer')) ||
-              (userProg.contains('corenergy') && subProg.contains('corenergy')) ||
-              (userProg.contains('ritemed') && subProg.contains('ritemed')) ||
-              (userProg.contains('vivaro') && subProg.contains('vivaro')) ||
-              (userProg.contains('exeltis') && subProg.contains('exeltis')) ||
-              (userProg.contains('taisho') && subProg.contains('taisho')) ||
-              (userProg.contains('fonterra') && subProg.contains('fonterra')) ||
-              (userProg.contains('biomerieux') && subProg.contains('biomerieux')) ||
-              (userProg.contains('nes') && subProg.contains('nes')) ||
-              (userProg.contains('nurturemed') && subProg.contains('nurturemed')) ||
-              (userProg.contains('pch') && subProg.contains('pch')) ||
-              (userProg.contains('pharmabest') && subProg.contains('pharmabest')) ||
-              (userProg.contains('tstacco') && subProg.contains('tstacco')) ||
-              (userProg.contains('tstacc1') && subProg.contains('tstacc1'));
+          return LocationResolver.isSameProgram(s.accountOrProgram, userProg);
         }).toList();
       }
     }
 
-    List<HcpProfileSubmission> mySubmissions = progSubmissions;
-    if (apiService.isMedRep) {
-      final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
-      final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
-      final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+    // 2. Strict Program-Scoped Doctors (via HCP Account and approved program submissions)
+    List<Hcp> programDoctors = List.from(_doctors);
+    if (!apiService.isAdmin) {
+      final userProg = apiService.selectedProgram.trim();
+      if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
+        final Set<String> progDocIds = {};
+        final Set<String> progDocNames = {};
 
-      mySubmissions = progSubmissions.where((item) {
-        final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
-        final sSales = (item.salesPerson ?? '').toLowerCase().trim();
-        if (sEmail.isNotEmpty && email.isNotEmpty) {
-          if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
-        }
-        if (sSales.isNotEmpty && fullName.isNotEmpty) {
-          if (sSales == fullName || sSales.contains(fullName) || fullName.contains(sSales)) return true;
-          final salesTokens = sSales.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
-          final matchingTokens = salesTokens.where((t) => userTokens.contains(t)).length;
-          if (matchingTokens >= 2 || (salesTokens.length == 1 && userTokens.contains(salesTokens.first))) {
-            return true;
+        for (final acc in _hcpAccounts) {
+          if (LocationResolver.isSameProgram(acc.accountOrProgram, userProg)) {
+            if (acc.hcp != null && acc.hcp!.isNotEmpty) {
+              progDocIds.add(acc.hcp!.toLowerCase().trim());
+            }
+            if (acc.name != null && acc.name!.isNotEmpty) {
+              progDocIds.add(acc.name!.toLowerCase().trim());
+            }
+            if (acc.hcpName != null && acc.hcpName!.isNotEmpty) {
+              progDocNames.add(acc.hcpName!.toLowerCase().trim());
+            }
           }
         }
-        return false;
-      }).toList();
+
+        for (final sub in progSubmissions) {
+          final state = (sub.workflowState ?? sub.status ?? '').toLowerCase();
+          final isCommitted = state == 'approved' || state == 'processed' || sub.docstatus == 1 || sub.applicationStatus == 'Applied';
+          if (isCommitted) {
+            if (sub.hcpName.isNotEmpty) {
+              progDocIds.add(sub.hcpName.toLowerCase().trim());
+              progDocNames.add(sub.hcpName.toLowerCase().trim());
+            }
+            final sFull = '${sub.firstName ?? ''} ${sub.lastName ?? ''}'.trim().toLowerCase();
+            if (sFull.isNotEmpty) {
+              progDocNames.add(sFull);
+            }
+          }
+        }
+
+        programDoctors = _doctors.where((doc) {
+          final dId = (doc.name ?? '').toLowerCase().trim();
+          final dFull = doc.fullName.toLowerCase().trim();
+          if (dId.isNotEmpty && progDocIds.contains(dId)) return true;
+          if (dFull.isNotEmpty && progDocNames.contains(dFull)) return true;
+          if (dFull.isNotEmpty) {
+            final docTokens = dFull.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+            for (final pName in progDocNames) {
+              final pTokens = pName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+              final matches = docTokens.where((t) => pTokens.contains(t)).length;
+              if (matches >= 2 || (docTokens.length == 1 && pTokens.contains(docTokens.first))) {
+                return true;
+              }
+            }
+          }
+          return false;
+        }).toList();
+      }
     }
 
     final effectiveSubmissions = progSubmissions;
@@ -409,7 +318,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Top Metric Summary Cards Row
-                    _buildMetricsRow(syncRatePercent, apiService, effectiveSubmissions),
+                    _buildMetricsRow(syncRatePercent, apiService, effectiveSubmissions, programDoctors),
 
                     const SizedBox(height: 20),
 
@@ -429,9 +338,9 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                                 flex: 3,
                                 child: Column(
                                   children: [
-                                    _buildDoctorsBySpecialtyCard(),
+                                    _buildDoctorsBySpecialtyCard(programDoctors),
                                     const SizedBox(height: 16),
-                                    _buildDoctorsBySubSpecialtyCard(),
+                                    _buildDoctorsBySubSpecialtyCard(programDoctors),
                                   ],
                                 ),
                               ),
@@ -442,9 +351,9 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                         } else {
                           return Column(
                             children: [
-                              _buildDoctorsBySpecialtyCard(),
+                              _buildDoctorsBySpecialtyCard(programDoctors),
                               const SizedBox(height: 16),
-                              _buildDoctorsBySubSpecialtyCard(),
+                              _buildDoctorsBySubSpecialtyCard(programDoctors),
                               const SizedBox(height: 16),
                               _buildRecentConsentLogsCard(apiService, effectiveSubmissions),
                             ],
@@ -456,7 +365,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                     const SizedBox(height: 20),
 
                     // Regional / Institution Distribution
-                    _buildTerritoryDistributionCard(),
+                    _buildTerritoryDistributionCard(programDoctors, effectiveSubmissions),
 
                     const SizedBox(height: 24),
                   ],
@@ -468,7 +377,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
 
 
 
-  Widget _buildMetricsRow(String syncRatePercent, ApiService apiService, List<HcpProfileSubmission> effectiveSubmissions) {
+  Widget _buildMetricsRow(String syncRatePercent, ApiService apiService, List<HcpProfileSubmission> effectiveSubmissions, List<Hcp> programDoctors) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = constraints.maxWidth > 700
@@ -500,7 +409,32 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         final submissionValue = apiService.isMedRep ? '${mySubmissions.length}' : '${effectiveSubmissions.length}';
         final submissionSubtitle = apiService.isMedRep
             ? '${mySubmissions.length} of ${effectiveSubmissions.length} Program Total'
-            : 'SFE Field Force Synced';
+            : (apiService.isAdmin ? 'SFE Field Force Synced' : '${apiService.selectedProgram} Synced');
+
+        final programInstCount = apiService.isAdmin
+            ? _institutions.length
+            : () {
+                final instNames = <String>{};
+                for (final d in programDoctors) {
+                  if (d.institution != null && d.institution!.isNotEmpty) {
+                    instNames.add(d.institution!.toLowerCase());
+                  }
+                  for (final w in d.workplaces) {
+                    if (w.workplace.isNotEmpty) {
+                      instNames.add(w.workplace.toLowerCase());
+                    }
+                  }
+                }
+                return instNames.isNotEmpty ? instNames.length : _institutions.length;
+              }();
+
+        final directorySubtitle = apiService.isAdmin
+            ? 'Universal Masterlist (All)'
+            : (apiService.isMedRep ? '${apiService.selectedProgram} Directory (View)' : '${apiService.selectedProgram} Directory');
+
+        final instSubtitle = apiService.isAdmin
+            ? 'Hospitals, Clinics, Centers'
+            : '${apiService.selectedProgram} Affiliations';
 
         return Wrap(
           spacing: 12,
@@ -509,8 +443,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             _buildMetricCard(
               width: cardWidth,
               title: 'TOTAL HCP DIRECTORY',
-              value: '${_doctors.length}',
-              subtitle: apiService.isMedRep ? 'Directory Reference (View)' : 'Enterprise Snowflake Standard',
+              value: '${programDoctors.length}',
+              subtitle: directorySubtitle,
               icon: Icons.people_alt_rounded,
               iconColor: const Color(0xFF0066FF),
               accentColor: const Color(0xFF2563EB),
@@ -528,8 +462,8 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             _buildMetricCard(
               width: cardWidth,
               title: 'AFFILIATED INSTITUTIONS',
-              value: '${_institutions.length}',
-              subtitle: 'Hospitals, Clinics, Centers',
+              value: '$programInstCount',
+              subtitle: instSubtitle,
               icon: Icons.domain_rounded,
               iconColor: const Color(0xFF8B5CF6),
               accentColor: const Color(0xFF8B5CF6),
@@ -784,9 +718,27 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     );
   }
 
-  Widget _buildDoctorsBySpecialtyCard() {
-    final totalDocs = _doctors.isNotEmpty ? _doctors.length : 1;
-    final sortedEntries = _specialtyCounts.entries.toList()
+  Widget _buildDoctorsBySpecialtyCard(List<Hcp> programDoctors) {
+    final totalDocs = programDoctors.isNotEmpty ? programDoctors.length : 1;
+    final Map<String, String> specLookup = {};
+    for (var s in _specializations) {
+      specLookup[s.name] = s.specialty;
+    }
+
+    final Map<String, int> specMap = {};
+    for (var d in programDoctors) {
+      if (d.specialties.isNotEmpty) {
+        for (var s in d.specialties) {
+          final rawSpec = s.hcpSpecialty.isNotEmpty ? s.hcpSpecialty : 'General Practice';
+          final specName = specLookup[rawSpec] ?? rawSpec;
+          specMap[specName] = (specMap[specName] ?? 0) + 1;
+        }
+      } else {
+        specMap['General Practice'] = (specMap['General Practice'] ?? 0) + 1;
+      }
+    }
+
+    final sortedEntries = specMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
 
     final barColors = [
@@ -826,7 +778,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 ],
               ),
               Text(
-                'Total Represented: ${_doctors.length}',
+                'Total Represented: ${programDoctors.length}',
                 style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
               ),
             ],
@@ -891,10 +843,27 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     );
   }
 
-  Widget _buildDoctorsBySubSpecialtyCard() {
-    final sortedEntries = _subSpecialtyCounts.entries.toList()
+  Widget _buildDoctorsBySubSpecialtyCard(List<Hcp> programDoctors) {
+    final Map<String, String> specLookup = {};
+    for (var s in _specializations) {
+      specLookup[s.name] = s.specialty;
+    }
+
+    final Map<String, int> subSpecMap = {};
+    for (var d in programDoctors) {
+      if (d.specialties.isNotEmpty) {
+        for (var s in d.specialties) {
+          if (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') {
+            final subSpecName = specLookup[s.subSpecialty!] ?? s.subSpecialty!;
+            subSpecMap[subSpecName] = (subSpecMap[subSpecName] ?? 0) + 1;
+          }
+        }
+      }
+    }
+
+    final sortedEntries = subSpecMap.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final totalDocs = _doctors.isEmpty ? 1 : _doctors.length;
+    final totalDocs = programDoctors.isEmpty ? 1 : programDoctors.length;
 
     final barColors = const [
       Color(0xFF10B981),
@@ -1184,8 +1153,56 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
     return raw;
   }
 
-  Widget _buildTerritoryDistributionCard() {
-    final totalDocs = _doctors.isNotEmpty ? _doctors.length : (_submissions.isNotEmpty ? _submissions.length : 1);
+  Widget _buildTerritoryDistributionCard(List<Hcp> programDoctors, List<HcpProfileSubmission> effectiveSubmissions) {
+    final totalDocs = programDoctors.isNotEmpty ? programDoctors.length : (effectiveSubmissions.isNotEmpty ? effectiveSubmissions.length : 1);
+
+    int ncr = 0;
+    int luzon = 0;
+    int vismin = 0;
+
+    for (var d in programDoctors) {
+      final Set<String> doctorTerritories = {};
+      if (d.provinceName != null && d.provinceName!.isNotEmpty) {
+        doctorTerritories.add(_determineTerritoryGroup(d.provinceName!));
+      }
+      if (d.regionName != null && d.regionName!.isNotEmpty) {
+        doctorTerritories.add(_determineTerritoryGroup(d.regionName!));
+      }
+      if (d.workplaces.isNotEmpty) {
+        for (var w in d.workplaces) {
+          if (w.address != null && w.address!.isNotEmpty) {
+            doctorTerritories.add(_determineTerritoryGroup(w.address!));
+          }
+          if (w.workplace.isNotEmpty) {
+            doctorTerritories.add(_determineTerritoryGroup(w.workplace));
+          }
+        }
+      }
+      if (doctorTerritories.isEmpty) doctorTerritories.add('NCR');
+      if (doctorTerritories.contains('NCR')) ncr++;
+      if (doctorTerritories.contains('LUZON')) luzon++;
+      if (doctorTerritories.contains('VISMIN')) vismin++;
+    }
+
+    if (programDoctors.isEmpty && effectiveSubmissions.isNotEmpty) {
+      for (var sub in effectiveSubmissions) {
+        final Set<String> subTerritories = {};
+        if (sub.provinceName != null && sub.provinceName!.isNotEmpty) {
+          subTerritories.add(_determineTerritoryGroup(sub.provinceName!));
+        }
+        if (sub.workplaces.isNotEmpty) {
+          for (var w in sub.workplaces) {
+            if (w.workplaceName != null && w.workplaceName!.isNotEmpty) {
+              subTerritories.add(_determineTerritoryGroup(w.workplaceName!));
+            }
+          }
+        }
+        if (subTerritories.isEmpty) subTerritories.add('NCR');
+        if (subTerritories.contains('NCR')) ncr++;
+        if (subTerritories.contains('LUZON')) luzon++;
+        if (subTerritories.contains('VISMIN')) vismin++;
+      }
+    }
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -1226,7 +1243,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               Expanded(
                 child: _buildRegionBox(
                   regionName: 'National Capital Region',
-                  count: _ncrCount,
+                  count: ncr,
                   total: totalDocs,
                   barColor: const Color(0xFF0066FF),
                 ),
@@ -1235,7 +1252,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               Expanded(
                 child: _buildRegionBox(
                   regionName: 'Luzon Provinces',
-                  count: _luzonCount,
+                  count: luzon,
                   total: totalDocs,
                   barColor: const Color(0xFF10B981),
                 ),
@@ -1244,7 +1261,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
               Expanded(
                 child: _buildRegionBox(
                   regionName: 'Visayas & Mindanao',
-                  count: _visminCount,
+                  count: vismin,
                   total: totalDocs,
                   barColor: const Color(0xFFEC4899),
                 ),

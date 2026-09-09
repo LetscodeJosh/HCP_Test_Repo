@@ -8,7 +8,6 @@ import '../models/lookup_models.dart';
 import '../models/submission.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
-import 'doctor_account_screen.dart';
 
 class DoctorMasterlistScreen extends StatefulWidget {
   const DoctorMasterlistScreen({Key? key}) : super(key: key);
@@ -22,8 +21,10 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   List<Hcp> _filteredDoctors = [];
   List<Institution> _institutions = [];
   List<Specialization> _specializations = [];
-  List<PsgcLocation> _psgcLocations = [];
   List<HcpType> _hcpTypes = [];
+  List<HcpAccount> _hcpAccounts = [];
+  List<HcpProfileSubmission> _submissions = [];
+  String _programFilter = 'All';
 
   bool _isLoading = true;
 
@@ -49,22 +50,33 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     });
     final apiService = Provider.of<ApiService>(context, listen: false);
     try {
-      final doctors = await apiService.fetchDoctors().catchError((e) {
-        print('Fetch doctors caught error: $e');
-        return <Hcp>[];
-      });
-      final institutions = await apiService.fetchInstitutions().catchError((_) => <Institution>[]);
-      final specializations = await apiService.fetchSpecializations().catchError((_) => <Specialization>[]);
-      final psgc = await apiService.fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
-      final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
+      final results = await Future.wait([
+        apiService.fetchDoctors().catchError((e) {
+          print('Fetch doctors caught error: $e');
+          return <Hcp>[];
+        }),
+        apiService.fetchInstitutions().catchError((_) => <Institution>[]),
+        apiService.fetchSpecializations().catchError((_) => <Specialization>[]),
+        apiService.fetchPsgcLocations().catchError((_) => <PsgcLocation>[]),
+        apiService.fetchHcpTypes().catchError((_) => <HcpType>[]),
+        apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]),
+        apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]),
+      ]);
+      final doctors = results[0] as List<Hcp>;
+      final institutions = results[1] as List<Institution>;
+      final specializations = results[2] as List<Specialization>;
+      final types = results[4] as List<HcpType>;
+      final accounts = results[5] as List<HcpAccount>;
+      final subs = results[6] as List<HcpProfileSubmission>;
 
       if (mounted) {
         setState(() {
           _allDoctors = doctors;
           _institutions = institutions;
           _specializations = specializations.where((s) => !s.isGroup).toList();
-          _psgcLocations = psgc;
           _hcpTypes = types;
+          _hcpAccounts = accounts;
+          _submissions = subs;
           _applyFilters();
           _isLoading = false;
         });
@@ -82,8 +94,68 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   }
 
   void _applyFilters() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final userProg = apiService.isAdmin ? _programFilter : apiService.selectedProgram;
+
+    final Set<String> progDocIds = {};
+    final Set<String> progDocNames = {};
+    final bool filterByProg = userProg.isNotEmpty && userProg.toLowerCase() != 'all';
+
+    if (filterByProg) {
+      for (final acc in _hcpAccounts) {
+        if (LocationResolver.isSameProgram(acc.accountOrProgram, userProg)) {
+          if (acc.hcp != null && acc.hcp!.isNotEmpty) {
+            progDocIds.add(acc.hcp!.toLowerCase().trim());
+          }
+          if (acc.name != null && acc.name!.isNotEmpty) {
+            progDocIds.add(acc.name!.toLowerCase().trim());
+          }
+          if (acc.hcpName != null && acc.hcpName!.isNotEmpty) {
+            progDocNames.add(acc.hcpName!.toLowerCase().trim());
+          }
+        }
+      }
+
+      for (final sub in _submissions) {
+        if (LocationResolver.isSameProgram(sub.accountOrProgram, userProg)) {
+          final state = (sub.workflowState ?? sub.status ?? '').toLowerCase();
+          final isCommitted = state == 'approved' || state == 'processed' || sub.docstatus == 1 || sub.applicationStatus == 'Applied';
+          if (isCommitted) {
+            if (sub.hcpName.isNotEmpty) {
+              progDocIds.add(sub.hcpName.toLowerCase().trim());
+              progDocNames.add(sub.hcpName.toLowerCase().trim());
+            }
+            final sFull = '${sub.firstName ?? ''} ${sub.lastName ?? ''}'.trim().toLowerCase();
+            if (sFull.isNotEmpty) {
+              progDocNames.add(sFull);
+            }
+          }
+        }
+      }
+    }
+
     setState(() {
       _filteredDoctors = _allDoctors.where((doctor) {
+        // 1. Program scoping
+        if (filterByProg) {
+          final dId = (doctor.name ?? '').toLowerCase().trim();
+          final dFull = doctor.fullName.toLowerCase().trim();
+          bool belongs = (dId.isNotEmpty && progDocIds.contains(dId)) ||
+              (dFull.isNotEmpty && progDocNames.contains(dFull));
+          if (!belongs && dFull.isNotEmpty) {
+            final docTokens = dFull.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+            for (final pName in progDocNames) {
+              final pTokens = pName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+              final matches = docTokens.where((t) => pTokens.contains(t)).length;
+              if (matches >= 2 || (docTokens.length == 1 && pTokens.contains(docTokens.first))) {
+                belongs = true;
+                break;
+              }
+            }
+          }
+          if (!belongs) return false;
+        }
+
         final nameStr = '${doctor.firstName} ${doctor.middleName ?? ''} ${doctor.lastName}'.toLowerCase();
         final idStr = (doctor.name ?? '').toLowerCase();
 
@@ -139,7 +211,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     }
 
     final doctorFullName = '${fullDoctor.firstName} ${fullDoctor.middleName != null && fullDoctor.middleName != '-' && fullDoctor.middleName!.isNotEmpty ? fullDoctor.middleName! + ' ' : ''}${fullDoctor.lastName}'.trim();
-    final specLookup = {for (var s in _specializations) s.name: s.specialty};
 
     showModalBottomSheet(
       context: context,
@@ -942,6 +1013,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
 
   // --- ERPNext Filter Bar (Darkish Blue #0B192C Theme) ---
   Widget _buildFilterAndSortBar() {
+    final apiService = Provider.of<ApiService>(context);
     return Container(
       color: const Color(0xFF0B192C),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1113,6 +1185,40 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   ),
                 ),
 
+                // Program Filter Dropdown (Admin only)
+                if (apiService.isAdmin) ...[
+                  Container(
+                    height: 36,
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFF334155)),
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _programFilter,
+                        dropdownColor: const Color(0xFF1E293B),
+                        hint: const Text('Program', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
+                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white70, size: 18),
+                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _programFilter = val;
+                              _applyFilters();
+                            });
+                          }
+                        },
+                        items: [
+                          const DropdownMenuItem<String>(value: 'All', child: Text('Program: All')),
+                          ...apiService.availablePrograms.map((p) => DropdownMenuItem(value: p, child: Text(p))),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+
                 // Type Filter Dropdown
                 Container(
                   height: 36,
@@ -1185,64 +1291,6 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
   @override
   Widget build(BuildContext context) {
     final apiService = Provider.of<ApiService>(context);
-
-    if (!apiService.isAdmin) {
-      return Scaffold(
-        backgroundColor: const Color(0xFFF4F6F9),
-        appBar: AppBar(
-          centerTitle: true,
-          title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-          backgroundColor: const Color(0xFF0B192C),
-          elevation: 0,
-        ),
-        drawer: const AppDrawer(currentItem: DrawerItem.dashboard),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.lock_outline_rounded, color: Color(0xFFEF4444), size: 48),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Access Restricted',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'The global Doctor Masterlist is restricted to System Administrators in ERPNext.\nPlease use "Doctor Account" to view and manage your assigned doctors.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: Color(0xFF64748B), height: 1.4),
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0066FF),
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                  icon: const Icon(Icons.account_box_rounded, color: Colors.white, size: 18),
-                  label: const Text('Go to Doctor Account', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  onPressed: () {
-                    Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6F9), // Soft Light Background for Darkish Blue & White combination

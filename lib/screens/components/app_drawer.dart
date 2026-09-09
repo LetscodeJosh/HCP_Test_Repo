@@ -303,12 +303,13 @@ class AppDrawer extends StatelessWidget {
                         }
                       },
                     ),
-                    if (apiService.isAdmin) ...[
+                    if (apiService.isAdmin || apiService.isManager) ...[
                       const SizedBox(height: 4),
                       _buildMenuItem(
                         context,
                         icon: Icons.people_alt_rounded,
                         title: 'Doctor Listing',
+                        subtitle: apiService.isManager ? '${apiService.selectedProgram} Doctors' : null,
                         isSelected: currentItem == DrawerItem.doctorManagement,
                         onTap: () {
                           Navigator.of(context).pop();

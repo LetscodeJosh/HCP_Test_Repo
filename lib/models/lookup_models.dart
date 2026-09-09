@@ -1769,4 +1769,82 @@ class LocationResolver {
     }
     return trimmed;
   }
+
+  /// Canonicalize a program name to its core key to handle synonyms across ERPNext
+  static String canonicalizeProgram(String? raw) {
+    if (raw == null) return '';
+    final p = raw.trim().toLowerCase();
+    if (p.isEmpty) return '';
+    if (p == 'rtmd' || p.contains('ritemed') || p.startsWith('rtmd')) {
+      return 'ritemed';
+    }
+    if (p == 'bch' || p.contains('bayer') || p.startsWith('bch')) {
+      return 'bayer';
+    }
+    if (p == 'adc' || p.contains('abbott') || p.contains('adc-detailing') || p.startsWith('adc')) {
+      return 'abbott';
+    }
+    if (p.contains('corenergy') || p.contains('cor energy')) {
+      return 'corenergy';
+    }
+    if (p.contains('vivaro') || p == 'vhsi') {
+      return 'vivaro';
+    }
+    if (p.contains('exeltis')) {
+      return 'exeltis';
+    }
+    if (p.contains('taisho') || p.contains('tppi')) {
+      return 'taisho';
+    }
+    if (p.contains('fonterra') || p.contains('anmum') || p.contains('anlene') || p.contains('hcap')) {
+      return 'fonterra';
+    }
+    if (p.contains('biomerieux')) {
+      return 'biomerieux';
+    }
+    if (p.contains('nes')) {
+      return 'nes';
+    }
+    if (p.contains('nurturemed')) {
+      return 'nurturemed';
+    }
+    if (p.contains('pch')) {
+      return 'pch';
+    }
+    if (p.contains('pharmabest')) {
+      return 'pharmabest';
+    }
+    if (p.contains('pascual')) {
+      return 'pascual';
+    }
+    if (p.contains('gsk')) {
+      return 'gsk';
+    }
+    if (p.contains('tstacco')) {
+      return 'tstacco';
+    }
+    if (p.contains('tstacc1')) {
+      return 'tstacc1';
+    }
+    return p;
+  }
+
+  /// Checks if two program representations refer to the same program.
+  /// Strictly rejects null/empty or non-matching programs.
+  static bool isSameProgram(String? progA, String? progB) {
+    if (progA == null || progB == null) return false;
+    final a = progA.trim().toLowerCase();
+    final b = progB.trim().toLowerCase();
+    if (a.isEmpty || b.isEmpty) return false;
+    if (a == 'all' || b == 'all') return true;
+    if (a == b) return true;
+
+    final canonA = canonicalizeProgram(a);
+    final canonB = canonicalizeProgram(b);
+    if (canonA.isNotEmpty && canonB.isNotEmpty && canonA == canonB) {
+      return true;
+    }
+
+    return a.contains(b) || b.contains(a);
+  }
 }

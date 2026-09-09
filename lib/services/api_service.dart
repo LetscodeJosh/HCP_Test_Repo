@@ -2318,8 +2318,7 @@ class ApiService extends ChangeNotifier {
       final matched = accounts.where((a) {
         final matchesHcp = (a.hcp == hcpId || a.name == hcpId || (a.hcpName != null && a.hcpName!.toLowerCase() == hcpId.toLowerCase()));
         if (!matchesHcp) return false;
-        final aProg = a.accountOrProgram.toLowerCase().trim();
-        return aProg == cleanProg || aProg.contains(cleanProg) || cleanProg.contains(aProg);
+        return LocationResolver.isSameProgram(a.accountOrProgram, effectiveProgram);
       }).firstOrNull;
 
       if (matched != null) {
@@ -3540,10 +3539,9 @@ class ApiService extends ChangeNotifier {
       if (searchResp.statusCode == 200) {
         final searchBody = jsonDecode(searchResp.body);
         final List<dynamic> data = searchBody['data'] ?? [];
-        final targetProg = cleanProgram.toLowerCase().trim();
         for (var d in data) {
-          final aProg = (d['account_or_program'] ?? '').toString().toLowerCase().trim();
-          if (aProg == targetProg || aProg.contains(targetProg) || targetProg.contains(aProg)) {
+          final aProg = (d['account_or_program'] ?? '').toString().trim();
+          if (LocationResolver.isSameProgram(aProg, cleanProgram)) {
             existingAccountName = d['name'];
             break;
           }
