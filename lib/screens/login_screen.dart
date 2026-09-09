@@ -193,14 +193,20 @@ class _LoginScreenState extends State<LoginScreen> {
             height: double.infinity,
             fit: BoxFit.cover,
           ),
-          // Subtle overlay & slight blur filter for theme harmony
-          BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 1.5, sigmaY: 1.5),
-            child: Container(
-              color: Colors.black.withOpacity(0.15),
+          // Subtle dark vignette gradient overlay for high contrast and elegance
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withOpacity(0.20),
+                  Colors.black.withOpacity(0.40),
+                ],
+              ),
             ),
           ),
-          // Top-right Credits Button (Three Dots)
+          // Top-right Credits Button (Apple Frosted Glass Circle)
           Positioned(
             top: 12,
             right: 16,
@@ -219,271 +225,457 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     );
                   },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.85),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
+                  borderRadius: BorderRadius.circular(22),
+                  child: ClipOval(
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.22),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.45),
+                            width: 1.2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.18),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.more_vert,
-                      color: Color(0xFF0056B3),
-                      size: 24,
+                        child: const Icon(
+                          Icons.more_horiz_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-          // Login Form
+          // Centered Apple Glassmorphic Login Card
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 36.0),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.88),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: Colors.white.withOpacity(0.4),
-                      width: 1.5,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 25,
-                        spreadRadius: 2,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Logo Container
-                        Center(
-                          child: Container(
-                            width: 80,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF0056B3), Color(0xFF007AFF)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(28),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 38.0),
+                        decoration: BoxDecoration(
+                          // Apple frosted glass gradient
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withOpacity(0.80),
+                              Colors.white.withOpacity(0.58),
+                            ],
+                          ),
+                          borderRadius: BorderRadius.circular(28),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.70),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.22),
+                              blurRadius: 36,
+                              spreadRadius: 2,
+                              offset: const Offset(0, 16),
+                            ),
+                            BoxShadow(
+                              color: const Color(0xFF0056B3).withOpacity(0.12),
+                              blurRadius: 40,
+                              spreadRadius: -4,
+                              offset: const Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Apple Squircle Logo Container
+                              Center(
+                                child: Container(
+                                  width: 78,
+                                  height: 78,
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [Color(0xFF0A84FF), Color(0xFF0056B3)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(22),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.40),
+                                      width: 1.2,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFF007AFF).withOpacity(0.40),
+                                        blurRadius: 20,
+                                        spreadRadius: 1,
+                                        offset: const Offset(0, 8),
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.donut_large_rounded,
+                                    color: Colors.white,
+                                    size: 40,
+                                  ),
+                                ),
                               ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF0056B3).withOpacity(0.3),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
+                              const SizedBox(height: 20),
+                              // App Title
+                              Text(
+                                AppConfig.mode == AppMode.corenergy ? 'PIMS MCP' : 'HCP Profiling',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: Color(0xFF00458E),
+                                  fontSize: 28,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Healthcare Professional Management',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: const Color(0xFF1D1D1F).withOpacity(0.55),
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  letterSpacing: -0.1,
+                                ),
+                              ),
+                              const SizedBox(height: 32),
+
+                              // Username Field
+                              Text(
+                                'USERNAME',
+                                style: TextStyle(
+                                  color: const Color(0xFF1D1D1F).withOpacity(0.65),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _usernameController,
+                                keyboardType: TextInputType.emailAddress,
+                                style: const TextStyle(
+                                  color: Color(0xFF1C1C1E),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                decoration: InputDecoration(
+                                  prefixIcon: Icon(
+                                    Icons.person_outline_rounded,
+                                    color: const Color(0xFF0056B3).withOpacity(0.7),
+                                    size: 20,
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.75),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: Colors.white.withOpacity(0.85),
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: Colors.white.withOpacity(0.85),
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF0071E3),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: Colors.red.shade400,
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  hintText: 'name@company.com',
+                                  hintStyle: TextStyle(
+                                    color: const Color(0xFF1D1D1F).withOpacity(0.35),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter your username';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 20),
+
+                              // Password Field
+                              Text(
+                                'PASSWORD',
+                                style: TextStyle(
+                                  color: const Color(0xFF1D1D1F).withOpacity(0.65),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.1,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              TextFormField(
+                                controller: _passwordController,
+                                obscureText: _obscurePassword,
+                                style: const TextStyle(
+                                  color: Color(0xFF1C1C1E),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                decoration: InputDecoration(
+                                  prefixIcon: Icon(
+                                    Icons.lock_outline_rounded,
+                                    color: const Color(0xFF0056B3).withOpacity(0.7),
+                                    size: 20,
+                                  ),
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_off_outlined
+                                          : Icons.visibility_outlined,
+                                      color: const Color(0xFF1D1D1F).withOpacity(0.45),
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                  ),
+                                  filled: true,
+                                  fillColor: Colors.white.withOpacity(0.75),
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: Colors.white.withOpacity(0.85),
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: Colors.white.withOpacity(0.85),
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: Color(0xFF0071E3),
+                                      width: 2,
+                                    ),
+                                  ),
+                                  errorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: BorderSide(
+                                      color: Colors.red.shade400,
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  focusedErrorBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    borderSide: const BorderSide(
+                                      color: Colors.red,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  hintText: 'Enter password',
+                                  hintStyle: TextStyle(
+                                    color: const Color(0xFF1D1D1F).withOpacity(0.35),
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return 'Please enter your password';
+                                  }
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 28),
+
+                              if (_errorMessage != null) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.shade50.withOpacity(0.92),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.red.shade200),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.error_outline_rounded, color: Colors.red.shade700, size: 18),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _errorMessage!,
+                                          style: TextStyle(
+                                            color: Colors.red.shade800,
+                                            fontSize: 12.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
+
+                              // Login Button (Apple Blue Gradient Capsule)
+                              Container(
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(14),
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF007AFF), Color(0xFF0056B3)],
+                                    begin: Alignment.topCenter,
+                                    end: Alignment.bottomCenter,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF0066CC).withOpacity(0.38),
+                                      blurRadius: 16,
+                                      offset: const Offset(0, 6),
+                                    ),
+                                  ],
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _handleLogin,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    disabledBackgroundColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: _isLoading
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.2,
+                                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Login',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: -0.2,
+                                          ),
+                                        ),
+                                ),
+                              ),
+
+                              // Biometric Button (Apple Frosted Capsule)
+                              if (_isBiometricAvailable && _hasSavedCredentials) ...[
+                                const SizedBox(height: 14),
+                                Builder(
+                                  builder: (context) {
+                                    final typed = _usernameController.text.trim();
+                                    final bool isOwnerMatching = typed.isEmpty ||
+                                        typed.toLowerCase() == _enrolledOwner.toLowerCase();
+
+                                    if (isOwnerMatching) {
+                                      return Container(
+                                        height: 48,
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.55),
+                                          borderRadius: BorderRadius.circular(14),
+                                          border: Border.all(
+                                            color: Colors.white.withOpacity(0.85),
+                                            width: 1.2,
+                                          ),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: Colors.black.withOpacity(0.04),
+                                              blurRadius: 8,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Material(
+                                          color: Colors.transparent,
+                                          child: InkWell(
+                                            borderRadius: BorderRadius.circular(14),
+                                            onTap: _isLoading ? null : _handleBiometricLogin,
+                                            child: const Row(
+                                              mainAxisAlignment: MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.fingerprint_rounded,
+                                                  color: Color(0xFF0056B3),
+                                                  size: 22,
+                                                ),
+                                                SizedBox(width: 8),
+                                                Text(
+                                                  'Biometric Login',
+                                                  style: TextStyle(
+                                                    color: Color(0xFF0056B3),
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w600,
+                                                    letterSpacing: 0.2,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    } else {
+                                      return const SizedBox.shrink();
+                                    }
+                                  },
                                 ),
                               ],
-                            ),
-                            child: const Icon(
-                              Icons.donut_large,
-                              color: Colors.white,
-                              size: 40,
-                            ),
+                            ],
                           ),
                         ),
-                        const SizedBox(height: 24),
-                        // App Title
-                        Text(
-                          AppConfig.mode == AppMode.corenergy ? 'PIMS MCP' : 'HCP Profiling',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Color(0xFF0056B3),
-                            fontSize: 30,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 32),
-                        
-                        // Username Field
-                        const Text(
-                          'USERNAME',
-                          style: TextStyle(
-                            color: Color(0xFF56565A),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _usernameController,
-                          keyboardType: TextInputType.emailAddress,
-                          style: const TextStyle(color: Color(0xFF1C1C1E)),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.person_outline, color: Color(0xFF8E8E93)),
-                            filled: true,
-                            fillColor: Colors.white.withOpacity(0.9),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF0056B3), width: 2),
-                            ),
-                            hintText: 'name@company.com',
-                            hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your username';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 20),
-                        
-                        // Password Field
-                        const Text(
-                          'PASSWORD',
-                          style: TextStyle(
-                            color: Color(0xFF56565A),
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          style: const TextStyle(color: Color(0xFF1C1C1E)),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFF8E8E93)),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                                color: const Color(0xFF8E8E93),
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                            filled: true,
-                            fillColor: Colors.white.withOpacity(0.9),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
-                            ),
-                            enabledBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFFD1D1D6)),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF0056B3), width: 2),
-                            ),
-                            hintText: 'Enter password',
-                            hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your password';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 30),
-                        
-                        if (_errorMessage != null) ...[
-                          Text(
-                            _errorMessage!,
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 16),
-                        ],
-                        
-                        // Login Button
-                        ElevatedButton(
-                          onPressed: _isLoading ? null : _handleLogin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0056B3),
-                            disabledBackgroundColor: const Color(0xFF0056B3).withOpacity(0.5),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            elevation: 2,
-                          ),
-                          child: _isLoading
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const Text(
-                                  'Login',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                        ),
-                        if (_isBiometricAvailable && _hasSavedCredentials) ...[
-                          const SizedBox(height: 14),
-                          Builder(
-                            builder: (context) {
-                              final typed = _usernameController.text.trim();
-                              final bool isOwnerMatching = typed.isEmpty || typed.toLowerCase() == _enrolledOwner.toLowerCase();
-
-                              if (isOwnerMatching) {
-                                return OutlinedButton.icon(
-                                  onPressed: _isLoading ? null : _handleBiometricLogin,
-                                  icon: const Icon(Icons.fingerprint_rounded, color: Color(0xFF0056B3)),
-                                  label: const Text(
-                                    'Biometric Login',
-                                    style: TextStyle(
-                                      color: Color(0xFF0056B3),
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(vertical: 14),
-                                    side: const BorderSide(color: Color(0xFF0056B3), width: 1.5),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                return const SizedBox.shrink();
-                              }
-                            },
-                          ),
-                        ],
-                      ],
+                      ),
                     ),
                   ),
                 ),
