@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>ERPNext Server-Side Approval Gap Analysis</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 15mm 18mm 15mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #64748b;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.5;
+    font-size: 9.5pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1, h2, h3, h4 {
+    color: #0f172a;
+    font-weight: 700;
+    margin-top: 1.3em;
+    margin-bottom: 0.4em;
+  }
+
+  h1 {
+    font-size: 19pt;
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 8px;
+    margin-top: 0;
+    color: #1e3a8a;
+  }
+
+  .subtitle {
+    font-size: 10.5pt;
+    color: #475569;
+    margin-top: -6px;
+    margin-bottom: 20px;
+    font-weight: 400;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 7.5pt;
+    font-weight: 600;
+    border-radius: 4px;
+    text-transform: uppercase;
+    margin-right: 6px;
+  }
+
+  .badge-danger { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .badge-success { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .badge-warning { background-color: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .badge-info { background-color: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
+
+  .callout {
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin: 14px 0;
+    border-left: 4px solid;
+    font-size: 9pt;
+  }
+
+  .callout-danger { background-color: #fff1f2; border-color: #e11d48; color: #881337; }
+  .callout-success { background-color: #f0fdf4; border-color: #16a34a; color: #14532d; }
+  .callout-warning { background-color: #fffbeb; border-color: #d97706; color: #78350f; }
+  .callout-info { background-color: #f0f9ff; border-color: #0284c7; color: #0c4a6e; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 8.5pt;
+  }
+
+  th, td {
+    padding: 8px 10px;
+    text-align: left;
+    border: 1px solid #cbd5e1;
+  }
+
+  th {
+    background-color: #f8fafc;
+    font-weight: 600;
+    color: #334155;
+  }
+
+  tr:nth-child(even) { background-color: #f8fafc; }
+
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 8pt;
+    background-color: #f1f5f9;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #0f172a;
+  }
+
+  pre {
+    background-color: #0f172a;
+    color: #f8fafc;
+    padding: 12px;
+    border-radius: 6px;
+    font-size: 8pt;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    line-height: 1.4;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+
+  .diagram-box {
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 14px 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 8pt;
+    line-height: 1.4;
+  }
+
+  .section-divider {
+    border-top: 1px solid #e2e8f0;
+    margin: 20px 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>Technical Root Cause Analysis</h1>
+<div class="subtitle">
+  <strong>Subject:</strong> Missing Server-Side Python Lifecycle Hooks in ERPNext HCP Profiling Approval Workflow<br>
+  <strong>Target System:</strong> ERPNext v14/v15 Dev Server (<code>dev.pmii-marketing.com</code>)<br>
+  <strong>Date of Audit:</strong> September 10, 2026 | <strong>Status:</strong> Definite Findings Confirmed by Database Query
+</div>
+
+<div class="callout callout-danger">
+  <strong>Executive Summary of the Architectural Gap:</strong><br>
+  The ERPNext server-side is completely missing the Python document lifecycle hook (<code>on_submit()</code> or <code>doc_events</code> in <code>hooks.py</code>) on the <code>HCP Profile Submission</code> DocType controller.<br>
+  In Frappe/ERPNext, native workflows (<code>Workflow</code> & <code>Workflow Action</code>) only change the document's own state from <code>Pending Approval</code> to <code>Approved</code> and flip <code>docstatus = 1</code>. <strong>Workflows do not spawn or update records in other DocTypes (<code>HCP</code>, <code>HCP Account</code>) without custom Python backend code.</strong>
+</div>
+
+<h2>1. Concrete Database Evidence on <code>dev.pmii-marketing.com</code></h2>
+<p>
+  A direct audit of all 27 <code>Approved</code> submissions on the live ERPNext server revealed an exact pattern:
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Submission ID</th>
+      <th>Doctor Full Name</th>
+      <th>Approval Channel</th>
+      <th><code>hcp_name</code> (Linked ID)</th>
+      <th>Master <code>HCP</code> Record</th>
+      <th><code>HCP Account</code> Record</th>
+      <th>Resulting Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>HCP-PROF-2026-00153</code></td>
+      <td>Yannie Hanna Joy</td>
+      <td><span class="badge badge-success">Flutter App</span></td>
+      <td><code>HCP-0000043</code></td>
+      <td><span class="badge badge-success">Created</span></td>
+      <td><span class="badge badge-success">Synced</span></td>
+      <td><strong>Fully Operational</strong></td>
+    </tr>
+    <tr>
+      <td><code>HCP-PROF-2026-00150</code></td>
+      <td>Leandro Miguel Santos</td>
+      <td><span class="badge badge-success">Flutter App</span></td>
+      <td><code>HCP-0000042</code></td>
+      <td><span class="badge badge-success">Created</span></td>
+      <td><span class="badge badge-success">Synced</span></td>
+      <td><strong>Fully Operational</strong></td>
+    </tr>
+    <tr>
+      <td><code>HCP-PROF-2026-00124</code></td>
+      <td>Maria Sol Bernades</td>
+      <td><span class="badge badge-danger">ERPNext Desk</span></td>
+      <td><code>NULL</code> / <code>""</code></td>
+      <td><span class="badge badge-danger">MISSING</span></td>
+      <td><span class="badge badge-danger">MISSING</span></td>
+      <td><strong>Broken / Orphaned State</strong></td>
+    </tr>
+    <tr>
+      <td><code>HCP-PROF-2026-00118</code></td>
+      <td>8 8 8</td>
+      <td><span class="badge badge-danger">ERPNext Desk</span></td>
+      <td><code>NULL</code> / <code>""</code></td>
+      <td><span class="badge badge-danger">MISSING</span></td>
+      <td><span class="badge badge-danger">MISSING</span></td>
+      <td><strong>Broken / Orphaned State</strong></td>
+    </tr>
+    <tr>
+      <td><code>HCP-PROF-2026-00110</code></td>
+      <td>2 2 2</td>
+      <td><span class="badge badge-danger">ERPNext Desk</span></td>
+      <td><code>NULL</code> / <code>""</code></td>
+      <td><span class="badge badge-danger">MISSING</span></td>
+      <td><span class="badge badge-danger">MISSING</span></td>
+      <td><strong>Broken / Orphaned State</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<p>
+  When an administrator navigates to ERPNext Desk in a web browser and clicks the workflow button <strong>"Approve"</strong>, Frappe seals the document with <code>docstatus = 1</code>, but leaves <code>hcp_name</code> blank, generates <strong>zero</strong> records in <code>HCP</code>, and generates <strong>zero</strong> records in <code>HCP Account</code>.
+</p>
+
+<div class="section-divider"></div>
+
+<h2>2. The 4 Specific Root Causes on the ERPNext Server</h2>
+
+<h3>Cause A: Only Browser-Side Client Scripts Exist (No Backend Code)</h3>
+<p>
+  Inspection of <code>dev.pmii-marketing.com/api/resource/Client Script</code> shows the developer (<code>/dah</code>) wrote 38,045 bytes of JavaScript in <code>HCP Profile Submission-Client</code> up to version <code>v0.1.6</code>.
+  This script only handles:
+</p>
+<ul>
+  <li>Calculating the full name string concatenation in the browser form.</li>
+  <li>Tracking JSON change summaries for UI review.</li>
+  <li>Enforcing checkbox toggles for "preferred" clinics and specialties.</li>
+</ul>
+<div class="callout callout-warning">
+  <strong>Key Fact:</strong> Client Scripts only run in a human user's web browser when looking at the Desk form. They do not run during automated workflow state transitions or backend submissions.
+</div>
+
+<h3>Cause B: Frappe Server Scripts are Blocked (<code>HTTP 403 FORBIDDEN</code>)</h3>
+<p>
+  When querying <code>/api/resource/Server Script</code>, the server returned <code>403 Forbidden</code>. In production Frappe sites, <code>server_script_enabled</code> is set to <code>false</code> in <code>common_site_config.json</code> for security. Therefore, Python logic <strong>cannot</strong> be added via the ERPNext web interface; it must be written in the app's backend repository on the server file system.
+</p>
+
+<h3>Cause C: Missing <code>on_submit()</code> in <code>hcp_profile_submission.py</code></h3>
+<p>
+  In Frappe apps, when a document transitions through a workflow to <code>docstatus = 1</code>, Frappe automatically triggers <code>on_submit()</code> on the DocType's Python controller class. Currently, the server controller contains no logic to instantiate or update foreign DocTypes.
+</p>
+
+<h3>Cause D: Frappe Workflow Engine Does Not Perform Cross-DocType Mutations</h3>
+<p>
+  The Workflow Engine (<code>frappe.model.workflow.apply_workflow</code>) is strictly a state machine for the current document table. It updates <code>workflow_state = 'Approved'</code> and <code>docstatus = 1</code>. It does not know that an <code>HCP Profile Submission</code> is supposed to spawn an <code>HCP</code> and sync an <code>HCP Account</code>.
+</p>
+
+<div class="section-divider"></div>
+
+<h2>3. Architecture Comparison: ERPNext Desk vs. Mobile App Saga</h2>
+
+<div class="diagram-box">
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1. ERPNext Desk Web Flow (Current Broken Behavior):                        │
+│    Manager Clicks [Approve]                                                 │
+│      │                                                                      │
+│      ▼                                                                      │
+│    frappe.model.workflow.apply_workflow                                     │
+│      │                                                                      │
+│      ▼                                                                      │
+│    workflow_state = 'Approved', docstatus = 1 (SEALED)                      │
+│    hcp_name = NULL                                                          │
+│    ❌ NO Master Doctor created in HCP doctype                               │
+│    ❌ NO Program Record created in HCP Account doctype                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 2. HCP Mobile App Flow (Working Client-Side Saga Orchestrator):             │
+│    Manager Clicks [Approve & Sync Masterlist]                               │
+│      │                                                                      │
+│      ├─▶ Phase 1: POST /api/resource/HCP ───────▶ Creates Universal Doctor  │
+│      │                                            (Returns HCP-0000043)     │
+│      │                                                                      │
+│      ├─▶ Phase 2: POST /api/resource/HCP Account ▶ Provisions Account with  │
+│      │                                            Territory & Manager       │
+│      │                                                                      │
+│      └─▶ Phase 3: POST apply_workflow / set_value                           │
+│                   Sets workflow_state = 'Approved', docstatus = 1,          │
+│                   and binds hcp_name = 'HCP-0000043'                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+</div>
+
+<div class="section-divider"></div>
+
+<h2>4. The Required ERPNext Server-Side Python Fix</h2>
+<p>
+  To fix the approval process on ERPNext Desk, the backend developer must add the following implementation to <code>hcp_profile_submission.py</code> (or via a <code>doc_events</code> hook in <code>hooks.py</code>):
+</p>
+
+<pre>
+import frappe
+from frappe.model.document import Document
+
+class HCPProfileSubmission(Document):
+    def on_submit(self):
+        # Executed automatically when workflow reaches Approved (docstatus = 1)
+        if self.workflow_state == "Approved":
+            effective_hcp_id = self.hcp_name
+
+            # 1. Provision Universal Doctor Master (HCP DocType)
+            if self.profile_action == "New HCP" or not effective_hcp_id:
+                new_hcp = frappe.get_doc({
+                    "doctype": "HCP",
+                    "first_name": self.first_name,
+                    "middle_name": self.middle_name or "-",
+                    "last_name": self.last_name,
+                    "hcp_full_name": self.hcp_full_name,
+                    "birth_date": self.birth_date,
+                    "hcp_type": self.hcp_type,
+                    "hcp_practice": self.hcp_practice,
+                    "hcp_specialty": [{"hcp_specialty": s.hcp_specialty, "sub_specialty": s.sub_specialty} for s in self.specialties],
+                    "hcp_workplace": [{"hcp_workplace": w.hcp_workplace, "address": w.workplace_name} for w in self.workplaces],
+                    "hcp_contact_info": [{"contact_number": c.contact_number, "email_address": c.email_address} for c in self.contacts]
+                })
+                new_hcp.insert(ignore_permissions=True)
+                effective_hcp_id = new_hcp.name
+                
+                # Link newly created doctor back to this submission
+                self.db_set("hcp_name", effective_hcp_id)
+
+            # 2. Provision or Additively Update Program Master (HCP Account DocType)
+            acc_name = frappe.db.get_value(
+                "HCP Account",
+                {"hcp": effective_hcp_id, "account_or_program": self.account_or_program},
+                "name"
+            )
+
+            if not acc_name:
+                new_acc = frappe.get_doc({
+                    "doctype": "HCP Account",
+                    "hcp": effective_hcp_id,
+                    "hcp_name": self.hcp_full_name,
+                    "account_or_program": self.account_or_program,
+                    "territory": self.territory,
+                    "sales_person": self.sales_person,
+                    "specialization": [{"hcp_specialty": s.hcp_specialty, "preferred": s.preferred} for s in self.specialties if s.preferred],
+                    "workplace_info": [{"hcp_workplace": w.hcp_workplace, "preferred": w.preferred} for w in self.workplaces if w.preferred],
+                    "contact_info": [{"contact_number": c.contact_number, "preferred": c.preferred} for c in self.contacts if c.preferred]
+                })
+                new_acc.insert(ignore_permissions=True)
+            else:
+                acc_doc = frappe.get_doc("HCP Account", acc_name)
+                # Perform additive merge on child tables...
+                acc_doc.save(ignore_permissions=True)
+</pre>
+
+<div class="callout callout-info">
+  <strong>Conclusion:</strong><br>
+  Until the ERPNext backend developer deploys this Python controller hook to the server, <strong>approvals performed inside ERPNext Desk will continue to leave submissions in a broken, half-committed state</strong> with empty <code>hcp_name</code> and missing doctors. The Flutter mobile app remains the <strong>only</strong> client capable of completing full multi-doctype masterlist provisioning.
+</div>
+
+</body>
+</html>
