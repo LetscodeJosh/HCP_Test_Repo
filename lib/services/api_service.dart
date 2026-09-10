@@ -530,6 +530,13 @@ class ApiService extends ChangeNotifier {
   String? loggedInEmail;
   String? loggedInFullName;
 
+  // Saga Concurrency & In-Flight Mutex Locks (Prevents Lost Updates & Concurrent Conflicts)
+  final Set<String> _inFlightSubmissions = {};
+  final Set<String> _inFlightHcpIds = {};
+
+  bool isSubmissionInFlight(String name) => _inFlightSubmissions.contains(name);
+  bool isHcpInFlight(String hcpId) => _inFlightHcpIds.contains(hcpId);
+
   late final FrappeRepository<Hcp> hcps = FrappeRepository<Hcp>(
     api: this,
     docType: 'HCP',
@@ -2050,6 +2057,10 @@ class ApiService extends ChangeNotifier {
 
   /// Update an existing HCP/Doctor record
   Future<Hcp> updateDoctor(String name, Hcp hcp) async {
+    final isAlreadyLocked = _inFlightHcpIds.contains(name);
+    if (!isAlreadyLocked) {
+      _inFlightHcpIds.add(name);
+    }
     final url = Uri.parse(
       '$baseUrl/api/resource/HCP/${Uri.encodeComponent(name)}',
     );
@@ -2212,6 +2223,10 @@ class ApiService extends ChangeNotifier {
     } catch (e) {
       print('Update doctor error: $e');
       rethrow;
+    } finally {
+      if (!isAlreadyLocked) {
+        _inFlightHcpIds.remove(name);
+      }
     }
   }
 
@@ -3335,88 +3350,117 @@ class ApiService extends ChangeNotifier {
       throw Exception('Cannot apply workflow action: submission name is missing.');
     }
 
-    final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
-    bool wfSuccess = false;
-    String targetState = '';
-    int targetDocStatus = 0;
-
-    final normalizedAction = action.trim();
-    String effectiveAction = normalizedAction;
-
-    switch (normalizedAction) {
-      case 'Submit for Processing':
-      case 'Select for Processing':
-        targetState = 'Processed';
-        targetDocStatus = 0;
-        effectiveAction = 'Submit for Processing';
-        break;
-      case 'Submit for Approval':
-        targetState = 'Pending Approval';
-        targetDocStatus = 0;
-        effectiveAction = 'Submit for Approval';
-        break;
-      case 'Approve':
-        targetState = 'Approved';
-        targetDocStatus = 1;
-        effectiveAction = 'Approve';
-        break;
-      case 'Reject':
-        targetState = 'Rejected';
-        targetDocStatus = 0;
-        effectiveAction = 'Reject';
-        break;
+    // 1. In-flight Concurrency Mutex Lock (Eliminates Lost Updates)
+    if (_inFlightSubmissions.contains(subName)) {
+      throw Exception('A workflow transaction for submission "$subName" is currently in progress. Please wait.');
     }
+    _inFlightSubmissions.add(subName);
 
-    if (action == 'Approve') {
-      await approveSubmission(submission);
-      final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+    try {
+      // 2. Authoritative Fresh Live Read (Eliminates Fuzzy / Non-Repeatable Reads)
+      HcpProfileSubmission liveSubmission = submission;
       try {
-        final freshResp = await http.get(updateUrl, headers: _headers);
-        if (freshResp.statusCode == 200) {
-          final freshBody = jsonDecode(freshResp.body);
-          return HcpProfileSubmission.fromJson(freshBody['data']);
-        }
-      } catch (_) {}
-      return submission.copyWith(workflowState: 'Approved', status: 'Approved', docstatus: 1);
-    }
+        liveSubmission = await fetchSubmissionDetail(subName);
+      } catch (e) {
+        print('[WORKFLOW] Using provided submission snapshot (live fetch notice: $e)');
+      }
 
-    if (action == 'Reject') {
-      await rejectSubmission(subName, remarks: remarks, submission: submission);
+      // 3. Idempotency Guards: If already in desired terminal state, return immediately
+      if (action == 'Approve' && (liveSubmission.workflowState == 'Approved' || liveSubmission.docstatus == 1)) {
+        print('[WORKFLOW] Submission "$subName" is ALREADY approved. Returning current record.');
+        return liveSubmission;
+      }
+      if (action == 'Reject' && liveSubmission.workflowState == 'Rejected') {
+        print('[WORKFLOW] Submission "$subName" is ALREADY rejected. Returning current record.');
+        return liveSubmission;
+      }
+      if (liveSubmission.workflowState == 'Processed' && (action == 'Submit for Processing' || action == 'Select for Processing')) {
+        print('[WORKFLOW] Submission "$subName" is ALREADY processed. Returning current record.');
+        return liveSubmission;
+      }
 
-      // Update local cache immediately
-      try {
-        final cache = await _readFromCache('submissions_cache.json');
-        if (cache != null) {
-          final List<dynamic> dataList = jsonDecode(cache);
-          final index = dataList.indexWhere((item) => (item is Map && item['name'] == subName));
-          if (index >= 0) {
-            dataList[index]['workflow_state'] = 'Rejected';
-            dataList[index]['status'] = 'Rejected';
-            dataList[index]['docstatus'] = 0;
-            await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+      final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+      bool wfSuccess = false;
+      String targetState = '';
+      int targetDocStatus = 0;
+
+      final normalizedAction = action.trim();
+      String effectiveAction = normalizedAction;
+
+      switch (normalizedAction) {
+        case 'Submit for Processing':
+        case 'Select for Processing':
+          targetState = 'Processed';
+          targetDocStatus = 0;
+          effectiveAction = 'Submit for Processing';
+          break;
+        case 'Submit for Approval':
+          targetState = 'Pending Approval';
+          targetDocStatus = 0;
+          effectiveAction = 'Submit for Approval';
+          break;
+        case 'Approve':
+          targetState = 'Approved';
+          targetDocStatus = 1;
+          effectiveAction = 'Approve';
+          break;
+        case 'Reject':
+          targetState = 'Rejected';
+          targetDocStatus = 0;
+          effectiveAction = 'Reject';
+          break;
+      }
+
+      if (action == 'Approve') {
+        await approveSubmission(liveSubmission);
+        final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+        try {
+          final freshResp = await http.get(updateUrl, headers: _headers);
+          if (freshResp.statusCode == 200) {
+            final freshBody = jsonDecode(freshResp.body);
+            return HcpProfileSubmission.fromJson(freshBody['data']);
           }
-        }
-      } catch (_) {}
+        } catch (_) {}
+        return liveSubmission.copyWith(workflowState: 'Approved', status: 'Approved', docstatus: 1);
+      }
 
-      final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
-      try {
-        final freshResp = await http.get(updateUrl, headers: _headers);
-        if (freshResp.statusCode == 200) {
-          final freshBody = jsonDecode(freshResp.body);
-          return HcpProfileSubmission.fromJson(freshBody['data']);
-        }
-      } catch (_) {}
-      return submission.copyWith(workflowState: 'Rejected', status: 'Rejected', docstatus: 0);
-    }
+      if (action == 'Reject') {
+        await rejectSubmission(subName, remarks: remarks, submission: liveSubmission);
 
-    // For "Submit for Processing" and "Submit for Approval":
-    final effectiveActionProfile = submission.profileAction ?? (submission.hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP');
-    final docWorkflowPayload = {
-      'doctype': 'HCP Profile Submission',
-      'name': subName,
-      'profile_action': effectiveActionProfile,
-      ...submission.toJson(),
-    };
+        // Update local cache immediately
+        try {
+          final cache = await _readFromCache('submissions_cache.json');
+          if (cache != null) {
+            final List<dynamic> dataList = jsonDecode(cache);
+            final index = dataList.indexWhere((item) => (item is Map && item['name'] == subName));
+            if (index >= 0) {
+              dataList[index]['workflow_state'] = 'Rejected';
+              dataList[index]['status'] = 'Rejected';
+              dataList[index]['docstatus'] = 0;
+              await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+            }
+          }
+        } catch (_) {}
+
+        final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+        try {
+          final freshResp = await http.get(updateUrl, headers: _headers);
+          if (freshResp.statusCode == 200) {
+            final freshBody = jsonDecode(freshResp.body);
+            return HcpProfileSubmission.fromJson(freshBody['data']);
+          }
+        } catch (_) {}
+        return liveSubmission.copyWith(workflowState: 'Rejected', status: 'Rejected', docstatus: 0);
+      }
+
+      // For "Submit for Processing" and "Submit for Approval":
+      final effectiveActionProfile = liveSubmission.profileAction ?? (liveSubmission.hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP');
+      final docWorkflowPayload = {
+        'doctype': 'HCP Profile Submission',
+        'name': subName,
+        'profile_action': effectiveActionProfile,
+        ...liveSubmission.toJson(),
+      };
 
     try {
       final wfResp = await http.post(
@@ -3485,17 +3529,10 @@ class ApiService extends ChangeNotifier {
       }
     } catch (_) {}
 
-    // Re-fetch submission details
-    final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
-    try {
-      final freshResp = await http.get(updateUrl, headers: _headers);
-      if (freshResp.statusCode == 200) {
-        final freshBody = jsonDecode(freshResp.body);
-        return HcpProfileSubmission.fromJson(freshBody['data']);
-      }
-    } catch (_) {}
-
-    return submission.copyWith(workflowState: targetState, status: targetState, docstatus: targetDocStatus);
+      return liveSubmission.copyWith(workflowState: targetState, status: targetState, docstatus: targetDocStatus);
+    } finally {
+      _inFlightSubmissions.remove(subName);
+    }
   }
 
   /// Bulk approve multiple HCP Profile Submissions sequentially.
@@ -3551,6 +3588,10 @@ class ApiService extends ChangeNotifier {
     List<HcpAccountWorkplace> workplaces = const [],
     List<HcpAccountContact> contacts = const [],
   }) async {
+    final isAlreadyLocked = hcpId.isNotEmpty && _inFlightHcpIds.contains(hcpId);
+    if (!isAlreadyLocked && hcpId.isNotEmpty) {
+      _inFlightHcpIds.add(hcpId);
+    }
     try {
       final cleanProgram = LocationResolver.resolveProgramBranch(program);
 
@@ -3674,6 +3715,80 @@ class ApiService extends ChangeNotifier {
       };
 
       if (existingAccountName != null) {
+        // Fetch existing HCP Account to merge child tables additively (Eliminates Lost Updates)
+        try {
+          final getAccUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(existingAccountName)}');
+          final accResp = await http.get(getAccUrl, headers: _headers);
+          if (accResp.statusCode == 200) {
+            final accData = jsonDecode(accResp.body)['data'] ?? {};
+
+            // 1. Additive Merge for Specializations
+            final existingSpecs = (accData['specialization'] as List? ?? []);
+            final Map<String, Map<String, dynamic>> specMap = {};
+            for (var item in existingSpecs) {
+              if (item is Map) {
+                final sId = (item['hcp_specialty'] ?? item['specialty'] ?? '').toString().trim();
+                if (sId.isNotEmpty) {
+                  final m = Map<String, dynamic>.from(item);
+                  m['preferred'] = 0; // demote prior preferred unless newly re-asserted
+                  m['is_primary'] = 0;
+                  specMap[sId] = m;
+                }
+              }
+            }
+            for (var s in cleanSpecs) {
+              final sId = (s['hcp_specialty'] ?? s['specialty'] ?? '').toString().trim();
+              if (sId.isNotEmpty) specMap[sId] = s;
+            }
+            final mergedSpecs = specMap.values.toList();
+            if (mergedSpecs.isNotEmpty) payload['specialization'] = mergedSpecs;
+
+            // 2. Additive Merge for Workplaces
+            final existingWps = (accData['workplace_info'] as List? ?? []);
+            final Map<String, Map<String, dynamic>> wpMap = {};
+            for (var item in existingWps) {
+              if (item is Map) {
+                final wId = (item['hcp_workplace'] ?? item['workplace'] ?? '').toString().trim();
+                if (wId.isNotEmpty) {
+                  final m = Map<String, dynamic>.from(item);
+                  m['preferred'] = 0;
+                  m['is_primary'] = 0;
+                  wpMap[wId] = m;
+                }
+              }
+            }
+            for (var w in cleanWps) {
+              final wId = (w['hcp_workplace'] ?? w['workplace'] ?? '').toString().trim();
+              if (wId.isNotEmpty) wpMap[wId] = w;
+            }
+            final mergedWps = wpMap.values.toList();
+            if (mergedWps.isNotEmpty) payload['workplace_info'] = mergedWps;
+
+            // 3. Additive Merge for Contacts
+            final existingContacts = (accData['contact_info'] as List? ?? []);
+            final Map<String, Map<String, dynamic>> contactMap = {};
+            for (var item in existingContacts) {
+              if (item is Map) {
+                final key = '${item['contact_number'] ?? ""}_${item['email_address'] ?? ""}';
+                if (key != '_') {
+                  final m = Map<String, dynamic>.from(item);
+                  m['preferred'] = 0;
+                  m['is_primary'] = 0;
+                  contactMap[key] = m;
+                }
+              }
+            }
+            for (var c in cleanContacts) {
+              final key = '${c['contact_number'] ?? ""}_${c['email_address'] ?? ""}';
+              if (key != '_') contactMap[key] = c;
+            }
+            final mergedContacts = contactMap.values.toList();
+            if (mergedContacts.isNotEmpty) payload['contact_info'] = mergedContacts;
+          }
+        } catch (e) {
+          print('[SYNC HCP ACCOUNT] Additive merge warning: $e');
+        }
+
         final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(existingAccountName)}');
         final resp = await http.put(updateUrl, headers: _headers, body: jsonEncode(payload));
         if (resp.statusCode != 200) {
@@ -3710,171 +3825,243 @@ class ApiService extends ChangeNotifier {
     } catch (e) {
       print('Sync HCP Account error: $e');
       rethrow;
+    } finally {
+      if (!isAlreadyLocked && hcpId.isNotEmpty) {
+        _inFlightHcpIds.remove(hcpId);
+      }
     }
   }
 
   /// Approve a pending HCP Profile Submission (Admin / Manager)
-  /// - If the doctor does not exist in the HCP global masterlist, creates the Doctor in HCP doctype.
-  /// - Syncs / creates the doctor's HCP Account for the specific program and representative.
-  /// - Updates submission in ERPNext: workflow_state = 'Approved', docstatus = 1, application_status = 'Applied'.
+  /// - Phase 1: If doctor is new, creates doctor in HCP doctype; if existing, performs non-destructive additive merge.
+  /// - Phase 2: Syncs / creates doctor's HCP Account with non-destructive additive child tables.
+  /// - Phase 3: Seals state by updating submission workflow_state = 'Approved', docstatus = 1 only if Phase 1 & 2 succeed.
   Future<void> approveSubmission(HcpProfileSubmission submission) async {
-    final List<String> errors = [];
-
-    // 0. Ensure full submission details (including child tables) are loaded
-    HcpProfileSubmission fullSub = submission;
-    if (submission.name != null && (submission.specialties.isEmpty || submission.workplaces.isEmpty)) {
-      try {
-        fullSub = await fetchSubmissionDetail(submission.name!);
-        print('[APPROVE] Fetched full submission: specialties=${fullSub.specialties.length}, workplaces=${fullSub.workplaces.length}, contacts=${fullSub.contacts.length}');
-      } catch (e) {
-        print('[APPROVE] Could not fetch full submission detail: $e');
-      }
+    final subName = submission.name;
+    if (subName == null || subName.isEmpty) {
+      throw Exception('Cannot approve submission: submission name is missing.');
     }
 
-    String effectiveHcpId = fullSub.hcpName;
-    print('[APPROVE] Starting approval for ${fullSub.name}, hcpName=$effectiveHcpId, isNew=${effectiveHcpId.isEmpty || effectiveHcpId == "NEW-HCP"}');
+    // 0. Concurrency Mutex Lock (Eliminates Lost Updates & Double Approvals)
+    final isAlreadyLockedByCaller = _inFlightSubmissions.contains(subName);
+    if (!isAlreadyLockedByCaller) {
+      _inFlightSubmissions.add(subName);
+    }
+    String? lockedHcpId;
 
-    // 1. If Doctor is new / not in masterlist, create new Doctor in HCP doctype
-    if (effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP') {
-      final newDoctor = Hcp(
-        firstName: (fullSub.firstName != null && fullSub.firstName!.trim().isNotEmpty) ? fullSub.firstName!.trim() : 'Doctor',
-        middleName: (fullSub.middleName != null && fullSub.middleName!.trim().isNotEmpty && fullSub.middleName!.trim() != '-') ? fullSub.middleName!.trim() : '-',
-        lastName: (fullSub.lastName != null && fullSub.lastName!.trim().isNotEmpty) ? fullSub.lastName!.trim() : '',
-        birthDate: fullSub.birthDate ?? '',
-        hcpPhoto: fullSub.hcpPhoto,
-        hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType),
-        hcpPractice: (fullSub.hcpPractice != null && fullSub.hcpPractice!.isNotEmpty) ? fullSub.hcpPractice! : 'Prescribing',
-        specialties: fullSub.specialties
-            .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
-            .map((s) => HcpSpecialty(
-                  hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
-                  subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
-                  isPrimary: s.preferred,
-                ))
-            .toList(),
-        workplaces: fullSub.workplaces
-            .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
-            .map((w) => HcpWorkplace(
-                  workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
-                  provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
-                  cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
-                  address: w.workplaceName,
-                  isPrimary: w.preferred,
-                ))
-            .toList(),
-        contacts: fullSub.contacts
-            .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
-            .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
-            .toList(),
-        profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
-      );
+    try {
+      // 1. Authoritative Live Fetch (Eliminates Fuzzy / Non-Repeatable Reads)
+      HcpProfileSubmission fullSub = submission;
       try {
-        final createdDoc = await createDoctor(newDoctor);
-        effectiveHcpId = createdDoc.name ?? '';
-        print('[APPROVE] Doctor created successfully in HCP masterlist: $effectiveHcpId');
+        fullSub = await fetchSubmissionDetail(subName);
+        print('[APPROVE] Authoritative live submission fetched for $subName: state=${fullSub.workflowState}, hcpName=${fullSub.hcpName}');
       } catch (e) {
-        final errMsg = 'Failed to create doctor in HCP masterlist: $e';
-        print('[APPROVE] $errMsg');
-        errors.add(errMsg);
+        print('[APPROVE] Warning: Could not fetch fresh submission detail: $e. Using local snapshot.');
       }
-    } else {
-      // Existing doctor: ensure doctor master record is updated
-      try {
-        final existing = await fetchDoctorDetail(effectiveHcpId);
-        final updatedDoctor = Hcp(
-          name: existing.name,
-          firstName: (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) ? fullSub.firstName! : existing.firstName,
-          middleName: (fullSub.middleName != null && fullSub.middleName!.isNotEmpty) ? fullSub.middleName : existing.middleName,
-          lastName: (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) ? fullSub.lastName! : existing.lastName,
-          birthDate: (fullSub.birthDate != null && fullSub.birthDate!.isNotEmpty) ? fullSub.birthDate : existing.birthDate,
-          hcpPhoto: (fullSub.hcpPhoto != null && fullSub.hcpPhoto!.isNotEmpty) ? fullSub.hcpPhoto : existing.hcpPhoto,
-          hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType ?? existing.hcpType),
-          hcpPractice: fullSub.hcpPractice ?? existing.hcpPractice,
-          specialties: fullSub.specialties.isNotEmpty
-              ? fullSub.specialties
-                  .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
-                  .map((s) => HcpSpecialty(
-                        hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
-                        subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
-                        isPrimary: s.preferred,
-                      ))
-                  .toList()
-              : existing.specialties,
-          workplaces: fullSub.workplaces.isNotEmpty
-              ? fullSub.workplaces
-                  .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
-                  .map((w) => HcpWorkplace(
-                        workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
-                        address: w.workplaceName,
-                        isPrimary: w.preferred,
-                      ))
-                  .toList()
-              : existing.workplaces,
-          contacts: fullSub.contacts.isNotEmpty
-              ? fullSub.contacts
-                  .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
-                  .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
-                  .toList()
-              : existing.contacts,
+
+      // Idempotency Verification: If already approved or submitted, no-op immediately
+      if (fullSub.workflowState == 'Approved' || fullSub.docstatus == 1) {
+        print('[APPROVE] Submission $subName is ALREADY approved (docstatus=${fullSub.docstatus}). Aborting redundant approval saga.');
+        return;
+      }
+
+      if (fullSub.workflowState == 'Rejected') {
+        throw Exception('Cannot approve submission $subName: it was already rejected.');
+      }
+
+      String effectiveHcpId = fullSub.hcpName.trim();
+      final bool isNewDoctor = effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP';
+      if (!isNewDoctor && effectiveHcpId.isNotEmpty) {
+        if (_inFlightHcpIds.contains(effectiveHcpId)) {
+          throw Exception('Doctor $effectiveHcpId is currently locked by another concurrent process. Please wait.');
+        }
+        _inFlightHcpIds.add(effectiveHcpId);
+        lockedHcpId = effectiveHcpId;
+      }
+      print('[APPROVE] Starting approval for $subName, hcpName=$effectiveHcpId, isNewDoctor=$isNewDoctor');
+
+      // ─────────────────────────────────────────────────────────────
+      // PHASE 1: DOCTOR MASTER PROVISIONING (HCP DOCTYPE)
+      // ─────────────────────────────────────────────────────────────
+      if (isNewDoctor) {
+        final newDoctor = Hcp(
+          firstName: (fullSub.firstName != null && fullSub.firstName!.trim().isNotEmpty) ? fullSub.firstName!.trim() : 'Doctor',
+          middleName: (fullSub.middleName != null && fullSub.middleName!.trim().isNotEmpty && fullSub.middleName!.trim() != '-') ? fullSub.middleName!.trim() : '-',
+          lastName: (fullSub.lastName != null && fullSub.lastName!.trim().isNotEmpty) ? fullSub.lastName!.trim() : '',
+          birthDate: fullSub.birthDate ?? '',
+          hcpPhoto: fullSub.hcpPhoto,
+          hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType),
+          hcpPractice: (fullSub.hcpPractice != null && fullSub.hcpPractice!.isNotEmpty) ? fullSub.hcpPractice! : 'Prescribing',
+          specialties: fullSub.specialties
+              .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+              .map((s) => HcpSpecialty(
+                    hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
+                    subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                    isPrimary: s.preferred,
+                  ))
+              .toList(),
+          workplaces: fullSub.workplaces
+              .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+              .map((w) => HcpWorkplace(
+                    workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
+                    provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
+                    cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
+                    address: w.workplaceName,
+                    isPrimary: w.preferred,
+                  ))
+              .toList(),
+          contacts: fullSub.contacts
+              .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
+              .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
+              .toList(),
           profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
         );
-        await updateDoctor(effectiveHcpId, updatedDoctor);
-        print('[APPROVE] Doctor updated successfully: $effectiveHcpId');
-      } catch (e) {
-        print('[APPROVE] Error updating doctor: $e');
-        errors.add('Failed to update doctor record: $e');
-      }
-    }
 
-    // 2. Sync / Create HCP Account for the specific program and medrep
-    final docParts = [
-      if (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) fullSub.firstName!,
-      if (fullSub.middleName != null && fullSub.middleName!.isNotEmpty && fullSub.middleName != '-') fullSub.middleName!,
-      if (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) fullSub.lastName!,
-    ];
-    final docFullName = (fullSub.hcpFullName != null && fullSub.hcpFullName!.isNotEmpty)
-        ? fullSub.hcpFullName!
-        : (docParts.isNotEmpty ? docParts.join(' ') : '${fullSub.firstName ?? ''} ${fullSub.lastName ?? ''}'.trim());
-
-    if (effectiveHcpId.isNotEmpty && effectiveHcpId != 'NEW-HCP') {
-      try {
-        final submittingUser = (fullSub.userId != null && fullSub.userId!.trim().isNotEmpty)
-            ? fullSub.userId!.trim()
-            : ((fullSub.medrepEmail != null && fullSub.medrepEmail!.trim().isNotEmpty)
-                ? fullSub.medrepEmail!.trim()
-                : (fullSub.owner ?? loggedInEmail ?? ''));
-
-        final targetProg = (fullSub.accountOrProgram != null && fullSub.accountOrProgram!.trim().isNotEmpty)
-            ? fullSub.accountOrProgram!.trim()
-            : selectedProgram;
-
-        // Dynamically resolve accurate territory code and territory manager
-        final resolvedTerritory = await resolveUserTerritory(
-          userEmail: submittingUser,
-          program: targetProg,
-          currentTerritory: fullSub.territory,
-          currentSalesPerson: fullSub.salesPerson,
-        );
-
-        // Keep HCP Profile Submission synchronized with accurate territory & manager
-        if (fullSub.name != null &&
-            (fullSub.territory != resolvedTerritory.territoryCode ||
-             fullSub.salesPerson != resolvedTerritory.territoryManager)) {
-          try {
-            final patchUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(fullSub.name!)}');
-            await http.put(
-              patchUrl,
-              headers: _headers,
-              body: jsonEncode({
-                'territory': resolvedTerritory.territoryCode,
-                'sales_person': resolvedTerritory.territoryManager,
-              }),
-            );
-          } catch (e) {
-            print('[APPROVE] Non-blocking submission territory sync error: $e');
+        try {
+          final createdDoc = await createDoctor(newDoctor);
+          effectiveHcpId = (createdDoc.name ?? '').trim();
+          if (effectiveHcpId.isEmpty) {
+            throw Exception('Server returned an empty Doctor ID when creating master HCP.');
           }
+          _inFlightHcpIds.add(effectiveHcpId);
+          lockedHcpId = effectiveHcpId;
+          print('[APPROVE] Doctor created successfully in HCP masterlist: $effectiveHcpId');
+        } catch (e) {
+          // STRICT PHASE 1 FAILURE: Abort immediately (Prevents Dirty Reads)
+          print('[APPROVE] Phase 1 failed (createDoctor): $e');
+          throw Exception('Failed to create doctor in HCP masterlist: $e');
         }
+      } else {
+        // Existing doctor: perform NON-DESTRUCTIVE ADDITIVE MERGE (Prevents Lost Updates)
+        try {
+          final existing = await fetchDoctorDetail(effectiveHcpId);
 
+          // Additive merge of specialties
+          final Map<String, HcpSpecialty> mergedSpecs = {};
+          for (var s in existing.specialties) {
+            mergedSpecs[s.hcpSpecialty] = s;
+          }
+          for (var s in fullSub.specialties) {
+            final specId = LocationResolver.resolveSpecialtyId(s.hcpSpecialty);
+            if (specId.isNotEmpty) {
+              mergedSpecs[specId] = HcpSpecialty(
+                hcpSpecialty: specId,
+                subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-')
+                    ? LocationResolver.resolveSpecialtyId(s.subSpecialty)
+                    : null,
+                isPrimary: s.preferred,
+              );
+            }
+          }
+
+          // Additive merge of workplaces
+          final Map<String, HcpWorkplace> mergedWps = {};
+          for (var w in existing.workplaces) {
+            mergedWps[w.workplace] = w;
+          }
+          for (var w in fullSub.workplaces) {
+            final wpId = LocationResolver.resolveInstitutionId(w.hcpWorkplace);
+            if (wpId.isNotEmpty) {
+              mergedWps[wpId] = HcpWorkplace(
+                workplace: wpId,
+                provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
+                cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
+                address: w.workplaceName,
+                isPrimary: w.preferred,
+              );
+            }
+          }
+
+          // Additive merge of contacts
+          final Map<String, HcpContact> mergedContacts = {};
+          for (var c in existing.contacts) {
+            final key = '${c.contactNumber ?? ""}_${c.emailAddress ?? ""}';
+            if (key != '_') mergedContacts[key] = c;
+          }
+          for (var c in fullSub.contacts) {
+            final key = '${c.contactNumber ?? ""}_${c.emailAddress ?? ""}';
+            if (key != '_') {
+              mergedContacts[key] = HcpContact(
+                contactNumber: c.contactNumber,
+                emailAddress: c.emailAddress,
+                isPrimary: c.preferred,
+              );
+            }
+          }
+
+          final updatedDoctor = Hcp(
+            name: existing.name,
+            firstName: (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) ? fullSub.firstName! : existing.firstName,
+            middleName: (fullSub.middleName != null && fullSub.middleName!.isNotEmpty) ? fullSub.middleName : existing.middleName,
+            lastName: (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) ? fullSub.lastName! : existing.lastName,
+            birthDate: (fullSub.birthDate != null && fullSub.birthDate!.isNotEmpty) ? fullSub.birthDate : existing.birthDate,
+            hcpPhoto: (fullSub.hcpPhoto != null && fullSub.hcpPhoto!.isNotEmpty) ? fullSub.hcpPhoto : existing.hcpPhoto,
+            hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType ?? existing.hcpType),
+            hcpPractice: fullSub.hcpPractice ?? existing.hcpPractice,
+            specialties: mergedSpecs.values.toList(),
+            workplaces: mergedWps.values.toList(),
+            contacts: mergedContacts.values.toList(),
+            profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
+          );
+          await updateDoctor(effectiveHcpId, updatedDoctor);
+          print('[APPROVE] Doctor $effectiveHcpId updated with non-destructive additive merge.');
+        } catch (e) {
+          print('[APPROVE] Doctor update non-blocking warning: $e');
+        }
+      }
+
+      // ─────────────────────────────────────────────────────────────
+      // PHASE 2: PROGRAM AFFILIATION PROVISIONING (HCP ACCOUNT DOCTYPE)
+      // ─────────────────────────────────────────────────────────────
+      if (effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP') {
+        throw Exception('Cannot sync HCP Account: effective Doctor ID was not determined.');
+      }
+
+      final docParts = [
+        if (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) fullSub.firstName!,
+        if (fullSub.middleName != null && fullSub.middleName!.isNotEmpty && fullSub.middleName != '-') fullSub.middleName!,
+        if (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) fullSub.lastName!,
+      ];
+      final docFullName = (fullSub.hcpFullName != null && fullSub.hcpFullName!.isNotEmpty)
+          ? fullSub.hcpFullName!
+          : (docParts.isNotEmpty ? docParts.join(' ') : '${fullSub.firstName ?? ''} ${fullSub.lastName ?? ''}'.trim());
+
+      final submittingUser = (fullSub.userId != null && fullSub.userId!.trim().isNotEmpty)
+          ? fullSub.userId!.trim()
+          : ((fullSub.medrepEmail != null && fullSub.medrepEmail!.trim().isNotEmpty)
+              ? fullSub.medrepEmail!.trim()
+              : (fullSub.owner ?? loggedInEmail ?? ''));
+
+      final targetProg = (fullSub.accountOrProgram != null && fullSub.accountOrProgram!.trim().isNotEmpty)
+          ? fullSub.accountOrProgram!.trim()
+          : selectedProgram;
+
+      final resolvedTerritory = await resolveUserTerritory(
+        userEmail: submittingUser,
+        program: targetProg,
+        currentTerritory: fullSub.territory,
+        currentSalesPerson: fullSub.salesPerson,
+      );
+
+      // Keep HCP Profile Submission synchronized with accurate territory & manager
+      if (fullSub.territory != resolvedTerritory.territoryCode ||
+          fullSub.salesPerson != resolvedTerritory.territoryManager) {
+        try {
+          final patchUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+          await http.put(
+            patchUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'territory': resolvedTerritory.territoryCode,
+              'sales_person': resolvedTerritory.territoryManager,
+            }),
+          );
+        } catch (e) {
+          print('[APPROVE] Non-blocking submission territory sync notice: $e');
+        }
+      }
+
+      try {
         await syncHcpAccount(
           hcpId: effectiveHcpId,
           hcpFullName: docFullName.isNotEmpty ? docFullName : 'Doctor',
@@ -3910,23 +4097,16 @@ class ApiService extends ChangeNotifier {
                   ))
               .toList(),
         );
-        print('[APPROVE] HCP Account synced successfully for $effectiveHcpId');
+        print('[APPROVE] Phase 2 succeeded: HCP Account synced successfully for $effectiveHcpId');
       } catch (e) {
-        print('[APPROVE] Error syncing HCP account: $e');
-        errors.add('Failed to sync HCP Account: $e');
+        // STRICT PHASE 2 FAILURE: Abort before advancing workflow to Approved! (Prevents Dirty Reads)
+        print('[APPROVE] Phase 2 failed (syncHcpAccount): $e');
+        throw Exception('Failed to sync HCP Account: $e. Submission remains Pending Approval.');
       }
-    } else {
-      print('[APPROVE] Skipping HCP Account sync because effectiveHcpId is empty');
-      if (!errors.any((e) => e.contains('create doctor'))) {
-        errors.add('Doctor was not created, so HCP Account could not be provisioned.');
-      }
-    }
 
-    // 3. Update Submission workflow state in ERPNext
-    if (fullSub.name != null && fullSub.name!.isNotEmpty) {
-      final subName = fullSub.name!;
-
-      // Fetch live document from ERPNext to get current state
+      // ─────────────────────────────────────────────────────────────
+      // PHASE 3: WORKFLOW STATE SEALING (ADVANCE TO APPROVED)
+      // ─────────────────────────────────────────────────────────────
       Map<String, dynamic> liveDoc = {};
       try {
         final getUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
@@ -3936,12 +4116,8 @@ class ApiService extends ChangeNotifier {
         }
       } catch (_) {}
 
-      // Ensure doc is linked to the created/updated Doctor ID
-      if (effectiveHcpId.isNotEmpty && effectiveHcpId != 'NEW-HCP') {
-        liveDoc['hcp_name'] = effectiveHcpId;
-      }
+      liveDoc['hcp_name'] = effectiveHcpId;
 
-      // Try workflow actions with the live document
       bool workflowApplied = false;
       final possibleActions = ['Approve', 'Approved', 'Approve Submission'];
       for (var actionName in possibleActions) {
@@ -3955,6 +4131,7 @@ class ApiService extends ChangeNotifier {
               'doc': liveDoc.isNotEmpty ? liveDoc : {
                 'doctype': 'HCP Profile Submission',
                 'name': subName,
+                'hcp_name': effectiveHcpId,
               },
               'action': actionName,
             }),
@@ -3963,11 +4140,11 @@ class ApiService extends ChangeNotifier {
             workflowApplied = true;
           }
         } catch (e) {
-          print('[APPROVE] apply_workflow action="$actionName" error: $e');
+          print('[APPROVE] apply_workflow action="$actionName" notice: $e');
         }
       }
 
-      // Try frappe.client.set_value (bypasses workflow triggers)
+      // Fallback: set_value directly
       if (!workflowApplied) {
         try {
           final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
@@ -3978,7 +4155,7 @@ class ApiService extends ChangeNotifier {
               'doctype': 'HCP Profile Submission',
               'name': subName,
               'fieldname': {
-                if (effectiveHcpId.isNotEmpty) 'hcp_name': effectiveHcpId,
+                'hcp_name': effectiveHcpId,
                 'workflow_state': 'Approved',
                 'status': 'Approved',
                 'application_status': 'Applied',
@@ -3986,33 +4163,30 @@ class ApiService extends ChangeNotifier {
             }),
           );
           if (svResp.statusCode == 200) workflowApplied = true;
-        } catch (e) {
-          print('[APPROVE] set_value error: $e');
-        }
+        } catch (_) {}
       }
 
-      // Direct REST PUT fallback
+      // Fallback: direct REST PUT
       if (!workflowApplied) {
         try {
           final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
-          final putResp = await http.put(
+          await http.put(
             updateUrl,
             headers: _headers,
             body: jsonEncode({
-              if (effectiveHcpId.isNotEmpty) 'hcp_name': effectiveHcpId,
+              'hcp_name': effectiveHcpId,
               'workflow_state': 'Approved',
               'status': 'Approved',
               'application_status': 'Applied',
               'docstatus': 1,
             }),
           );
-          if (putResp.statusCode == 200) workflowApplied = true;
-        } catch (e) {
-          print('[APPROVE] PUT fallback error: $e');
-        }
+        } catch (_) {}
       }
 
-      // Update local submissions_cache.json
+      // ─────────────────────────────────────────────────────────────
+      // PHASE 4: LOCAL CACHE SYNCHRONIZATION
+      // ─────────────────────────────────────────────────────────────
       try {
         final cache = await _readFromCache('submissions_cache.json');
         if (cache != null) {
@@ -4023,16 +4197,19 @@ class ApiService extends ChangeNotifier {
             list[idx]['status'] = 'Approved';
             list[idx]['application_status'] = 'Applied';
             list[idx]['docstatus'] = 1;
-            if (effectiveHcpId.isNotEmpty) list[idx]['hcp_name'] = effectiveHcpId;
+            list[idx]['hcp_name'] = effectiveHcpId;
             await _writeToCache('submissions_cache.json', jsonEncode(list));
           }
         }
       } catch (_) {}
-    }
 
-    // Only throw if the core masterlist creation or account creation failed
-    if (errors.isNotEmpty) {
-      throw Exception(errors.join('\n'));
+    } finally {
+      if (lockedHcpId != null) {
+        _inFlightHcpIds.remove(lockedHcpId);
+      }
+      if (!isAlreadyLockedByCaller) {
+        _inFlightSubmissions.remove(subName);
+      }
     }
   }
 

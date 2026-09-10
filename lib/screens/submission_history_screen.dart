@@ -246,6 +246,13 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
 
   Future<void> _handleApplyWorkflowAction(BuildContext modalCtx, HcpProfileSubmission submission, String action, {String remarks = ''}) async {
     final apiService = Provider.of<ApiService>(context, listen: false);
+    final subName = submission.name ?? '';
+    if (subName.isNotEmpty && apiService.isSubmissionInFlight(subName)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Action already in-flight for this submission. Please wait.')),
+      );
+      return;
+    }
     try {
       showDialog(
         context: context,
