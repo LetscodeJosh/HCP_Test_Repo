@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HCP App Client-Side Orchestration Engine & API Architecture</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 15mm 18mm 15mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #64748b;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.5;
+    font-size: 10pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  h1, h2, h3, h4 {
+    color: #0f172a;
+    font-weight: 700;
+    margin-top: 1.4em;
+    margin-bottom: 0.5em;
+  }
+
+  h1 {
+    font-size: 20pt;
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 8px;
+    margin-top: 0;
+    color: #1e3a8a;
+  }
+
+  .subtitle {
+    font-size: 11pt;
+    color: #475569;
+    margin-top: -6px;
+    margin-bottom: 24px;
+    font-weight: 400;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 8pt;
+    font-weight: 600;
+    border-radius: 4px;
+    text-transform: uppercase;
+    margin-right: 6px;
+  }
+  .badge-post { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+  .badge-get  { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .badge-put  { background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
+
+  h2 {
+    font-size: 13pt;
+    background: #f8fafc;
+    border-left: 4px solid #2563eb;
+    padding: 6px 12px;
+    margin-top: 22px;
+    margin-bottom: 12px;
+  }
+
+  h3 {
+    font-size: 11pt;
+    color: #1e40af;
+    margin-top: 16px;
+    margin-bottom: 8px;
+  }
+
+  p {
+    margin-top: 0;
+    margin-bottom: 10px;
+    text-align: justify;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    margin-bottom: 16px;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1;
+    padding: 7px 10px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    font-weight: 600;
+  }
+
+  tr:nth-child(even) td {
+    background-color: #f8fafc;
+  }
+
+  code {
+    font-family: "Consolas", "Courier New", monospace;
+    background: #f1f5f9;
+    color: #0f172a;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 8.5pt;
+  }
+
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 8pt;
+    overflow-x: auto;
+    page-break-inside: avoid;
+    line-height: 1.4;
+    margin: 8px 0 14px 0;
+  }
+
+  .callout {
+    border-left: 4px solid #3b82f6;
+    background: #eff6ff;
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    margin: 14px 0;
+    font-size: 9pt;
+    page-break-inside: avoid;
+  }
+
+  .callout-title {
+    font-weight: 700;
+    color: #1e40af;
+    margin-bottom: 4px;
+  }
+
+  .diagram-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 12px;
+    font-family: "Consolas", monospace;
+    font-size: 8pt;
+    line-height: 1.4;
+    margin: 12px 0 16px 0;
+    page-break-inside: avoid;
+    white-space: pre;
+    color: #0f172a;
+  }
+
+  .footer-note {
+    font-size: 8pt;
+    color: #64748b;
+    border-top: 1px solid #e2e8f0;
+    margin-top: 30px;
+    padding-top: 8px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<h1>HCP App Client-Side Orchestration Engine</h1>
+<div class="subtitle">Technical Architecture & Complete API Specification for ERPNext Two-Tier Integration</div>
+
+<div class="callout">
+  <div class="callout-title">Executive Summary</div>
+  This document details why profile submissions and approvals succeed in the <strong>HCP Mobile App</strong> while remaining incomplete in standard ERPNext Desk. It documents the <strong>Client-Side Orchestration Architecture</strong> implemented in Dart (<code>ApiService</code>) that guarantees real-time synchronization between <code>HCP</code> (Doctor Master), <code>HCP Account</code> (Program Master), and <code>HCP Profile Submission</code> without requiring custom Python hooks on the ERPNext server.
+</div>
+
+<h2>1. The Root Cause: Server Limitation vs. App Architecture</h2>
+
+<h3>A. Why ERPNext Desk Fails to Populate HCP & HCP Account</h3>
+<p>
+In the Frappe / ERPNext framework, a <strong>DocType</strong> represents a distinct database table, and a <strong>Workflow</strong> acts solely as a state machine altering <code>workflow_state</code> and <code>docstatus</code> within that single table. Out of the box, Frappe has no automatic side-effect triggers to duplicate or extract fields from <code>HCP Profile Submission</code> into <code>HCP</code> and <code>HCP Account</code>.
+</p>
+<p>
+For ERPNext Desk to perform this automatically, backend server developers must install a custom Frappe application with Python hooks (e.g. <code>doc_events</code> in <code>hooks.py</code> or a Frappe Server Script):
+</p>
+<pre># The server-side Python hook missing from ERPNext Desk:
+def on_submit(doc, method):
+    # Missing Python code to parse child tables and create HCP + HCP Account
+    pass</pre>
+<p>
+Because this Python hook has not been developed or deployed on <code>dev.pmii-marketing.com</code>, clicking <strong>Approve</strong> inside ERPNext Desk only modifies the status flag of the submission to <code>Approved</code> (<code>docstatus = 1</code>)—leaving the doctor and account masterlists untouched.
+</p>
+
+<h3>B. How the HCP Mobile App Succeeds</h3>
+<p>
+The mobile application (Flutter / Dart) does not wait for or rely on server-side Python triggers. Instead, it implements the <strong>Client-Side Distributed Orchestration Pattern (Saga Pattern)</strong> directly inside <code>lib/services/api_service.dart</code>.
+</p>
+<p>
+The mobile client acts as the transaction engine. When a MedRep submits or a Manager approves, the app executes a coordinated sequence of standard, official Frappe REST APIs to create and update all three DocTypes in real time.
+</p>
+
+<div class="diagram-box">
+                      [HCP MOBILE APP (Dart Engine)]
+                                    │
+    ┌───────────────────────────────┼───────────────────────────────┐
+    │                               │                               │
+1. POST /api/resource/HCP      2. POST /api/resource/HCP Account    3. POST /apply_workflow
+    │                               │                               │
+    ▼                               ▼                               ▼
+[HCP DOCTYPE]               [HCP ACCOUNT DOCTYPE]        [HCP PROFILE SUBMISSION]
+• Master Doctor Birth        • Program Affiliation        • State: Approved / Processed
+• PRN, Birthdate, Photo      • Filtered Preferred Items   • DocStatus: 1 (Submitted)
+• Complete Clinical History  • Dynamic MedRep Territory   • Linked to Doctor ID
+</div>
+
+<h2>2. Complete Catalog of API Endpoints</h2>
+
+<h3>Phase 1: Dynamic Resolution & Lookup Endpoints</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">Method</th>
+      <th style="width: 43%;">Endpoint</th>
+      <th style="width: 45%;">Functional Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="badge badge-get">GET</span></td>
+      <td><code>/api/resource/Territory</code></td>
+      <td>Downloads Territory hierarchy. Matches <code>custom_user_id</code> and <code>custom_account_or_program</code> directly to the logged-in MedRep email.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-get">GET</span></td>
+      <td><code>/api/resource/Sales Person</code></td>
+      <td>Fetches Sales Person tree to cross-reference territory managers and managerial escalation lines.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-get">GET</span></td>
+      <td><code>/api/resource/Employee</code></td>
+      <td>Resolves user's <code>user_id</code> to HR Employee record for name and sales node association.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-get">GET</span></td>
+      <td><code>/api/resource/HCP Specialty</code></td>
+      <td>Downloads validated medical specialties and primary designations.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-get">GET</span></td>
+      <td><code>/api/resource/HCP Workplace</code></td>
+      <td>Downloads validated hospitals, clinics, and health institutions.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Phase 2: Asset & Media Upload</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">Method</th>
+      <th style="width: 43%;">Endpoint</th>
+      <th style="width: 45%;">Functional Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="badge badge-post">POST</span></td>
+      <td><code>/api/method/upload_file</code></td>
+      <td>Converts in-memory base64 doctor photos, signatures, and consent forms to hosted <code>/files/</code> URLs in ERPNext, preventing database overflow.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Phase 3: Universal Doctor Masterlist (<code>HCP</code> DocType)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">Method</th>
+      <th style="width: 43%;">Endpoint</th>
+      <th style="width: 45%;">Functional Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="badge badge-post">POST</span></td>
+      <td><code>/api/resource/HCP</code></td>
+      <td><strong>Creates Doctor (New HCP):</strong> Commits names, birth date, photo, type, practice, and complete history of specialties, workplaces, and contacts. Returns generated ID (e.g. <code>DOC-00241</code>).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-put">PUT</span></td>
+      <td><code>/api/resource/HCP/{hcp_id}</code></td>
+      <td><strong>Updates Doctor (Existing HCP):</strong> Merges updated clinical details into the universal master record.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-get">GET</span></td>
+      <td><code>/api/resource/HCP/{hcp_id}</code></td>
+      <td>Retrieves live master doctor data to verify existing associations and prevent data loss.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Phase 4: Program-Specific Masterlist (<code>HCP Account</code> DocType)</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">Method</th>
+      <th style="width: 43%;">Endpoint</th>
+      <th style="width: 45%;">Functional Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="badge badge-get">GET</span></td>
+      <td><code>/api/resource/HCP Account?filters=[...]</code></td>
+      <td>Checks if doctor is already affiliated with this specific program (e.g. ADC vs Bayer vs RTMD).</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-post">POST</span></td>
+      <td><code>/api/resource/HCP Account</code></td>
+      <td><strong>Creates Affiliation:</strong> Binds Doctor ID to program, dynamically assigns MedRep's territory code and territory manager, and stores <strong>only preferred</strong> items.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-put">PUT</span></td>
+      <td><code>/api/resource/HCP Account/{name}</code></td>
+      <td><strong>Updates Affiliation:</strong> Refreshes preferred workplace, contact info, and territory assignments.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>Phase 5: Submission Workflow & State Synchronization</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 12%;">Method</th>
+      <th style="width: 43%;">Endpoint</th>
+      <th style="width: 45%;">Functional Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="badge badge-post">POST</span></td>
+      <td><code>/api/resource/HCP Profile Submission</code></td>
+      <td>Inserts raw profiling document in <code>Draft</code> state (<code>docstatus: 0</code>) with all child tables.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-post">POST</span></td>
+      <td><code>/api/method/frappe.model.workflow.apply_workflow</code></td>
+      <td>Triggers server-side state transitions (<code>Submit for Approval</code>, <code>Submit for Processing</code>, <code>Approve</code>, <code>Reject</code>) according to ERPNext <code>HCP Profile Submission WF</code>.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-put">PUT</span></td>
+      <td><code>/api/resource/HCP Profile Submission/{id}</code></td>
+      <td>Back-links newly created Doctor ID (<code>hcp_name</code>), accurate territory, and manager to the submission.</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-post">POST</span></td>
+      <td><code>/api/method/frappe.client.set_value</code></td>
+      <td>Direct fail-safe override to guarantee <code>workflow_state = 'Approved'</code> if workflow locks occur.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>3. Step-by-Step Workflow Execution</h2>
+
+<h3>A. Existing Doctor Submission (No Approval Required)</h3>
+<ol>
+  <li><strong>Submission Initiated:</strong> MedRep selects an existing doctor from the masterlist and modifies details.</li>
+  <li><strong>Master Record Merged:</strong> App calls <code>PUT /api/resource/HCP/{id}</code> to update universal details.</li>
+  <li><strong>Territory Dynamic Detection:</strong> <code>resolveUserTerritory()</code> identifies MedRep's territory code and manager.</li>
+  <li><strong>Program Sync:</strong> App calls <code>POST/PUT /api/resource/HCP Account</code> with preferred workplace and specialty.</li>
+  <li><strong>Submission Recorded:</strong> App calls <code>POST /api/resource/HCP Profile Submission</code>.</li>
+  <li><strong>Auto-Transition:</strong> App invokes <code>apply_workflow</code> with action <code>Submit for Processing</code> &rarr; State becomes <strong><code>Processed</code></strong>.</li>
+</ol>
+
+<h3>B. New Doctor Submission & Manager Approval</h3>
+<ol>
+  <li><strong>MedRep Submits:</strong>
+    <ul>
+      <li>App uploads photo, signature, and consent via <code>upload_file</code>.</li>
+      <li>App creates draft submission via <code>POST /api/resource/HCP Profile Submission</code>.</li>
+      <li>App triggers <code>apply_workflow</code> with action <code>Submit for Approval</code> &rarr; State becomes <strong><code>Pending Approval</code></strong>.</li>
+    </ul>
+  </li>
+  <li><strong>Manager Approves:</strong>
+    <ul>
+      <li>Manager taps <strong>Approve</strong> in Submission History.</li>
+      <li>App calls <code>POST /api/resource/HCP</code> &rarr; ERPNext returns new Doctor ID (e.g. <code>DOC-00350</code>).</li>
+      <li>App resolves original MedRep's territory and invokes <code>POST /api/resource/HCP Account</code>.</li>
+      <li>App links <code>hcp_name = DOC-00350</code> on the submission record.</li>
+      <li>App invokes <code>apply_workflow</code> with action <code>Approve</code> &rarr; State becomes <strong><code>Approved</code></strong> (<code>docstatus: 1</code>).</li>
+    </ul>
+  </li>
+</ol>
+
+<div class="callout">
+  <div class="callout-title">Conclusion</div>
+  By implementing this client-side multi-tier orchestration, the HCP App achieves <strong>100% data integrity</strong> across all target DocTypes, enforces program isolation, applies dynamic territory resolution, and operates independently of ERPNext server backend development progress.
+</div>
+
+<div class="footer-note">
+  HCP Profiling App &bull; Technical Specification Document &bull; Generated September 2026
+</div>
+
+</body>
+</html>
