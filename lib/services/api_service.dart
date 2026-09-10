@@ -3884,52 +3884,80 @@ class ApiService extends ChangeNotifier {
       // PHASE 1: DOCTOR MASTER PROVISIONING (HCP DOCTYPE)
       // ─────────────────────────────────────────────────────────────
       if (isNewDoctor) {
-        final newDoctor = Hcp(
-          firstName: (fullSub.firstName != null && fullSub.firstName!.trim().isNotEmpty) ? fullSub.firstName!.trim() : 'Doctor',
-          middleName: (fullSub.middleName != null && fullSub.middleName!.trim().isNotEmpty && fullSub.middleName!.trim() != '-') ? fullSub.middleName!.trim() : '-',
-          lastName: (fullSub.lastName != null && fullSub.lastName!.trim().isNotEmpty) ? fullSub.lastName!.trim() : '',
-          birthDate: fullSub.birthDate ?? '',
-          hcpPhoto: fullSub.hcpPhoto,
-          hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType),
-          hcpPractice: (fullSub.hcpPractice != null && fullSub.hcpPractice!.isNotEmpty) ? fullSub.hcpPractice! : 'Prescribing',
-          specialties: fullSub.specialties
-              .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
-              .map((s) => HcpSpecialty(
-                    hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
-                    subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
-                    isPrimary: s.preferred,
-                  ))
-              .toList(),
-          workplaces: fullSub.workplaces
-              .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
-              .map((w) => HcpWorkplace(
-                    workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
-                    provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
-                    cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
-                    address: w.workplaceName,
-                    isPrimary: w.preferred,
-                  ))
-              .toList(),
-          contacts: fullSub.contacts
-              .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
-              .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
-              .toList(),
-          profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
-        );
+        // Countermeasure 4: Idempotent Service - Check if master doctor was already provisioned
+        // to prevent duplicate records if an earlier attempt succeeded before a network retry
+        if (effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP') {
+          try {
+            final fName = fullSub.firstName?.trim() ?? '';
+            final lName = fullSub.lastName?.trim() ?? '';
+            if (fName.isNotEmpty && lName.isNotEmpty) {
+              final checkUrl = Uri.parse(
+                '$baseUrl/api/resource/HCP?filters=[["first_name","=","${Uri.encodeComponent(fName)}"],["last_name","=","${Uri.encodeComponent(lName)}"]]&fields=["name"]&limit=1',
+              );
+              final checkResp = await http.get(checkUrl, headers: _headers);
+              if (checkResp.statusCode == 200) {
+                final checkBody = jsonDecode(checkResp.body);
+                final List<dynamic> checkData = checkBody['data'] ?? [];
+                if (checkData.isNotEmpty && checkData[0]['name'] != null) {
+                  effectiveHcpId = checkData[0]['name'].toString().trim();
+                  print('[APPROVE] Idempotency match: Reusing already provisioned Doctor $effectiveHcpId.');
+                }
+              }
+            }
+          } catch (_) {}
+        }
 
-        try {
-          final createdDoc = await createDoctor(newDoctor);
-          effectiveHcpId = (createdDoc.name ?? '').trim();
-          if (effectiveHcpId.isEmpty) {
-            throw Exception('Server returned an empty Doctor ID when creating master HCP.');
-          }
+        if (effectiveHcpId.isNotEmpty && effectiveHcpId != 'NEW-HCP') {
           _inFlightHcpIds.add(effectiveHcpId);
           lockedHcpId = effectiveHcpId;
-          print('[APPROVE] Doctor created successfully in HCP masterlist: $effectiveHcpId');
-        } catch (e) {
-          // STRICT PHASE 1 FAILURE: Abort immediately (Prevents Dirty Reads)
-          print('[APPROVE] Phase 1 failed (createDoctor): $e');
-          throw Exception('Failed to create doctor in HCP masterlist: $e');
+        } else {
+          final newDoctor = Hcp(
+            firstName: (fullSub.firstName != null && fullSub.firstName!.trim().isNotEmpty) ? fullSub.firstName!.trim() : 'Doctor',
+            middleName: (fullSub.middleName != null && fullSub.middleName!.trim().isNotEmpty && fullSub.middleName!.trim() != '-') ? fullSub.middleName!.trim() : '-',
+            lastName: (fullSub.lastName != null && fullSub.lastName!.trim().isNotEmpty) ? fullSub.lastName!.trim() : '',
+            birthDate: fullSub.birthDate ?? '',
+            hcpPhoto: fullSub.hcpPhoto,
+            hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType),
+            hcpPractice: (fullSub.hcpPractice != null && fullSub.hcpPractice!.isNotEmpty) ? fullSub.hcpPractice! : 'Prescribing',
+            specialties: fullSub.specialties
+                .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+                .map((s) => HcpSpecialty(
+                      hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
+                      subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                      isPrimary: s.preferred,
+                    ))
+                .toList(),
+            workplaces: fullSub.workplaces
+                .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+                .map((w) => HcpWorkplace(
+                      workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
+                      provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
+                      cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
+                      address: w.workplaceName,
+                      isPrimary: w.preferred,
+                    ))
+                .toList(),
+            contacts: fullSub.contacts
+                .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
+                .map((c) => HcpContact(contactNumber: c.contactNumber, emailAddress: c.emailAddress, isPrimary: c.preferred))
+                .toList(),
+            profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
+          );
+
+          try {
+            final createdDoc = await createDoctor(newDoctor);
+            effectiveHcpId = (createdDoc.name ?? '').trim();
+            if (effectiveHcpId.isEmpty) {
+              throw Exception('Server returned an empty Doctor ID when creating master HCP.');
+            }
+            _inFlightHcpIds.add(effectiveHcpId);
+            lockedHcpId = effectiveHcpId;
+            print('[APPROVE] Doctor created successfully in HCP masterlist: $effectiveHcpId');
+          } catch (e) {
+            // STRICT PHASE 1 FAILURE: Abort immediately (Prevents Dirty Reads)
+            print('[APPROVE] Phase 1 failed (createDoctor): $e');
+            throw Exception('Failed to create doctor in HCP masterlist: $e');
+          }
         }
       } else {
         // Existing doctor: perform NON-DESTRUCTIVE ADDITIVE MERGE (Prevents Lost Updates)
@@ -4107,6 +4135,7 @@ class ApiService extends ChangeNotifier {
       // ─────────────────────────────────────────────────────────────
       // PHASE 3: WORKFLOW STATE SEALING (ADVANCE TO APPROVED)
       // ─────────────────────────────────────────────────────────────
+      // Countermeasure 3: REREAD VALUE before final commit to verify database state was not altered mid-workflow
       Map<String, dynamic> liveDoc = {};
       try {
         final getUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
@@ -4115,6 +4144,19 @@ class ApiService extends ChangeNotifier {
           liveDoc = jsonDecode(getResp.body)['data'] ?? {};
         }
       } catch (_) {}
+
+      if (liveDoc.isNotEmpty) {
+        final midState = (liveDoc['workflow_state'] ?? liveDoc['status'] ?? '').toString();
+        final midDocstatus = liveDoc['docstatus'];
+        if (midState == 'Rejected' || midDocstatus == 2) {
+          print('[APPROVE] Reread Value conflict: Submission $subName was rejected mid-workflow. Aborting commit.');
+          throw Exception('Aborting approval commit: Submission $subName was rejected mid-workflow by another user.');
+        }
+        if (midState == 'Approved' || midDocstatus == 1) {
+          print('[APPROVE] Reread Value notice: Submission $subName was already marked Approved mid-workflow. Sealing complete.');
+          return;
+        }
+      }
 
       liveDoc['hcp_name'] = effectiveHcpId;
 

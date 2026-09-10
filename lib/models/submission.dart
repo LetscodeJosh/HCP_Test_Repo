@@ -257,6 +257,14 @@ class HcpProfileSubmission {
     };
   }
 
+  // Countermeasure 1: Semantic Locks (Application-level status properties)
+  bool get isPendingApproval => workflowState == 'Pending Approval';
+  bool get isApproved => workflowState == 'Approved' || docstatus == 1;
+  bool get isProcessed => workflowState == 'Processed';
+  bool get isRejected => workflowState == 'Rejected' || docstatus == 2;
+  bool get isDraft => (workflowState == 'Draft' || workflowState == null) && docstatus == 0;
+  bool get isSemanticallyLocked => isPendingApproval || isApproved;
+
   HcpProfileSubmission copyWith({
     String? name,
     String? hcpName,
