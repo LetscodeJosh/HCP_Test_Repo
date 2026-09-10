@@ -23,6 +23,11 @@ dependencies:
   sqflite: ^2.3.0
   path: ^1.8.3
   url_launcher: ^6.2.0
+  flutter_plugin_android_lifecycle: ^2.0.35
+  local_auth_android: ^1.0.56
+  path_provider_android: ^2.3.1
+  shared_preferences_android: ^2.4.28
+  url_launcher_android: ^6.3.33
 
 dev_dependencies:
   flutter_test:
