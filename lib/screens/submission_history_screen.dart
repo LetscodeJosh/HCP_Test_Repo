@@ -261,12 +261,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
         ),
       );
 
-      await apiService.applyWorkflowAction(submission, action, remarks: remarks);
+      final updatedSub = await apiService.applyWorkflowAction(submission, action, remarks: remarks);
       if (action == 'Approve') {
         await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
         await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
       }
-      await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
+      final freshList = await apiService.fetchSubmissions().catchError((_) => <HcpProfileSubmission>[]);
 
       if (mounted) {
         Navigator.pop(context); // Close loading dialog
@@ -291,6 +291,15 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             ),
           ),
         );
+        setState(() {
+          final idx = _submissions.indexWhere((s) => s.name == submission.name);
+          if (idx != -1) {
+            _submissions[idx] = updatedSub;
+          }
+          if (freshList.isNotEmpty) {
+            _submissions = freshList;
+          }
+        });
         _loadSubmissions();
       }
     } catch (e) {
@@ -852,6 +861,10 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                 TextButton(
                                   onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Approve'),
                                   child: const Text('Approve', style: TextStyle(color: Color(0xFF4ADE80), fontSize: 11)),
+                                ),
+                                TextButton(
+                                  onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Reject'),
+                                  child: const Text('Reject', style: TextStyle(color: Color(0xFFF87171), fontSize: 11)),
                                 ),
                               ],
                             ),

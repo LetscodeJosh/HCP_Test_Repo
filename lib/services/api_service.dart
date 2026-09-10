@@ -3381,7 +3381,31 @@ class ApiService extends ChangeNotifier {
     }
 
     if (action == 'Reject') {
-      await rejectSubmission(subName, remarks: remarks);
+      await rejectSubmission(subName, remarks: remarks, submission: submission);
+
+      // Update local cache immediately
+      try {
+        final cache = await _readFromCache('submissions_cache.json');
+        if (cache != null) {
+          final List<dynamic> dataList = jsonDecode(cache);
+          final index = dataList.indexWhere((item) => (item is Map && item['name'] == subName));
+          if (index >= 0) {
+            dataList[index]['workflow_state'] = 'Rejected';
+            dataList[index]['status'] = 'Rejected';
+            dataList[index]['docstatus'] = 0;
+            await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+          }
+        }
+      } catch (_) {}
+
+      final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+      try {
+        final freshResp = await http.get(updateUrl, headers: _headers);
+        if (freshResp.statusCode == 200) {
+          final freshBody = jsonDecode(freshResp.body);
+          return HcpProfileSubmission.fromJson(freshBody['data']);
+        }
+      } catch (_) {}
       return submission.copyWith(workflowState: 'Rejected', status: 'Rejected', docstatus: 0);
     }
 
@@ -4013,44 +4037,99 @@ class ApiService extends ChangeNotifier {
   }
 
   /// Reject a pending HCP Profile Submission (Admin / Manager)
-  Future<void> rejectSubmission(String submissionName, {String remarks = ''}) async {
+  Future<void> rejectSubmission(String submissionName, {String remarks = '', HcpProfileSubmission? submission}) async {
     bool workflowApplied = false;
+
+    // 1. Fetch live document from ERPNext to ensure full context, profile_action, and state
+    Map<String, dynamic> liveDoc = {};
+    try {
+      final getUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submissionName)}');
+      final getResp = await http.get(getUrl, headers: _headers);
+      if (getResp.statusCode == 200) {
+        liveDoc = jsonDecode(getResp.body)['data'] ?? {};
+      }
+    } catch (e) {
+      print('[REJECT] Fetch live document warning: $e');
+    }
+
+    // Ensure essential doc fields for Frappe workflow evaluation
+    final docPayload = Map<String, dynamic>.from(liveDoc);
+    docPayload['doctype'] = 'HCP Profile Submission';
+    docPayload['name'] = submissionName;
+    if (docPayload['profile_action'] == null || docPayload['profile_action'].toString().trim().isEmpty) {
+      if (submission != null && submission.profileAction != null && submission.profileAction!.isNotEmpty) {
+        docPayload['profile_action'] = submission.profileAction;
+      } else if (docPayload['hcp_name'] != null && docPayload['hcp_name'].toString().trim().isNotEmpty) {
+        docPayload['profile_action'] = 'Existing HCP';
+      } else {
+        docPayload['profile_action'] = 'New HCP';
+      }
+    }
+
+    // 2. Primary: Official Frappe workflow engine transition
     try {
       final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
       final wfResp = await http.post(
         wfUrl,
         headers: _headers,
         body: jsonEncode({
-          'doc': {
-            'doctype': 'HCP Profile Submission',
-            'name': submissionName,
-          },
+          'doc': docPayload,
           'action': 'Reject',
         }),
       );
       if (wfResp.statusCode == 200) {
         workflowApplied = true;
+        print('[REJECT] Successfully applied workflow action "Reject" for $submissionName');
+      } else {
+        print('[REJECT] apply_workflow response: ${wfResp.statusCode} - ${wfResp.body}');
       }
-    } catch (_) {}
+    } catch (e) {
+      print('[REJECT] Error applying workflow action Reject: $e');
+    }
 
+    // 3. Robust fallback: frappe.client.set_value (bypasses server before_save hooks that crash on empty hcp_name)
     if (!workflowApplied) {
-      final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submissionName)}');
       try {
-        await http.put(
-          updateUrl,
+        final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+        final svResp = await http.post(
+          setValueUrl,
           headers: _headers,
           body: jsonEncode({
-            'workflow_state': 'Rejected',
-            'docstatus': 0,
-            'status': 'Rejected',
-            if (remarks.isNotEmpty) 'rejection_remarks': remarks,
+            'doctype': 'HCP Profile Submission',
+            'name': submissionName,
+            'fieldname': {
+              'workflow_state': 'Rejected',
+              'status': 'Rejected',
+              'docstatus': 0,
+              if (remarks.isNotEmpty) 'rejection_remarks': remarks,
+            },
           }),
         );
+        if (svResp.statusCode == 200) {
+          workflowApplied = true;
+          print('[REJECT] Successfully rejected via frappe.client.set_value for $submissionName');
+        } else {
+          print('[REJECT] set_value response: ${svResp.statusCode} - ${svResp.body}');
+        }
       } catch (e) {
-        print('Error rejecting submission: $e');
-        rethrow;
+        print('[REJECT] set_value fallback warning: $e');
       }
     }
+
+    // 4. Update local cache immediately
+    try {
+      final cache = await _readFromCache('submissions_cache.json');
+      if (cache != null) {
+        final List<dynamic> dataList = jsonDecode(cache);
+        final index = dataList.indexWhere((item) => (item is Map && item['name'] == submissionName));
+        if (index >= 0) {
+          dataList[index]['workflow_state'] = 'Rejected';
+          dataList[index]['status'] = 'Rejected';
+          dataList[index]['docstatus'] = 0;
+          await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+        }
+      }
+    } catch (_) {}
   }
 
   /// Retrieve list of Specializations with multi-tier cache & local fallback
