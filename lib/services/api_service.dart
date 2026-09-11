@@ -4285,7 +4285,30 @@ class ApiService extends ChangeNotifier {
       }
     }
 
-    // 2. Primary: Official Frappe workflow engine transition
+    // 2. Pre-arm rejection: Set application_status = 'Applied' on the server first.
+    // This allows ERPNext's before_save sync_submission() to see 'Changes already applied'
+    // and skip apply_changes(), preventing the DoesNotExistError (HCP None not found) on New HCP submissions.
+    try {
+      final preArmUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+      final preArmResp = await http.post(
+        preArmUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'doctype': 'HCP Profile Submission',
+          'name': submissionName,
+          'fieldname': 'application_status',
+          'value': 'Applied',
+        }),
+      );
+      if (preArmResp.statusCode == 200) {
+        docPayload['application_status'] = 'Applied';
+        print('[REJECT] Successfully pre-armed application_status=Applied for $submissionName');
+      }
+    } catch (e) {
+      print('[REJECT] Pre-arm application_status warning: $e');
+    }
+
+    // 3. Primary: Official Frappe workflow engine transition
     try {
       final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
       final wfResp = await http.post(
@@ -4306,7 +4329,7 @@ class ApiService extends ChangeNotifier {
       print('[REJECT] Error applying workflow action Reject: $e');
     }
 
-    // 3. Robust fallback: frappe.client.set_value (bypasses server before_save hooks that crash on empty hcp_name)
+    // 4. Robust fallback: frappe.client.set_value directly setting workflow_state to Rejected
     if (!workflowApplied) {
       try {
         final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
@@ -4318,8 +4341,7 @@ class ApiService extends ChangeNotifier {
             'name': submissionName,
             'fieldname': {
               'workflow_state': 'Rejected',
-              'status': 'Rejected',
-              'docstatus': 0,
+              'application_status': 'Applied',
               if (remarks.isNotEmpty) 'rejection_remarks': remarks,
             },
           }),
