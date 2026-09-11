@@ -13,8 +13,16 @@ import 'hcp_dashboard_screen.dart';
 class HcpWizardScreen extends StatefulWidget {
   final Hcp? doctor;
   final bool isNewDoctor;
+  final HcpProfileSubmission? existingSubmission;
+  final bool isResubmission;
 
-  const HcpWizardScreen({Key? key, this.doctor, this.isNewDoctor = false}) : super(key: key);
+  const HcpWizardScreen({
+    Key? key,
+    this.doctor,
+    this.isNewDoctor = false,
+    this.existingSubmission,
+    this.isResubmission = false,
+  }) : super(key: key);
 
   @override
   State<HcpWizardScreen> createState() => _HcpWizardScreenState();
@@ -70,29 +78,84 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   @override
   void initState() {
     super.initState();
-    if (widget.isNewDoctor) {
+    if (widget.isResubmission && widget.existingSubmission != null) {
+      final sub = widget.existingSubmission!;
+      final bool isNew = sub.profileAction == 'New HCP' || sub.hcpName.isEmpty;
+      _isCreatingNewDoctor = isNew;
+      _consentGiven = true;
+      _selectedHcpType = sub.hcpType ?? 'HCP-TYPE-01';
+      _selectedPractice = sub.hcpPractice ?? 'Dispensing';
+      if (sub.accountOrProgram != null && sub.accountOrProgram!.isNotEmpty) {
+        _selectedProgram = sub.accountOrProgram!;
+      }
+      if (sub.territory != null && sub.territory!.isNotEmpty) {
+        _selectedTerritory = sub.territory!;
+      }
+      _territoryManagerController = TextEditingController(text: sub.salesPerson ?? '');
+      _hcpFullNameController = TextEditingController(
+        text: (sub.hcpFullName != null && sub.hcpFullName!.isNotEmpty)
+            ? sub.hcpFullName!
+            : '${sub.firstName ?? ''} ${sub.lastName ?? ''}'.trim(),
+      );
+      _firstNameController = TextEditingController(text: sub.firstName ?? '');
+      _middleNameController = TextEditingController(
+        text: (sub.middleName != null && sub.middleName != '-') ? sub.middleName! : '',
+      );
+      _lastNameController = TextEditingController(text: sub.lastName ?? '');
+      _birthDateController = TextEditingController(text: sub.birthDate ?? '');
+      _doctorPhotoUrl = sub.hcpPhoto;
+
+      _selectedSpecialties.addAll(sub.specialties);
+      _selectedWorkplaces.addAll(sub.workplaces);
+      _contacts.addAll(sub.contacts);
+
+      for (var ans in sub.answers) {
+        final q = ans.surveyQuestion.isNotEmpty ? ans.surveyQuestion : (ans.questionText ?? '');
+        if (q.isNotEmpty) {
+          _surveyAnswers[q] = ans.answer;
+        }
+      }
+
+      if (!isNew && sub.hcpName.isNotEmpty) {
+        _selectedDoctor = Hcp(
+          name: sub.hcpName,
+          firstName: sub.firstName ?? '',
+          middleName: sub.middleName,
+          lastName: sub.lastName ?? '',
+          hcpType: sub.hcpType ?? '',
+          hcpPractice: sub.hcpPractice ?? 'Dispensing',
+        );
+      }
+
+      _currentStep = 1;
+    } else if (widget.isNewDoctor) {
       _selectedDoctor = null;
       _isCreatingNewDoctor = true;
       _selectedHcpType = 'HCP-TYPE-01';
       _selectedPractice = 'Dispensing';
+      _territoryManagerController = TextEditingController();
+      _hcpFullNameController = TextEditingController();
+      _firstNameController = TextEditingController();
+      _middleNameController = TextEditingController();
+      _lastNameController = TextEditingController();
+      _birthDateController = TextEditingController();
     } else {
       _selectedDoctor = widget.doctor;
       _isCreatingNewDoctor = false;
       _selectedHcpType = widget.doctor?.hcpType;
       _selectedPractice = widget.doctor?.hcpPractice ?? 'Both';
-    }
+      _territoryManagerController = TextEditingController();
+      _hcpFullNameController = TextEditingController(
+        text: widget.doctor != null ? '${widget.doctor!.firstName} ${widget.doctor!.middleName != null && widget.doctor!.middleName != '-' ? widget.doctor!.middleName! + ' ' : ''}${widget.doctor!.lastName}' : '',
+      );
+      _firstNameController = TextEditingController(text: widget.doctor?.firstName ?? '');
+      _middleNameController = TextEditingController(text: widget.doctor?.middleName ?? '');
+      _lastNameController = TextEditingController(text: widget.doctor?.lastName ?? '');
+      _birthDateController = TextEditingController(text: widget.doctor?.birthDate ?? '');
 
-    _territoryManagerController = TextEditingController();
-    _hcpFullNameController = TextEditingController(
-      text: (widget.doctor != null && !widget.isNewDoctor) ? '${widget.doctor!.firstName} ${widget.doctor!.middleName != null && widget.doctor!.middleName != '-' ? widget.doctor!.middleName! + ' ' : ''}${widget.doctor!.lastName}' : '',
-    );
-    _firstNameController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.firstName ?? '') : '');
-    _middleNameController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.middleName ?? '') : '');
-    _lastNameController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.lastName ?? '') : '');
-    _birthDateController = TextEditingController(text: !widget.isNewDoctor ? (widget.doctor?.birthDate ?? '') : '');
-
-    if (widget.doctor != null && !widget.isNewDoctor) {
-      _prepopulateDoctorData(widget.doctor!);
+      if (widget.doctor != null) {
+        _prepopulateDoctorData(widget.doctor!);
+      }
     }
 
     _loadLookups();
@@ -337,7 +400,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     });
   }
 
-  void _updateActiveSurveyForProgram(String program) {
+  void _updateActiveSurveyForProgram(String program, {bool preserveExisting = false}) {
     if (_allSurveyTemplates.isNotEmpty) {
       HcpSurveyTemplate? matched;
       try {
@@ -350,17 +413,23 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
       setState(() {
         _activeSurvey = matched;
-        _surveyAnswers.clear();
+        if (!preserveExisting) {
+          _surveyAnswers.clear();
+        }
         if (matched != null) {
           for (var q in matched.questions) {
-            _surveyAnswers[q.question] = '';
+            if (!_surveyAnswers.containsKey(q.question)) {
+              _surveyAnswers[q.question] = '';
+            }
           }
         }
       });
     } else {
       setState(() {
         _activeSurvey = null;
-        _surveyAnswers.clear();
+        if (!preserveExisting) {
+          _surveyAnswers.clear();
+        }
       });
     }
   }
@@ -392,17 +461,45 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         _hcpTypes = types;
         _allSurveyTemplates = templates;
         _programs = programs;
-        _selectedProgram = userProg;
 
-        _territories = progTerritories.isNotEmpty ? progTerritories : [resolvedTerritory.territoryCode];
-        _selectedTerritory = resolvedTerritory.territoryCode;
-        _territoryManagerController.text = resolvedTerritory.territoryManager;
+        final sub = widget.existingSubmission;
+        if (widget.isResubmission && sub != null) {
+          if (sub.accountOrProgram != null && sub.accountOrProgram!.isNotEmpty) {
+            _selectedProgram = sub.accountOrProgram!;
+          } else {
+            _selectedProgram = userProg;
+          }
+
+          _territories = progTerritories.isNotEmpty ? progTerritories : [resolvedTerritory.territoryCode];
+          if (sub.territory != null && sub.territory!.isNotEmpty) {
+            _selectedTerritory = sub.territory!;
+          } else {
+            _selectedTerritory = resolvedTerritory.territoryCode;
+          }
+
+          if (sub.salesPerson != null && sub.salesPerson!.isNotEmpty) {
+            _territoryManagerController.text = sub.salesPerson!;
+          } else {
+            _territoryManagerController.text = resolvedTerritory.territoryManager;
+          }
+
+          if (!sub.hcpName.isEmpty && !_isCreatingNewDoctor) {
+            try {
+              _selectedDoctor = doctors.firstWhere((d) => d.name == sub.hcpName);
+            } catch (_) {}
+          }
+        } else {
+          _selectedProgram = userProg;
+          _territories = progTerritories.isNotEmpty ? progTerritories : [resolvedTerritory.territoryCode];
+          _selectedTerritory = resolvedTerritory.territoryCode;
+          _territoryManagerController.text = resolvedTerritory.territoryManager;
+        }
 
         if (_hcpTypes.isNotEmpty && (_selectedHcpType == null || _selectedHcpType!.isEmpty)) {
           _selectedHcpType = _hcpTypes.first.name;
         }
 
-        _updateActiveSurveyForProgram(_selectedProgram);
+        _updateActiveSurveyForProgram(_selectedProgram, preserveExisting: widget.isResubmission);
         _isLoading = false;
       });
     } catch (e) {
@@ -1183,6 +1280,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       }
 
       final submission = HcpProfileSubmission(
+        name: widget.isResubmission ? widget.existingSubmission?.name : null,
         hcpName: effectiveHcpId,
         hcpFullName: fullDoctorName,
         firstName: fn,
@@ -1193,9 +1291,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         hcpType: _selectedHcpType,
         hcpPractice: _selectedPractice,
         consentPrivacyUnderstood: _consentGiven,
-        consentSignature: sigUri.isNotEmpty ? sigUri : null,
-        consentPhoto: uploadedConsentPhotoUrl,
-        hcpPhoto: uploadedDoctorPhotoUrl,
+        consentSignature: sigUri.isNotEmpty ? sigUri : widget.existingSubmission?.consentSignature,
+        consentPhoto: uploadedConsentPhotoUrl ?? widget.existingSubmission?.consentPhoto,
+        hcpPhoto: uploadedDoctorPhotoUrl ?? widget.existingSubmission?.hcpPhoto,
         specialties: _selectedSpecialties,
         workplaces: _selectedWorkplaces,
         contacts: _contacts,
@@ -1205,9 +1303,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             ? _territoryManagerController.text.trim()
             : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
         userId: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
-        surveyTemplate: _activeSurvey?.name,
-        surveyTemplateTitle: _activeSurvey?.templateName,
-        answers: answersList,
+        surveyTemplate: _activeSurvey?.name ?? widget.existingSubmission?.surveyTemplate,
+        surveyTemplateTitle: _activeSurvey?.templateName ?? widget.existingSubmission?.surveyTemplateTitle,
+        answers: answersList.isNotEmpty ? answersList : (widget.existingSubmission?.answers ?? []),
         medrepEmail: apiService.loggedInEmail ?? 'jptan@profinsights.biz',
         submissionDate: actualSubmissionTime.toIso8601String().split('.').first,
         validFrom: HcpAccount.calculateMonthValidFrom(actualSubmissionTime),
@@ -1220,6 +1318,25 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         changesJson: changesJsonStr,
         docstatus: targetDocstatus,
       );
+
+      // Handle Resubmission: update existing document and apply workflow transition to Pending Approval
+      if (widget.isResubmission && widget.existingSubmission?.name != null) {
+        final submissionName = widget.existingSubmission!.name!;
+        final updatedDoc = await apiService.updateSubmission(submissionName, submission);
+        await apiService.applyWorkflowAction(updatedDoc, 'Submit for Approval');
+
+        setState(() => _isLoading = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              backgroundColor: Color(0xFFD97706),
+              content: Text('Doctor profile resubmitted for approval (Status: Pending Approval)!'),
+            ),
+          );
+          Navigator.of(context).pop(true);
+        }
+        return;
+      }
 
       // Record submission in ERPNext HCP Profile Submission doctype:
       // - Existing Doctor: Transitioned to Processed via Submit for Processing (Rows 1 & 2).
@@ -2482,9 +2599,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
         title: Text(
-          _selectedDoctor != null
-              ? 'New HCP Profile Submission (Dr. ${_selectedDoctor!.firstName} ${_selectedDoctor!.lastName})'
-              : 'New HCP Profile Submission',
+          widget.isResubmission
+              ? 'Edit HCP Profile Submission (${widget.existingSubmission?.name ?? ''})'
+              : (_selectedDoctor != null
+                  ? 'New HCP Profile Submission (Dr. ${_selectedDoctor!.firstName} ${_selectedDoctor!.lastName})'
+                  : 'New HCP Profile Submission'),
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
           overflow: TextOverflow.ellipsis,
           maxLines: 1,
@@ -4279,6 +4398,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     Text(q.question, style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 6),
                     TextFormField(
+                      initialValue: _surveyAnswers[q.question] ?? '',
                       style: const TextStyle(color: Color(0xFF0F172A)),
                       decoration: InputDecoration(
                         filled: true,
@@ -4843,6 +4963,27 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     ((_selectedDoctor != null && (_selectedDoctor!.name?.isNotEmpty ?? false)) ||
                         _allDoctors.any((d) =>
                             d.firstName.trim().toLowerCase() == currentFn && d.lastName.trim().toLowerCase() == currentLn));
+
+                if (widget.isResubmission) {
+                  return ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD97706),
+                      disabledBackgroundColor: const Color(0xFFD97706).withOpacity(0.4),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.replay_rounded, size: 18, color: Colors.white),
+                    label: const Text(
+                      'Resubmit for Approval',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                        ? null
+                        : () {
+                            _submitForm(workflowAction: 'Submit for Approval');
+                          },
+                  );
+                }
 
                 return isDoctorExisting
                     ? ElevatedButton.icon(

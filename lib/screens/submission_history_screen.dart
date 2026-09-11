@@ -776,12 +776,30 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                       padding: const EdgeInsets.symmetric(vertical: 14),
                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                                     ),
-                                    icon: Icon(isRejected ? Icons.replay_rounded : Icons.send_rounded, size: 18),
+                                    icon: Icon(isRejected ? Icons.edit_note_rounded : Icons.send_rounded, size: 18),
                                     label: Text(
-                                      isRejected ? 'Resubmit for Approval' : 'Submit for Approval',
+                                      isRejected ? 'Edit' : 'Submit for Approval',
                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                                     ),
-                                    onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Submit for Approval'),
+                                    onPressed: () async {
+                                      if (isRejected) {
+                                        Navigator.pop(ctx);
+                                        final result = await Navigator.push<bool>(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => HcpWizardScreen(
+                                              existingSubmission: currentSub,
+                                              isResubmission: true,
+                                            ),
+                                          ),
+                                        );
+                                        if (result == true) {
+                                          _loadSubmissions();
+                                        }
+                                      } else {
+                                        _handleApplyWorkflowAction(ctx, currentSub, 'Submit for Approval');
+                                      }
+                                    },
                                   ),
                                 ),
                                 const SizedBox(width: 8),

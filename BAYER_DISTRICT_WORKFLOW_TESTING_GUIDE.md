@@ -118,11 +118,16 @@ The server developer strictly defined 10 transition rules for `HCP Profile Submi
    - *Status transitions back to `Pending Approval` via Transition Rule #9.*
    - **Mark Passed on spreadsheet for DSM!**
 
-4. **MedRep Resubmits for Approval (`Rejected` $\rightarrow$ `Pending Approval`)**:
+4. **MedRep Edits & Resubmits for Approval (`Rejected` $\rightarrow$ `Pending Approval`)**:
    - DSM taps **Reject** once more to return it to `Rejected`.
    - Log out, and log in as the **MedRep**.
-   - MedRep opens the `Rejected` submission in **Submissions History** and taps **"Resubmit for Approval"**.
-   - *Status transitions back to `Pending Approval` via Transition Rule #10.*
+   - MedRep opens the `Rejected` submission in **Submissions History**.
+   - Tap the orange **"Edit"** button.
+   - The app redirects directly to **HCP Profile Submission** with all submitted doctor information, specialties, workplaces, contacts, and survey answers pre-populated.
+   - Edit/fix any lacking or incorrect doctor details.
+   - Navigate to the **Changes** tab to review the live diff/summary of modifications.
+   - Tap the orange **"Resubmit for Approval"** button at the bottom.
+   - *The submission updates in ERPNext and transitions back to `Pending Approval` via Transition Rule #10.*
 
 5. **DSM Approves Doctor (`Pending Approval` $\rightarrow$ `Approved`)**:
    - Log in as the **DSM**.

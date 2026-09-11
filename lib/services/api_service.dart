@@ -3263,6 +3263,10 @@ class ApiService extends ChangeNotifier {
         'status',
         'application_status',
         'docstatus',
+        'profile_action',
+        'change_summary_html',
+        'changes_json',
+        'answers',
       };
       payload.removeWhere((k, _) => !allowedDoctypeFields.contains(k));
 
@@ -3461,6 +3465,24 @@ class ApiService extends ChangeNotifier {
         'profile_action': effectiveActionProfile,
         ...liveSubmission.toJson(),
       };
+
+      // Ensure New HCP submissions bypass ERPNext sync_submission hook crash
+      if (effectiveActionProfile == 'New HCP') {
+        docWorkflowPayload['application_status'] = 'Applied';
+        try {
+          final preArmUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+          await http.post(
+            preArmUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doctype': 'HCP Profile Submission',
+              'name': subName,
+              'fieldname': 'application_status',
+              'value': 'Applied',
+            }),
+          );
+        } catch (_) {}
+      }
 
     try {
       final wfResp = await http.post(
