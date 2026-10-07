@@ -1,3 +1,76 @@
+import 'dart:convert';
+import 'dart:io' show File;
+import 'package:flutter/services.dart' show rootBundle;
+
+class InstitutionClassification {
+  static const List<String> ownershipOptions = ['Government', 'Private'];
+  static const List<String> typeOptions = ['Hospital', 'Clinic'];
+  static const List<String> institutionTypeOptions = typeOptions;
+
+  static const List<String> hospitalCapabilities = [
+    'Primary',
+    'Secondary',
+    'Tertiary',
+  ];
+
+  static const List<String> clinicCapabilities = [
+    'Baranggay Health Center',
+    'Municipal Health Center',
+    'Lying-In Clinic',
+    'Dental Clinic',
+    'General Clinic',
+  ];
+
+  static List<String> getCapabilitiesForType(String? type) {
+    if (type == null) return [];
+    final lower = type.trim().toLowerCase();
+    if (lower == 'hospital') {
+      return hospitalCapabilities;
+    } else if (lower == 'clinic') {
+      return clinicCapabilities;
+    }
+    return [];
+  }
+}
+
+class InstitutionAuditLogEntry {
+  final DateTime timestamp;
+  final String user;
+  final String role;
+  final String action;
+  final String? details;
+  final Map<String, dynamic>? snapshot;
+
+  InstitutionAuditLogEntry({
+    required this.timestamp,
+    required this.user,
+    required this.role,
+    required this.action,
+    this.details,
+    this.snapshot,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'timestamp': timestamp.toIso8601String(),
+    'user': user,
+    'role': role,
+    'action': action,
+    if (details != null) 'details': details,
+    if (snapshot != null) 'snapshot': snapshot,
+  };
+
+  factory InstitutionAuditLogEntry.fromJson(Map<String, dynamic> json) {
+    return InstitutionAuditLogEntry(
+      timestamp: DateTime.tryParse(json['timestamp']?.toString() ?? '') ?? DateTime.now(),
+      user: json['user']?.toString() ?? 'System',
+      role: json['role']?.toString() ?? 'User',
+      action: json['action']?.toString() ?? '',
+      details: json['details']?.toString(),
+      snapshot: json['snapshot'] != null ? Map<String, dynamic>.from(json['snapshot']) : null,
+    );
+  }
+}
+
 class Institution {
   final String name; // e.g. INST-00001
   final String institutionName;
@@ -9,6 +82,24 @@ class Institution {
   final String? rawProvinceName;
   final String? rawCityMunicipality;
   final String? rawRegionName;
+  final String? workflowState;
+  final String? rejectionReason;
+  final bool isCustom;
+  final String? owner;
+  final String? creation;
+  final String? modified;
+  final int? docstatus;
+  final bool isResubmission;
+  final String? ownership; // Government, Private
+  final String? institutionType; // Hospital, Clinic
+  final String? serviceCapability; // Primary, Secondary, Tertiary, Baranggay Health Center, etc.
+  final int resubmissionCount; // Max 2 resubmissions allowed
+  final DateTime? lastSubmittedAt; // Submission timestamp
+  final DateTime? activeEditingLock; // Concurrency anti-collision active 60s edit lock
+  final String? editingUser; // User currently editing the institution
+  final bool requiresDsmApproval; // True if submitted along with a New HCP
+  final String? linkedDoctorName; // Link to doctor if proposed during doctor profiling
+  final List<InstitutionAuditLogEntry> auditTrail; // Read-only history of submissions & reviews
 
   Institution({
     required this.name,
@@ -21,13 +112,207 @@ class Institution {
     this.rawProvinceName,
     this.rawCityMunicipality,
     this.rawRegionName,
+    this.workflowState,
+    this.rejectionReason,
+    this.isCustom = false,
+    this.owner,
+    this.creation,
+    this.modified,
+    this.docstatus,
+    this.isResubmission = false,
+    this.ownership,
+    this.institutionType,
+    this.serviceCapability,
+    this.resubmissionCount = 0,
+    this.lastSubmittedAt,
+    this.activeEditingLock,
+    this.editingUser,
+    this.requiresDsmApproval = false,
+    this.linkedDoctorName,
+    this.auditTrail = const [],
   });
+
+  String? get region => regionName;
+
+  /// Exact status of the institution matching ERPNext Institution DocType workflow_state:
+  /// - 'Approved' (Green)
+  /// - 'Pending Approval' / 'For SFE Approval' (Amber/Orange)
+  /// - 'Draft' (Red - matches ERPNext initial masterlist import / draft state)
+  /// - 'Rejected' (Red)
+  String get status {
+    final state = (workflowState ?? '').trim();
+    if (state.isNotEmpty) {
+      final lower = state.toLowerCase();
+      if (lower == 'approved') return 'Approved';
+      if (lower == 'pending dsm approval') return 'Pending DSM Approval';
+      if (lower == 'pending approval' || lower == 'pending sfe approval' || lower == 'for sfe approval') {
+        return 'For SFE Approval';
+      }
+      if (lower == 'draft') return 'Draft';
+      if (lower == 'rejected') return 'Rejected';
+      return state;
+    }
+    if (docstatus == 1) return 'Approved';
+    if (docstatus == 2) return 'Cancelled';
+    return 'Draft';
+  }
+
+  bool get isDraft {
+    final state = (workflowState ?? '').trim().toLowerCase();
+    return state == 'draft' || (state.isEmpty && docstatus == 0);
+  }
+
+  bool get isRejected {
+    final state = (workflowState ?? '').trim().toLowerCase();
+    return state == 'rejected';
+  }
+
+  bool get isPendingApproval {
+    if (isRejected) return false;
+    final state = (workflowState ?? '').trim().toLowerCase();
+    return state == 'pending approval' || state == 'pending sfe approval' || state == 'for sfe approval' || state == 'pending dsm approval';
+  }
+
+  bool get isApproved {
+    final state = (workflowState ?? '').trim().toLowerCase();
+    return state == 'approved' || docstatus == 1;
+  }
+
+  /// Whether this institution can be used by the MedRep for doctor profiling & coverage.
+  /// Newly added institutions awaiting SFE approval (Pending Approval) and existing Draft masterlist facilities CAN be used.
+  /// Only explicitly rejected facilities are prohibited until modified and resubmitted.
+  bool get isApprovedForProfiling {
+    if (isRejected) return false;
+    return true;
+  }
+
+  /// Concurrency lock: True if submitted or actively being edited within the last 60 seconds
+  bool get isCooldownActive {
+    final lockTime = activeEditingLock ?? lastSubmittedAt;
+    if (lockTime == null) return false;
+    final diff = DateTime.now().difference(lockTime).inSeconds;
+    return diff >= 0 && diff < 60;
+  }
+
+  /// Remaining seconds on the 1-minute concurrency lock
+  int get cooldownRemainingSeconds {
+    final lockTime = activeEditingLock ?? lastSubmittedAt;
+    if (lockTime == null) return 0;
+    final diff = DateTime.now().difference(lockTime).inSeconds;
+    if (diff < 0) return 60;
+    if (diff >= 60) return 0;
+    return 60 - diff;
+  }
+
+  /// MedRep can only resubmit maximum 2 times after rejection
+  bool get canResubmit => isRejected && resubmissionCount < 2;
+
+  /// If rejected and resubmission hits 2, prompt to call SFE Specialist
+  bool get requiresSfeSpecialistCall => isRejected && resubmissionCount >= 2;
+
+  /// Prominent label for rejected institution across DocTypes
+  String get rejectionDisplayLabel => (rejectionReason != null && rejectionReason!.trim().isNotEmpty)
+      ? '[REJECTED INSTITUTION: ${rejectionReason!.trim()}]'
+      : '[REJECTED INSTITUTION]';
+
+  /// Dynamic note per ERPNext HCP Account standard:
+  /// - Rejected: "[REJECTED INSTITUTION: <Reason>]" or "[REJECTED INSTITUTION]"
+  /// - Pending / Unapproved: "this institution is not yet approved"
+  /// - Approved: "this institution is now approved"
+  String get approvalStatusNote {
+    if (isRejected) return rejectionDisplayLabel;
+    return isApproved
+        ? 'this institution is now approved'
+        : 'this institution is not yet approved';
+  }
+
+  Institution copyWith({
+    String? name,
+    String? institutionName,
+    String? regionName,
+    String? provinceName,
+    String? cityMunicipality,
+    String? barangayName,
+    String? streetAddress,
+    String? rawProvinceName,
+    String? rawCityMunicipality,
+    String? rawRegionName,
+    String? workflowState,
+    String? rejectionReason,
+    bool? isCustom,
+    String? owner,
+    String? creation,
+    String? modified,
+    int? docstatus,
+    bool? isResubmission,
+    String? ownership,
+    String? institutionType,
+    String? serviceCapability,
+    int? resubmissionCount,
+    DateTime? lastSubmittedAt,
+    DateTime? activeEditingLock,
+    String? editingUser,
+    bool? requiresDsmApproval,
+    String? linkedDoctorName,
+    List<InstitutionAuditLogEntry>? auditTrail,
+  }) {
+    return Institution(
+      name: name ?? this.name,
+      institutionName: institutionName ?? this.institutionName,
+      regionName: regionName ?? this.regionName,
+      provinceName: provinceName ?? this.provinceName,
+      cityMunicipality: cityMunicipality ?? this.cityMunicipality,
+      barangayName: barangayName ?? this.barangayName,
+      streetAddress: streetAddress ?? this.streetAddress,
+      rawProvinceName: rawProvinceName ?? this.rawProvinceName,
+      rawCityMunicipality: rawCityMunicipality ?? this.rawCityMunicipality,
+      rawRegionName: rawRegionName ?? this.rawRegionName,
+      workflowState: workflowState ?? this.workflowState,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      isCustom: isCustom ?? this.isCustom,
+      owner: owner ?? this.owner,
+      creation: creation ?? this.creation,
+      modified: modified ?? this.modified,
+      docstatus: docstatus ?? this.docstatus,
+      isResubmission: isResubmission ?? this.isResubmission,
+      ownership: ownership ?? this.ownership,
+      institutionType: institutionType ?? this.institutionType,
+      serviceCapability: serviceCapability ?? this.serviceCapability,
+      resubmissionCount: resubmissionCount ?? this.resubmissionCount,
+      lastSubmittedAt: lastSubmittedAt ?? this.lastSubmittedAt,
+      activeEditingLock: activeEditingLock ?? this.activeEditingLock,
+      editingUser: editingUser ?? this.editingUser,
+      requiresDsmApproval: requiresDsmApproval ?? this.requiresDsmApproval,
+      linkedDoctorName: linkedDoctorName ?? this.linkedDoctorName,
+      auditTrail: auditTrail ?? this.auditTrail,
+    );
+  }
 
   factory Institution.fromJson(Map<String, dynamic> json) {
     final rawCity = (json['city_municipality'] ?? json['city'] ?? json['city_title'])?.toString();
     final rawProv = (json['province_name'] ?? json['province'] ?? json['province_title'])?.toString();
     final rawReg = (json['region_name'] ?? json['region'] ?? json['region_title'])?.toString();
     final rawInstName = json['institution_name'] ?? json['institution'] ?? json['name'] ?? '';
+    
+    DateTime? parsedLastSubmitted;
+    if (json['last_submitted_at'] != null) {
+      parsedLastSubmitted = DateTime.tryParse(json['last_submitted_at'].toString());
+    } else if (json['modified'] != null) {
+      parsedLastSubmitted = DateTime.tryParse(json['modified'].toString());
+    }
+
+    DateTime? parsedEditingLock;
+    if (json['active_editing_lock'] != null) {
+      parsedEditingLock = DateTime.tryParse(json['active_editing_lock'].toString());
+    }
+
+    List<InstitutionAuditLogEntry> parsedAuditTrail = [];
+    if (json['audit_trail'] is List) {
+      parsedAuditTrail = (json['audit_trail'] as List)
+          .map((e) => InstitutionAuditLogEntry.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    }
+
     return Institution(
       name: json['name'] ?? '',
       institutionName: LocationResolver.resolveInstitutionName(rawInstName.toString()),
@@ -39,6 +324,24 @@ class Institution {
       rawProvinceName: rawProv,
       rawCityMunicipality: rawCity,
       rawRegionName: rawReg,
+      workflowState: json['workflow_state']?.toString(),
+      rejectionReason: (json['rejection_reason'] ?? json['rejection_remarks'])?.toString(),
+      isCustom: json['is_custom'] == true || json['is_custom'] == 1,
+      owner: json['owner']?.toString(),
+      creation: json['creation']?.toString(),
+      modified: json['modified']?.toString(),
+      docstatus: json['docstatus'] is int ? json['docstatus'] : int.tryParse(json['docstatus']?.toString() ?? ''),
+      isResubmission: json['is_resubmission'] == 1 || json['is_resubmission'] == true || json['is_resubmission'] == '1',
+      ownership: (json['ownership'] ?? json['custom_ownership'])?.toString(),
+      institutionType: (json['institution_type'] ?? json['custom_institution_type'])?.toString(),
+      serviceCapability: (json['service_capability'] ?? json['custom_service_capability'])?.toString(),
+      resubmissionCount: json['resubmission_count'] is int ? json['resubmission_count'] : int.tryParse(json['resubmission_count']?.toString() ?? '') ?? 0,
+      lastSubmittedAt: parsedLastSubmitted,
+      activeEditingLock: parsedEditingLock,
+      editingUser: json['editing_user']?.toString(),
+      requiresDsmApproval: json['requires_dsm_approval'] == 1 || json['requires_dsm_approval'] == true || json['requires_dsm_approval'] == '1',
+      linkedDoctorName: json['linked_doctor_name']?.toString(),
+      auditTrail: parsedAuditTrail,
     );
   }
 
@@ -51,6 +354,24 @@ class Institution {
       if (rawCityMunicipality != null || cityMunicipality != null) 'city_municipality': rawCityMunicipality ?? cityMunicipality,
       if (barangayName != null) 'barangay_name': barangayName,
       if (streetAddress != null) 'street_address': streetAddress,
+      if (workflowState != null) 'workflow_state': workflowState,
+      if (rejectionReason != null) 'rejection_reason': rejectionReason,
+      if (isCustom) 'is_custom': 1,
+      if (owner != null) 'owner': owner,
+      if (creation != null) 'creation': creation,
+      if (modified != null) 'modified': modified,
+      if (docstatus != null) 'docstatus': docstatus,
+      if (isResubmission) 'is_resubmission': 1,
+      if (ownership != null) 'ownership': ownership,
+      if (institutionType != null) 'institution_type': institutionType,
+      if (serviceCapability != null) 'service_capability': serviceCapability,
+      'resubmission_count': resubmissionCount,
+      if (lastSubmittedAt != null) 'last_submitted_at': lastSubmittedAt!.toIso8601String(),
+      if (activeEditingLock != null) 'active_editing_lock': activeEditingLock!.toIso8601String(),
+      if (editingUser != null) 'editing_user': editingUser,
+      'requires_dsm_approval': requiresDsmApproval ? 1 : 0,
+      if (linkedDoctorName != null) 'linked_doctor_name': linkedDoctorName,
+      if (auditTrail.isNotEmpty) 'audit_trail': auditTrail.map((e) => e.toJson()).toList(),
     };
   }
 }
@@ -89,6 +410,26 @@ class Specialization {
       'is_group': isGroup ? 1 : 0,
     };
   }
+}
+
+class InstitutionSearchResult {
+  final Institution institution;
+  final bool isExactOrHighConfidenceDuplicate;
+  final double matchScore;
+  final String formattedLocation;
+
+  InstitutionSearchResult({
+    required this.institution,
+    required this.isExactOrHighConfidenceDuplicate,
+    required this.matchScore,
+    required this.formattedLocation,
+  });
+}
+
+class _ScoredInstitutionItem {
+  final Institution institution;
+  final double score;
+  const _ScoredInstitutionItem(this.institution, this.score);
 }
 
 class PsgcLocation {
@@ -385,6 +726,33 @@ class GeographicUnit {
   const GeographicUnit(this.name, this.code);
 }
 
+/// Fully-resolved workplace location containing guaranteed non-empty fields
+/// for Workplace, Region, Province, and City.
+class ResolvedWorkplaceLocation {
+  final String regionId;
+  final String regionName;
+  final String provinceId;
+  final String provinceName;
+  final String cityId;
+  final String cityName;
+  final String workplaceId;
+  final String workplaceName;
+
+  const ResolvedWorkplaceLocation({
+    required this.regionId,
+    required this.regionName,
+    required this.provinceId,
+    required this.provinceName,
+    required this.cityId,
+    required this.cityName,
+    required this.workplaceId,
+    required this.workplaceName,
+  });
+
+  @override
+  String toString() => '$workplaceName ($cityName, $provinceName, $regionName)';
+}
+
 /// Centralized resolver that translates ERPNext IDs (SPEC-XXXX, INST-XXXX) and
 /// PSGC numeric location codes (e.g. 0301400000 -> Bulacan) to human-readable names.
 class LocationResolver {
@@ -393,6 +761,19 @@ class LocationResolver {
   static final Map<String, String> _dynamicInstitutions = {};
   static final Map<String, String> _dynamicPsgcLocations = {};
   static final Map<String, String> _dynamicHcpTypes = {};
+
+  // Structured PSGC Collections and Parent-Child Mappings (1,772 official Philippine locations)
+  static final List<PsgcLocation> _psgcLocations = [];
+  static final Map<String, PsgcLocation> _psgcById = {};
+  static final Map<String, PsgcLocation> _psgcByLabelLower = {};
+  static final List<PsgcLocation> _psgcRegions = [];
+  static final List<PsgcLocation> _psgcProvinces = [];
+  static final List<PsgcLocation> _psgcCities = [];
+  static final Map<String, List<PsgcLocation>> _psgcProvincesByRegion = {};
+  static final Map<String, List<PsgcLocation>> _psgcCitiesByProvince = {};
+  static final Map<String, PsgcLocation> _provinceToRegionMap = {};
+  static final Map<String, PsgcLocation> _cityToProvinceMap = {};
+  static bool _isPsgcInitialized = false;
 
   static const Map<String, String> _staticHcpTypes = {
     'HCP-TYPE-01': 'Consultant',
@@ -944,7 +1325,7 @@ class LocationResolver {
 
   static void registerInstitutions(Iterable<Institution> list) {
     for (var i in list) {
-      if (i.name.isNotEmpty && i.institutionName.isNotEmpty) {
+      if (!i.isRejected && i.name.isNotEmpty && i.institutionName.isNotEmpty) {
         _dynamicInstitutions[i.name] = i.institutionName;
         _dynamicInstitutions[i.name.toLowerCase()] = i.institutionName;
       }
@@ -954,14 +1335,279 @@ class LocationResolver {
   static void registerPsgcLocations(Iterable<PsgcLocation> list) {
     for (var p in list) {
       if (p.name.isNotEmpty && p.locationLabel.isNotEmpty) {
-        _dynamicPsgcLocations[p.name] = p.locationLabel;
-        _dynamicPsgcLocations[p.name.toLowerCase()] = p.locationLabel;
+        final label = p.locationLabel.trim();
+        _dynamicPsgcLocations[p.name] = label;
+        _dynamicPsgcLocations[p.name.toLowerCase()] = label;
         if (p.psgcCode != null && p.psgcCode!.isNotEmpty) {
-          _dynamicPsgcLocations[p.psgcCode!] = p.locationLabel;
-          _dynamicPsgcLocations[p.psgcCode!.toLowerCase()] = p.locationLabel;
+          _dynamicPsgcLocations[p.psgcCode!] = label;
+          _dynamicPsgcLocations[p.psgcCode!.toLowerCase()] = label;
+        }
+
+        _psgcById[p.name] = p;
+        _psgcByLabelLower[label.toLowerCase()] = p;
+        if (p.psgcCode != null && p.psgcCode!.isNotEmpty) {
+          _psgcById[p.psgcCode!] = p;
+        }
+
+        if (!_psgcLocations.any((loc) => loc.name == p.name)) {
+          _psgcLocations.add(p);
+        }
+
+        final type = p.locationType.toLowerCase();
+        if (type == 'region') {
+          if (!_psgcRegions.any((r) => r.name == p.name)) {
+            _psgcRegions.add(p);
+          }
+        } else if (type == 'province') {
+          if (!_psgcProvinces.any((pr) => pr.name == p.name)) {
+            _psgcProvinces.add(p);
+          }
+          if (p.parentPsgcLocation != null && p.parentPsgcLocation!.isNotEmpty) {
+            _psgcProvincesByRegion.putIfAbsent(p.parentPsgcLocation!, () => []);
+            if (!_psgcProvincesByRegion[p.parentPsgcLocation!]!.any((pr) => pr.name == p.name)) {
+              _psgcProvincesByRegion[p.parentPsgcLocation!]!.add(p);
+            }
+          }
+        } else if (type == 'city') {
+          if (!_psgcCities.any((c) => c.name == p.name)) {
+            _psgcCities.add(p);
+          }
+          if (p.parentPsgcLocation != null && p.parentPsgcLocation!.isNotEmpty) {
+            _psgcCitiesByProvince.putIfAbsent(p.parentPsgcLocation!, () => []);
+            if (!_psgcCitiesByProvince[p.parentPsgcLocation!]!.any((c) => c.name == p.name)) {
+              _psgcCitiesByProvince[p.parentPsgcLocation!]!.add(p);
+            }
+          }
         }
       }
     }
+
+    // Link parent mappings for strict cascading
+    for (var prov in _psgcProvinces) {
+      if (prov.parentPsgcLocation != null && _psgcById.containsKey(prov.parentPsgcLocation!)) {
+        final reg = _psgcById[prov.parentPsgcLocation!]!;
+        _provinceToRegionMap[prov.name] = reg;
+        _provinceToRegionMap[prov.locationLabel.trim().toLowerCase()] = reg;
+      }
+    }
+
+    for (var city in _psgcCities) {
+      if (city.parentPsgcLocation != null && _psgcById.containsKey(city.parentPsgcLocation!)) {
+        final prov = _psgcById[city.parentPsgcLocation!]!;
+        _cityToProvinceMap[city.name] = prov;
+        _cityToProvinceMap[city.locationLabel.trim().toLowerCase()] = prov;
+      }
+    }
+
+    _isPsgcInitialized = true;
+  }
+
+  /// Synchronous fallback to ensure bundled PSGC dataset is loaded from disk if available
+  static void _ensurePsgcSynchronousFallback() {
+    if (_isPsgcInitialized && _psgcLocations.isNotEmpty) return;
+    try {
+      final f = File('assets/data/psgc_locations.json');
+      if (f.existsSync()) {
+        final content = f.readAsStringSync();
+        final List<dynamic> parsed = jsonDecode(content);
+        final list = parsed.map((j) => PsgcLocation.fromJson(j)).toList();
+        registerPsgcLocations(list);
+      }
+    } catch (_) {
+      // Ignored if file access is restricted (e.g. web/sandboxed mobile)
+    }
+  }
+
+  /// Asynchronously loads and indexes all 1,772 official Philippine PSGC locations
+  /// (18 Regions, 99 Provinces, 1,655 Cities/Municipalities) from assets/data/psgc_locations.json.
+  static Future<void> initializePsgc({String? jsonString}) async {
+    if (_isPsgcInitialized && _psgcLocations.isNotEmpty) return;
+    try {
+      String content = '';
+      if (jsonString != null && jsonString.isNotEmpty) {
+        content = jsonString;
+      } else {
+        try {
+          content = await rootBundle.loadString('assets/data/psgc_locations.json');
+        } catch (_) {
+          final f = File('assets/data/psgc_locations.json');
+          if (f.existsSync()) {
+            content = f.readAsStringSync();
+          }
+        }
+      }
+
+      if (content.isNotEmpty) {
+        final List<dynamic> parsed = jsonDecode(content);
+        final list = parsed.map((j) => PsgcLocation.fromJson(j)).toList();
+        registerPsgcLocations(list);
+      }
+    } catch (e) {
+      print('Warning: initializePsgc encountered: $e');
+    }
+  }
+
+  /// Returns all official Regions from PSGC (18 regions)
+  static List<String> getRegions() {
+    _ensurePsgcSynchronousFallback();
+    if (_psgcRegions.isNotEmpty) {
+      return _psgcRegions.map((r) => r.locationLabel).toList();
+    }
+    return standardRegions.map((r) => r.name).toList();
+  }
+
+  /// Returns strictly the Provinces belonging to the specified Region.
+  /// If [regionNameOrCode] is null or empty, returns all Provinces in the Philippines.
+  static List<String> getProvincesForRegion(String? regionNameOrCode) {
+    _ensurePsgcSynchronousFallback();
+    final regInput = regionNameOrCode?.trim() ?? '';
+    if (regInput.isEmpty) {
+      if (_psgcProvinces.isNotEmpty) {
+        final list = <String>[];
+        list.add('Metro Manila');
+        for (var p in _psgcProvinces) {
+          if (!list.contains(p.locationLabel)) {
+            list.add(p.locationLabel);
+          }
+        }
+        return list;
+      }
+      final list = standardProvinces.map((p) => p.name).toList();
+      if (!list.contains('Metro Manila')) list.insert(0, 'Metro Manila');
+      return list;
+    }
+
+    final regId = resolveRegionId(regInput);
+    if (_psgcProvincesByRegion.containsKey(regId)) {
+      final list = _psgcProvincesByRegion[regId]!.map((p) => p.locationLabel).toList();
+      if (regId == '1300000000' || regInput.toLowerCase().contains('ncr') || regInput.toLowerCase().contains('capital')) {
+        if (!list.contains('Metro Manila')) {
+          list.insert(0, 'Metro Manila');
+        }
+      }
+      return list;
+    }
+
+    // Fallback using 2-digit PSGC prefix
+    if (regId.length >= 2) {
+      final prefix = regId.substring(0, 2);
+      if (_psgcProvinces.isNotEmpty) {
+        final list = _psgcProvinces
+            .where((p) => p.name.startsWith(prefix) || (p.psgcCode != null && p.psgcCode!.startsWith(prefix)))
+            .map((p) => p.locationLabel)
+            .toList();
+        if (prefix == '13' && !list.contains('Metro Manila')) {
+          list.insert(0, 'Metro Manila');
+        }
+        if (list.isNotEmpty) return list;
+      }
+      final standard = standardProvinces.where((p) => p.code.startsWith(prefix)).map((p) => p.name).toList();
+      if (prefix == '13' && !standard.contains('Metro Manila')) {
+        standard.insert(0, 'Metro Manila');
+      }
+      return standard;
+    }
+
+    return standardProvinces.map((p) => p.name).toList();
+  }
+
+  /// Returns strictly the Cities / Municipalities belonging to the specified Province.
+  /// Strict cascading: NO other provinces' cities are EVER appended!
+  static List<String> getCitiesForProvince(String? provinceNameOrCode) {
+    _ensurePsgcSynchronousFallback();
+    final provInput = provinceNameOrCode?.trim() ?? '';
+    if (provInput.isEmpty) {
+      if (_psgcCities.isNotEmpty) {
+        return _psgcCities.map((c) => c.locationLabel).toSet().toList();
+      }
+      return standardCities.map((c) => c.name).toSet().toList();
+    }
+
+    // Handle "Metro Manila" umbrella province -> returns all NCR cities
+    if (provInput.toLowerCase() == 'metro manila' || provInput.toLowerCase().contains('national capital')) {
+      if (_psgcCities.isNotEmpty) {
+        final ncrCities = _psgcCities
+            .where((c) => c.name.startsWith('13') || (c.parentPsgcLocation != null && c.parentPsgcLocation!.startsWith('13')))
+            .map((c) => c.locationLabel)
+            .toSet()
+            .toList();
+        if (ncrCities.isNotEmpty) return ncrCities;
+      }
+      return standardCities.where((c) => c.code.startsWith('13')).map((c) => c.name).toSet().toList();
+    }
+
+    // Lookup province record by ID or label
+    PsgcLocation? provLoc;
+    final provId = resolveProvinceId(provInput);
+    if (_psgcById.containsKey(provId)) {
+      provLoc = _psgcById[provId];
+    } else if (_psgcByLabelLower.containsKey(provInput.toLowerCase())) {
+      provLoc = _psgcByLabelLower[provInput.toLowerCase()];
+    }
+
+    final targetProvId = provLoc?.name ?? provId;
+    if (_psgcCitiesByProvince.containsKey(targetProvId)) {
+      final cities = _psgcCitiesByProvince[targetProvId]!.map((c) => c.locationLabel).toSet().toList();
+      if (cities.isNotEmpty) return cities;
+    }
+
+    // Fallback: match by 4-digit PSGC prefix
+    if (targetProvId.length >= 4) {
+      final prefix = targetProvId.substring(0, 4);
+      if (_psgcCities.isNotEmpty) {
+        final cities = _psgcCities
+            .where((c) => c.name.startsWith(prefix) || (c.parentPsgcLocation != null && c.parentPsgcLocation!.startsWith(prefix)))
+            .map((c) => c.locationLabel)
+            .toSet()
+            .toList();
+        if (cities.isNotEmpty) return cities;
+      }
+      return standardCities.where((c) => c.code.startsWith(prefix)).map((c) => c.name).toSet().toList();
+    }
+
+    return [];
+  }
+
+  /// Automatically derive parent Province name from a City name or PSGC code
+  static String? resolveProvinceFromCity(String? cityNameOrCode) {
+    if (cityNameOrCode == null || cityNameOrCode.trim().isEmpty) return null;
+    _ensurePsgcSynchronousFallback();
+    final trimmed = cityNameOrCode.trim();
+
+    if (_cityToProvinceMap.containsKey(trimmed.toLowerCase())) {
+      return _cityToProvinceMap[trimmed.toLowerCase()]!.locationLabel;
+    }
+    final cityId = resolveCityId(trimmed);
+    if (_cityToProvinceMap.containsKey(cityId)) {
+      return _cityToProvinceMap[cityId]!.locationLabel;
+    }
+
+    // If city is an NCR city (e.g. Las Piñas City, Makati City)
+    if (cityId.startsWith('13') || trimmed.toLowerCase().contains('las piñ') || trimmed.toLowerCase().contains('las pin')) {
+      for (var p in _psgcProvinces) {
+        if (p.name.startsWith('13802') || p.locationLabel.toLowerCase().contains('las piñ') || p.locationLabel.toLowerCase().contains('las pin')) {
+          return p.locationLabel;
+        }
+      }
+      return 'Metro Manila-Las Piñas';
+    }
+
+    // Fallback: find province matching city prefix (first 4 digits)
+    if (cityId.length >= 4) {
+      final provPrefix = cityId.substring(0, 4);
+      for (var p in _psgcProvinces) {
+        if (p.name.startsWith(provPrefix)) {
+          return p.locationLabel;
+        }
+      }
+      for (var p in standardProvinces) {
+        if (p.code.startsWith(provPrefix)) {
+          return p.name;
+        }
+      }
+    }
+
+    return null;
   }
 
   static void registerHcpTypes(Iterable<HcpType> list) {
@@ -1442,7 +2088,10 @@ class LocationResolver {
         (i) => i.institutionName.toLowerCase() == trimmed.toLowerCase() || i.name.toLowerCase() == trimmed.toLowerCase(),
         orElse: () => Institution(name: '', institutionName: ''),
       );
-      if (found.name.isNotEmpty) return found.name;
+      if (found.name.isNotEmpty) {
+        if (found.isRejected) return '';
+        return found.name;
+      }
     }
 
     // 2. Check dynamic in-memory registry
@@ -1459,13 +2108,803 @@ class LocationResolver {
       }
     }
 
-    // If it already starts with INST-, return it
+    // If it starts with INST-, return it
     if (trimmed.toUpperCase().startsWith('INST-')) {
       return trimmed.toUpperCase();
     }
 
     return trimmed;
   }
+
+  /// Check if a given institution (by ID or display name) was rejected by SFE.
+  static bool isRejectedInstitution(String? raw, [List<Institution>? dynamicInsts]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return false;
+    final trimmed = raw.trim().toLowerCase();
+    if (dynamicInsts != null && dynamicInsts.isNotEmpty) {
+      final found = dynamicInsts.firstWhere(
+        (i) => i.name.toLowerCase() == trimmed || i.institutionName.toLowerCase() == trimmed,
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (found.name.isNotEmpty) {
+        return found.isRejected;
+      }
+    }
+    return false;
+  }
+
+  /// Get rejection reason for a rejected institution if available.
+  static String? getRejectedInstitutionReason(String? raw, [List<Institution>? dynamicInsts]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return null;
+    final trimmed = raw.trim().toLowerCase();
+    if (dynamicInsts != null && dynamicInsts.isNotEmpty) {
+      final found = dynamicInsts.firstWhere(
+        (i) => i.name.toLowerCase() == trimmed || i.institutionName.toLowerCase() == trimmed,
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (found.name.isNotEmpty && found.isRejected) {
+        return found.rejectionReason?.trim();
+      }
+    }
+    return null;
+  }
+
+  /// Check if a given institution (by ID or display name) is verified and approved by SFE.
+  static bool isApprovedInstitution(String? raw, [List<Institution>? dynamicInsts]) {
+    if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return false;
+    final trimmed = raw.trim();
+
+    if (dynamicInsts != null && dynamicInsts.isNotEmpty) {
+      final found = dynamicInsts.firstWhere(
+        (i) => i.name.toLowerCase() == trimmed.toLowerCase() || i.institutionName.toLowerCase() == trimmed.toLowerCase(),
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (found.name.isNotEmpty) {
+        return found.isApproved && !found.isRejected;
+      }
+    }
+
+    final match = RegExp(r'^INST-(\d+)$', caseSensitive: false).firstMatch(trimmed);
+    if (match != null) {
+      final num = int.tryParse(match.group(1)!) ?? 0;
+      if (num > 0 && num <= 7000) return true;
+    }
+
+    if (_staticInstitutions.containsKey(trimmed.toUpperCase())) {
+      return true;
+    }
+    for (var entry in _staticInstitutions.entries) {
+      if (entry.value.toLowerCase() == trimmed.toLowerCase()) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /// Exact note required for HCP Account:
+  /// - "[REJECTED INSTITUTION: <Reason>]" (Red)
+  /// - "this institution is not yet approved"
+  /// - "this institution is now approved"
+  static String getInstitutionApprovalStatusNote(String? raw, [List<Institution>? dynamicInsts]) {
+    if (isRejectedInstitution(raw, dynamicInsts)) {
+      if (dynamicInsts != null && dynamicInsts.isNotEmpty && raw != null) {
+        final trimmed = raw.trim().toLowerCase();
+        final found = dynamicInsts.firstWhere(
+          (i) => i.name.toLowerCase() == trimmed || i.institutionName.toLowerCase() == trimmed,
+          orElse: () => Institution(name: '', institutionName: ''),
+        );
+        if (found.rejectionReason != null && found.rejectionReason!.trim().isNotEmpty) {
+          return '[REJECTED INSTITUTION: ${found.rejectionReason!.trim()}]';
+        }
+      }
+      return '[REJECTED INSTITUTION]';
+    }
+    final isApproved = isApprovedInstitution(raw, dynamicInsts);
+    return isApproved
+        ? 'this institution is now approved'
+        : 'this institution is not yet approved';
+  }
+
+  /// Smart predictive directory search with duplicate detection and PSGC location embedding.
+  /// Detects if an institution is already present in the directory (exact match, token overlap, or acronym).
+  static List<InstitutionSearchResult> searchDirectoryWithDuplicateDetection(
+    String rawQuery,
+    Iterable<Institution> allInstitutions, {
+    int limit = 8,
+  }) {
+    final cleanQ = rawQuery
+        .replaceAll("'", "")
+        .replaceAll("’", "")
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (cleanQ.length < 2) return [];
+
+    final qTokens = cleanQ.split(' ').where((t) => t.isNotEmpty && t.length > 1).toList();
+    if (qTokens.isEmpty) return [];
+
+    const stopWords = {
+      'hospital', 'medical', 'center', 'clinic', 'inc', 'corporation', 'corp',
+      'phils', 'philippines', 'dr', 'san', 'sta', 'saint', 'of', 'and', 'the',
+      'care', 'health', 'foundation', 'memorial', 'general', 'community',
+      'district', 'city', 'provincial', 'lying', 'in', 'diagnostic',
+    };
+
+    final coreTokens = <String>[];
+    for (var t in qTokens) {
+      if (!stopWords.contains(t) && t.length > 2) {
+        coreTokens.add(t);
+        if (t.endsWith('s') && t.length > 3) {
+          coreTokens.add(t.substring(0, t.length - 1));
+        }
+      }
+    }
+
+    final isAcronymCandidate = cleanQ.length >= 2 && cleanQ.length <= 5 && RegExp(r'^[a-z]+$').hasMatch(cleanQ);
+
+    final List<InstitutionSearchResult> results = [];
+    final Set<String> seenIds = {};
+
+    for (var inst in allInstitutions) {
+      if (inst.institutionName.isEmpty && inst.name.isEmpty) continue;
+      final instId = inst.name;
+      if (seenIds.contains(instId)) continue;
+
+      final instName = inst.institutionName.isNotEmpty ? inst.institutionName : inst.name;
+      final normInstName = instName
+          .replaceAll("'", "")
+          .replaceAll("’", "")
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      // Fast-path candidate filter: skips 95%+ of irrelevant records instantly to eliminate UI lag
+      final bool hasDirectPhrase = normInstName.contains(cleanQ);
+      final bool hasCoreMatch = coreTokens.isNotEmpty && coreTokens.any((ct) => normInstName.contains(ct));
+
+      if (!hasDirectPhrase && !hasCoreMatch && !isAcronymCandidate) {
+        continue;
+      }
+
+      final instTokens = normInstName.split(' ').where((t) => t.isNotEmpty).toList();
+
+      double score = 0.0;
+      bool isHighConfidence = false;
+
+      // 1. Exact match
+      if (normInstName == cleanQ) {
+        score = 100.0;
+        isHighConfidence = true;
+      }
+      // 2. Starts with query (prefix phrase match)
+      else if (normInstName.startsWith(cleanQ)) {
+        score = 92.0;
+        if (cleanQ.length >= 6) isHighConfidence = true;
+      }
+      // 3. Contains full query phrase
+      else if (normInstName.contains(cleanQ)) {
+        score = 85.0;
+        if (cleanQ.length >= 8) isHighConfidence = true;
+      }
+      // 4. Acronym match (e.g. "MDH" -> "Manila Doctors Hospital", "SLMC" -> "St Luke's Medical Center")
+      else if (isAcronymCandidate) {
+        final acronym = instTokens.map((t) => t.isNotEmpty ? t[0] : '').join('');
+        if (acronym == cleanQ) {
+          score = 85.0;
+          isHighConfidence = true;
+        } else if (acronym.startsWith(cleanQ)) {
+          score = 75.0;
+        }
+      }
+
+      // 5. Distinctive word / phrase overlap (only matches if significant keywords overlap, never generic stop words)
+      if (score < 80.0 && coreTokens.isNotEmpty) {
+        int matchedCore = 0;
+        for (var ct in coreTokens) {
+          if (instTokens.any((it) => it == ct || (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))))) {
+            matchedCore++;
+          } else if (ct.length >= 4 && instTokens.any((it) => isSoundAlikeMatch(ct, it))) {
+            matchedCore++;
+          }
+        }
+
+        if (coreTokens.length == 1) {
+          if (matchedCore == 1 && coreTokens.first.length >= 4) {
+            score = 75.0;
+          }
+        } else if (coreTokens.length >= 2) {
+          final ratio = matchedCore / coreTokens.length;
+          if (ratio >= 0.5) {
+            final tokenScore = 70.0 + (ratio * 25.0);
+            if (tokenScore > score) {
+              score = tokenScore;
+              if (ratio == 1.0 && coreTokens.length >= 2) {
+                isHighConfidence = true;
+              }
+            }
+          }
+        }
+      }
+
+      final locStr = formatLocation(
+        streetAddress: inst.streetAddress,
+        cityMunicipality: inst.cityMunicipality,
+        provinceName: inst.provinceName,
+        regionName: inst.regionName,
+      );
+
+      // Clean confidence threshold: only genuine suggestions with score >= 65.0
+      if (score >= 65.0) {
+        seenIds.add(instId);
+        results.add(InstitutionSearchResult(
+          institution: inst,
+          isExactOrHighConfidenceDuplicate: isHighConfidence,
+          matchScore: score,
+          formattedLocation: locStr,
+        ));
+      }
+    }
+
+    // Also search baseline static institutions if not already matched
+    for (var entry in _staticInstitutions.entries) {
+      if (seenIds.contains(entry.key)) continue;
+
+      final instName = entry.value;
+      final normInstName = instName
+          .replaceAll("'", "")
+          .replaceAll("’", "")
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      final bool hasDirectPhrase = normInstName.contains(cleanQ);
+      final bool hasCoreMatch = coreTokens.isNotEmpty && coreTokens.any((ct) => normInstName.contains(ct));
+
+      if (!hasDirectPhrase && !hasCoreMatch && !isAcronymCandidate) {
+        continue;
+      }
+
+      final instTokens = normInstName.split(' ').where((t) => t.isNotEmpty).toList();
+
+      double score = 0.0;
+      bool isHighConfidence = false;
+
+      if (normInstName == cleanQ) {
+        score = 100.0;
+        isHighConfidence = true;
+      } else if (normInstName.startsWith(cleanQ)) {
+        score = 92.0;
+        if (cleanQ.length >= 6) isHighConfidence = true;
+      } else if (normInstName.contains(cleanQ)) {
+        score = 85.0;
+        if (cleanQ.length >= 8) isHighConfidence = true;
+      } else if (isAcronymCandidate) {
+        final acronym = instTokens.map((t) => t.isNotEmpty ? t[0] : '').join('');
+        if (acronym == cleanQ) {
+          score = 85.0;
+          isHighConfidence = true;
+        } else if (acronym.startsWith(cleanQ)) {
+          score = 75.0;
+        }
+      }
+
+      if (score < 80.0 && coreTokens.isNotEmpty) {
+        int matchedCore = 0;
+        for (var ct in coreTokens) {
+          if (instTokens.any((it) => it == ct || (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))))) {
+            matchedCore++;
+          }
+        }
+        if (coreTokens.length == 1) {
+          if (matchedCore == 1 && coreTokens.first.length >= 4) {
+            score = 75.0;
+          }
+        } else if (coreTokens.length >= 2) {
+          final ratio = matchedCore / coreTokens.length;
+          if (ratio >= 0.5) {
+            final tokenScore = 70.0 + (ratio * 25.0);
+            if (tokenScore > score) {
+              score = tokenScore;
+              if (ratio == 1.0 && coreTokens.length >= 2) {
+                isHighConfidence = true;
+              }
+            }
+          }
+        }
+      }
+
+      if (score >= 65.0) {
+        seenIds.add(entry.key);
+        results.add(InstitutionSearchResult(
+          institution: Institution(
+            name: entry.key,
+            institutionName: entry.value,
+            workflowState: 'Approved',
+          ),
+          isExactOrHighConfidenceDuplicate: isHighConfidence,
+          matchScore: score,
+          formattedLocation: '',
+        ));
+      }
+    }
+
+    results.sort((a, b) => b.matchScore.compareTo(a.matchScore));
+    return results.take(limit).toList();
+  }
+
+  static const Map<String, List<String>> _fuzzySynonyms = {
+    'st': ['saint', 'ste', 'st.', 'santo', 'sta', 'sto', 'san'],
+    'saint': ['st', 'ste', 'santo', 'sta', 'sto', 'san'],
+    'santo': ['sto', 'st', 'saint', 'thomas', 'tomas'],
+    'santa': ['sta', 'st', 'saint'],
+    'sto': ['santo', 'saint', 'st'],
+    'sta': ['santa', 'saint', 'st'],
+    'san': ['saint', 'st', 'santo'],
+    'dr': ['doctor', 'doctors', 'doc', 'docs', 'dr.'],
+    'doctor': ['dr', 'doc', 'docs', 'doctors'],
+    'doctors': ['dr', 'doc', 'docs', 'doctor'],
+    'doc': ['doctor', 'doctors', 'dr', 'docs'],
+    'docs': ['doctor', 'doctors', 'dr', 'doc'],
+    'med': ['medical', 'medicine'],
+    'medical': ['med', 'medicine'],
+    'medicine': ['med', 'medical'],
+    'ctr': ['center', 'centre'],
+    'center': ['ctr', 'centre', 'centers'],
+    'lourdes': ['lordes', 'lourds', 'lady'],
+    'lordes': ['lourdes', 'lourds', 'lady'],
+    'cardinal': ['kardinal', 'cardynal', 'csmc'],
+    'kardinal': ['cardinal', 'cardynal', 'csmc'],
+    'tomas': ['thomas', 'ust'],
+    'thomas': ['tomas', 'ust'],
+    'chinese': ['chines', 'chynese', 'china', 'cgh'],
+    'chines': ['chinese', 'chynese', 'cgh'],
+    'lukes': ['luke', 'lucas', 'slmc'],
+    'luke': ['lukes', 'lucas', 'slmc'],
+    'asian': ['asiya', 'alabang'],
+    'perpetual': ['perpetuel', 'succor'],
+    'succor': ['succour', 'socorro', 'perpetual'],
+    'providence': ['probidens'],
+    'probidens': ['providence'],
+    'makati': ['makaty', 'mmc'],
+    'makaty': ['makati', 'mmc'],
+    'metropolitan': ['metropolytan', 'metro', 'mmc'],
+    'filipino': ['philippine', 'phil', 'pgh'],
+    'philipine': ['philippine', 'phil', 'pgh'],
+    'chiles': ['child', 'children', 'chile', 'chyles'],
+    'chile': ['chiles', 'child'],
+    'clinica': ['clinic', 'clnc'],
+    'clnc': ['clinic', 'clinica'],
+    'cgh': ['chinese', 'general', 'hospital'],
+    'hosp': ['hospital'],
+    'hospital': ['hosp', 'hospitals'],
+    'hospitals': ['hosp', 'hospital'],
+    'gen': ['general'],
+    'general': ['gen'],
+    'cln': ['clinic'],
+    'clinic': ['cln', 'clnc', 'clinics', 'clinica'],
+    'clinics': ['cln', 'clinic'],
+    'mem': ['memorial'],
+    'memorial': ['mem'],
+    'natl': ['national'],
+    'national': ['natl'],
+    'univ': ['university'],
+    'university': ['univ'],
+    'fdn': ['foundation', 'fndn'],
+    'foundation': ['fdn', 'fndn'],
+    'inst': ['institute'],
+    'institute': ['inst', 'institutes'],
+    'delos': ['de', 'los'],
+    'bgc': ['bonifacio', 'global', 'taguig'],
+    'global': ['bgc', 'bonifacio'],
+    'qc': ['quezon'],
+    'quezon': ['qc'],
+    'ncr': ['metro', 'manila'],
+    'manila': ['ncr', 'metro'],
+    'pgh': ['philippine', 'general', 'hospital'],
+    'slmc': ['st', 'lukes', 'medical', 'center'],
+    'mmc': ['makati', 'medical', 'center'],
+    'mdh': ['manila', 'doctors', 'hospital'],
+    'ust': ['university', 'santo', 'tomas'],
+    'tmc': ['the', 'medical', 'city'],
+    'csmc': ['cardinal', 'santos', 'medical', 'center'],
+    'nkti': ['national', 'kidney', 'transplant', 'institute'],
+    'vmmc': ['veterans', 'memorial', 'medical', 'center'],
+    'pcmc': ['philippine', 'childrens', 'medical', 'center'],
+    'eamc': ['east', 'avenue', 'medical', 'center'],
+    'dls': ['de', 'la', 'salle'],
+    'dlsumc': ['de', 'la', 'salle', 'university', 'medical', 'center'],
+    'phc': ['philippine', 'heart', 'center'],
+    'lcp': ['lung', 'center', 'philippines'],
+    'poc': ['philippine', 'orthopedic', 'center'],
+    'philippine': ['philippines', 'phil', 'pgh', 'phc', 'pcmc', 'poc', 'filipino'],
+    'philippines': ['philippine', 'phil', 'pgh', 'phc', 'pcmc', 'lcp', 'poc', 'filipino'],
+    'phil': ['philippine', 'philippines', 'pgh', 'phc', 'pcmc', 'filipino'],
+    'children': ['childrens', 'pediatric', 'pedia'],
+    'childrens': ['children', 'pediatric', 'pedia'],
+    'heart': ['cardio', 'cardiac', 'phc'],
+    'lung': ['pulmo', 'pulmonary', 'lcp'],
+    'kidney': ['renal', 'nephro', 'nkti'],
+    'orthopedic': ['ortho', 'poc'],
+  };
+
+  /// Generates a 4-character phonetic Soundex code for sound-alike comparison.
+  /// Normalizes English & Filipino phonetic variations (e.g. PH/F, C/K/S, Z/S, V/B).
+  static String soundex(String s) {
+    if (s.isEmpty) return '';
+    final lower = s.toLowerCase().replaceAll("'", "").replaceAll("’", "").trim();
+    final normalized = lower
+        .replaceAll('ph', 'f')
+        .replaceAll('ck', 'k')
+        .replaceAll('qu', 'k')
+        .replaceAll('ch', 'k')
+        .replaceAll('th', 't')
+        .replaceAll('dg', 'j')
+        .replaceAll('gh', 'g')
+        .replaceAll(RegExp(r'[^a-z]'), '');
+    if (normalized.isEmpty) return '';
+
+    // Normalize initial phonetic character (Hard C -> K, Soft C -> S, V -> B, Z -> S)
+    String initial = normalized[0];
+    if (initial == 'c') {
+      if (normalized.length > 1 && (normalized[1] == 'e' || normalized[1] == 'i' || normalized[1] == 'y')) {
+        initial = 's';
+      } else {
+        initial = 'k';
+      }
+    } else if (initial == 'v') {
+      initial = 'b';
+    } else if (initial == 'z') {
+      initial = 's';
+    }
+
+    final firstLetter = initial.toUpperCase();
+    final buffer = StringBuffer(firstLetter);
+
+    String lastCode = _soundexCode(initial);
+    for (int i = 1; i < normalized.length && buffer.length < 4; i++) {
+      final code = _soundexCode(normalized[i]);
+      if (code != '0' && code != lastCode) {
+        buffer.write(code);
+      }
+      lastCode = code;
+    }
+    while (buffer.length < 4) {
+      buffer.write('0');
+    }
+    return buffer.toString();
+  }
+
+  static String _soundexCode(String char) {
+    switch (char) {
+      case 'b':
+      case 'f':
+      case 'p':
+      case 'v':
+        return '1';
+      case 'c':
+      case 'g':
+      case 'j':
+      case 'k':
+      case 'q':
+      case 's':
+      case 'x':
+      case 'z':
+        return '2';
+      case 'd':
+      case 't':
+        return '3';
+      case 'l':
+        return '4';
+      case 'm':
+      case 'n':
+        return '5';
+      case 'r':
+        return '6';
+      default:
+        return '0';
+    }
+  }
+
+  /// Fast Damerau-Levenshtein edit distance for typo tolerance and sound-alike spelling.
+  static int levenshteinDistance(String s1, String s2) {
+    if (s1 == s2) return 0;
+    if (s1.isEmpty) return s2.length;
+    if (s2.isEmpty) return s1.length;
+
+    List<int> v0 = List<int>.generate(s2.length + 1, (i) => i);
+    List<int> v1 = List<int>.filled(s2.length + 1, 0);
+
+    for (int i = 0; i < s1.length; i++) {
+      v1[0] = i + 1;
+      for (int j = 0; j < s2.length; j++) {
+        final cost = (s1[i] == s2[j]) ? 0 : 1;
+        v1[j + 1] = [
+          v1[j] + 1,
+          v0[j + 1] + 1,
+          v0[j] + cost,
+        ].reduce((min, val) => val < min ? val : min);
+      }
+      for (int j = 0; j <= s2.length; j++) {
+        v0[j] = v1[j];
+      }
+    }
+    return v1[s2.length];
+  }
+
+  /// Checks whether two tokens sound alike or have high phonetic/spelling similarity.
+  static bool isSoundAlikeMatch(String t1, String t2) {
+    if (t1 == t2) return true;
+    if (t1.isEmpty || t2.isEmpty) return false;
+
+    // Direct Soundex comparison
+    final s1 = soundex(t1);
+    final s2 = soundex(t2);
+    if (s1.isNotEmpty && s1 == s2) return true;
+
+    // Levenshtein edit distance for small typos and phonetic spelling
+    final maxLen = t1.length > t2.length ? t1.length : t2.length;
+    final minLen = t1.length < t2.length ? t1.length : t2.length;
+    if (minLen >= 3 && (maxLen - minLen <= 2)) {
+      final dist = levenshteinDistance(t1, t2);
+      if (dist <= 1) return true;
+      if (minLen >= 5 && dist <= 2) return true;
+    }
+    return false;
+  }
+
+  /// Advanced multi-clue fuzzy search for institution dropdowns and selection pickers.
+  /// 
+  /// Guarantees that any potential clue of any word of that particular institution
+  /// is matched and included in the dropdown list (not filterized or excluded prematurely),
+  /// while ranking results by multi-clue relevance score with heavy prefix prioritization,
+  /// sound-alike phonetic matching, and same-phrase permutation matching.
+  static List<Institution> fuzzySearchInstitutions(
+    String rawQuery,
+    Iterable<Institution> allInstitutions, {
+    int? limit,
+  }) {
+    final trimmed = rawQuery.trim();
+    if (trimmed.isEmpty) {
+      final list = allInstitutions.toList();
+      return limit != null && limit > 0 ? list.take(limit).toList() : list;
+    }
+
+    final cleanQ = trimmed
+        .replaceAll("'", "")
+        .replaceAll("’", "")
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    final qTokens = cleanQ.split(' ').where((t) => t.isNotEmpty).toList();
+    if (qTokens.isEmpty) {
+      final list = allInstitutions.toList();
+      return limit != null && limit > 0 ? list.take(limit).toList() : list;
+    }
+
+    final List<_ScoredInstitutionItem> scoredList = [];
+
+    for (final inst in allInstitutions) {
+      final instName = inst.institutionName.isNotEmpty ? inst.institutionName : inst.name;
+      final instNameClean = instName
+          .replaceAll("'", "")
+          .replaceAll("’", "")
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      final locStr = [
+        inst.streetAddress ?? '',
+        inst.barangayName ?? '',
+        inst.cityMunicipality ?? inst.rawCityMunicipality ?? '',
+        inst.provinceName ?? inst.rawProvinceName ?? '',
+        inst.regionName ?? inst.rawRegionName ?? '',
+      ].join(' ');
+
+      final locClean = locStr
+          .replaceAll("'", "")
+          .replaceAll("’", "")
+          .toLowerCase()
+          .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      final combinedClean = '${inst.name.toLowerCase()} $instNameClean $locClean';
+      final nameTokens = instNameClean.split(' ').where((t) => t.isNotEmpty).toList();
+      final locTokens = locClean.split(' ').where((t) => t.isNotEmpty).toSet();
+      final acronym = nameTokens.where((t) => t.isNotEmpty).map((t) => t[0]).join();
+
+      double score = 0.0;
+      int tokensMatched = 0;
+      int nameTokensMatched = 0;
+
+      // 1. Exact phrase matches, Prefix matching, and Sound-Alike (Highest Tier - Appears readily at top of dropdown)
+      if (instNameClean == cleanQ) {
+        score += 3500.0;
+      } else if (instNameClean.startsWith(cleanQ)) {
+        // Entire institution name starts with query (e.g. "Philippine General Hospital", "Philippine Heart Center" when searching "Philippine")
+        score += 3000.0;
+      } else if (nameTokens.isNotEmpty && (nameTokens[0] == cleanQ || nameTokens[0].startsWith(cleanQ))) {
+        // First word starts with query
+        score += 2600.0;
+      } else if (nameTokens.any((nt) => nt == cleanQ)) {
+        // A whole word in institution name matches query exactly
+        score += 2000.0;
+      } else if (nameTokens.any((nt) => isSoundAlikeMatch(cleanQ, nt))) {
+        // A whole word in institution name sounds like the query (e.g. "lordes" -> "lourdes", "kardinal" -> "cardinal", "makaty" -> "makati", "chines" -> "chinese")
+        score += 2400.0;
+      } else if (nameTokens.any((nt) => nt.startsWith(cleanQ))) {
+        // A word in institution name starts with query
+        score += 1600.0;
+      } else if (instNameClean.contains(cleanQ)) {
+        // Substring anywhere in name (e.g. "Lung Center of the Philippines")
+        score += 1200.0;
+      } else if (cleanQ.length >= 4 && (soundex(cleanQ).isNotEmpty && soundex(cleanQ) == soundex(instNameClean) || isSoundAlikeMatch(cleanQ, instNameClean))) {
+        // Whole query sounds like entire institution name
+        score += 3200.0;
+      } else if (combinedClean.contains(cleanQ)) {
+        // In location, address, or ID
+        score += 800.0;
+      }
+
+      // 2. Acronym matching
+      if (cleanQ.length >= 2 && cleanQ.length <= 6 && RegExp(r'^[a-z]+$').hasMatch(cleanQ)) {
+        if (cleanQ == acronym) {
+          score += 1800.0;
+        } else if (acronym.startsWith(cleanQ)) {
+          score += 1200.0;
+        }
+      }
+
+      // 3. Multi-token clue evaluation (Inclusive retention: any potential clue matches)
+      for (final qt in qTokens) {
+        bool tokenFound = false;
+        bool isNameMatch = false;
+        final syns = _fuzzySynonyms[qt];
+        final expanded = [qt, ...?syns];
+        // Stemming: also add stripped 's' or 'es'
+        if (qt.endsWith('s') && qt.length > 3) {
+          expanded.add(qt.substring(0, qt.length - 1));
+        }
+        if (qt.endsWith('es') && qt.length > 4) {
+          expanded.add(qt.substring(0, qt.length - 2));
+        }
+
+        // A. Match against institution name tokens (bidirectional token & prefix matching & sound-alike)
+        for (final nt in nameTokens) {
+          final ntStem = (nt.endsWith('s') && nt.length > 3) ? nt.substring(0, nt.length - 1) : nt;
+          if (expanded.any((exp) => exp == nt || exp == ntStem)) {
+            score += 300.0;
+            tokenFound = true;
+            isNameMatch = true;
+            break;
+          } else if (expanded.any((exp) => isSoundAlikeMatch(exp, nt))) {
+            // Sound-alike token match (e.g. "lordes" -> "lourdes", "kardinal" -> "cardinal")
+            score += 280.0;
+            tokenFound = true;
+            isNameMatch = true;
+            break;
+          } else if (expanded.any((exp) => (exp.length >= 2 && nt.startsWith(exp)) || (nt.length >= 2 && exp.startsWith(nt)))) {
+            score += 200.0;
+            tokenFound = true;
+            isNameMatch = true;
+            break;
+          } else if (expanded.any((exp) => (exp.length >= 3 && nt.contains(exp)) || (nt.length >= 3 && exp.contains(nt)))) {
+            score += 120.0;
+            tokenFound = true;
+            isNameMatch = true;
+            break;
+          }
+        }
+
+        // B. Compound names (e.g. "delos" matching "de" + "los")
+        if (!tokenFound && qt == 'delos' && nameTokens.contains('de') && nameTokens.contains('los')) {
+          score += 250.0;
+          tokenFound = true;
+          isNameMatch = true;
+        }
+
+        // C. Match against location tokens (city, municipality, province, street)
+        if (!tokenFound) {
+          for (final exp in expanded) {
+            if (locTokens.contains(exp)) {
+              score += 100.0;
+              tokenFound = true;
+              break;
+            } else if (locTokens.any((lt) => isSoundAlikeMatch(exp, lt))) {
+              score += 90.0;
+              tokenFound = true;
+              break;
+            } else if (locTokens.any((lt) => (exp.length >= 2 && lt.startsWith(exp)) || (lt.length >= 2 && exp.startsWith(lt)))) {
+              score += 80.0;
+              tokenFound = true;
+              break;
+            } else if (exp.length >= 3 && locClean.contains(exp)) {
+              score += 60.0;
+              tokenFound = true;
+              break;
+            }
+          }
+        }
+
+        // D. Match against Institution ID (e.g. "INST-00123" or "00123")
+        if (!tokenFound && (qt.startsWith('inst') || RegExp(r'^\d+$').hasMatch(qt))) {
+          if (inst.name.toLowerCase().contains(qt)) {
+            score += 150.0;
+            tokenFound = true;
+          }
+        }
+
+        if (tokenFound) {
+          tokensMatched++;
+          if (isNameMatch) {
+            nameTokensMatched++;
+          }
+        }
+      }
+
+      // 4. Same Phrase & Multi-token synergy bonus
+      if (qTokens.length > 1) {
+        // SAME PHRASE MATCH: When 100% of query tokens match institution name tokens in any order
+        // (e.g. "Doctors Manila" or "Manila Doctors", "General Chinese", "St Lukes BGC", "Lourdes Lady")
+        if (nameTokensMatched == qTokens.length) {
+          score += 3200.0; // Massive Same-Phrase Priority Boost so it immediately appears readily at the top!
+          if (nameTokens.length == qTokens.length) {
+            score += 500.0; // Exact permutation bonus
+          }
+        } else if (tokensMatched == qTokens.length) {
+          score += 600.0; // All tokens matched across name + location
+        } else if (tokensMatched > 0) {
+          score += (tokensMatched / qTokens.length) * 250.0;
+        }
+      }
+
+      // Inclusion rule: any potential clue matches keeps it in the dropdown list (never filterized out)!
+      if (score > 0.0 || tokensMatched > 0) {
+        scoredList.add(_ScoredInstitutionItem(inst, score));
+      }
+    }
+
+    // 5. Fallback typo tolerance & sound-alike: if no tokens matched at all, check phonetic and subsequence
+    if (scoredList.isEmpty && cleanQ.length >= 3) {
+      for (final inst in allInstitutions) {
+        final instName = inst.institutionName.isNotEmpty ? inst.institutionName : inst.name;
+        final instLower = instName.toLowerCase();
+        if (isSoundAlikeMatch(cleanQ, instLower)) {
+          scoredList.add(_ScoredInstitutionItem(inst, 100.0));
+        } else if (_hasSubsequenceMatch(cleanQ, instLower)) {
+          scoredList.add(_ScoredInstitutionItem(inst, 15.0));
+        }
+      }
+    }
+
+    // Sort descending by relevance score; on tie, sort alphabetically A-Z by institutionName
+    scoredList.sort((a, b) {
+      final cmp = b.score.compareTo(a.score);
+      if (cmp != 0) return cmp;
+      return a.institution.institutionName.toLowerCase().compareTo(b.institution.institutionName.toLowerCase());
+    });
+
+    final results = scoredList.map((e) => e.institution);
+    return limit != null && limit > 0 ? results.take(limit).toList() : results.toList();
+  }
+
+  static bool _hasSubsequenceMatch(String query, String target) {
+    if (query.isEmpty || target.isEmpty) return false;
+    int qIdx = 0;
+    for (int tIdx = 0; tIdx < target.length && qIdx < query.length; tIdx++) {
+      if (target[tIdx] == query[qIdx]) {
+        qIdx++;
+      }
+    }
+    return qIdx == query.length;
+  }
+
 
   /// Resolve a Province name (e.g. "Metro Manila", "Bulacan") to its ERPNext Link ID / PSGC Code
   static String resolveProvinceId(String? raw, [List<PsgcLocation>? dynamicLocations]) {
@@ -1699,6 +3138,7 @@ class LocationResolver {
   static String resolveRegionId(String? raw, [List<PsgcLocation>? dynamicLocations]) {
     if (raw == null || raw.trim().isEmpty || raw.trim() == '-') return '';
     final trimmed = raw.trim();
+    if (RegExp(r'^\d{10}$').hasMatch(trimmed)) return trimmed;
 
     if (dynamicLocations != null && dynamicLocations.isNotEmpty) {
       final match = dynamicLocations.firstWhere(
@@ -1712,9 +3152,354 @@ class LocationResolver {
       if (r.name.toLowerCase() == trimmed.toLowerCase() || r.code == trimmed) {
         return r.code;
       }
+      if (trimmed.length > 2 && r.name.toLowerCase().contains(trimmed.toLowerCase())) {
+        return r.code;
+      }
     }
 
     return trimmed;
+  }
+
+  /// Automatically derive Region name from a Province name or PSGC code
+  static String resolveRegionFromProvince(String? provinceNameOrCode) {
+    if (provinceNameOrCode == null || provinceNameOrCode.trim().isEmpty) return '';
+    _ensurePsgcSynchronousFallback();
+    final trimmed = provinceNameOrCode.trim();
+
+    // Check direct parent mapping
+    if (_provinceToRegionMap.containsKey(trimmed.toLowerCase())) {
+      return _provinceToRegionMap[trimmed.toLowerCase()]!.locationLabel;
+    }
+    final provId = resolveProvinceId(trimmed);
+    if (_provinceToRegionMap.containsKey(provId)) {
+      return _provinceToRegionMap[provId]!.locationLabel;
+    }
+
+    // Special case for Metro Manila
+    if (trimmed.toLowerCase().contains('metro manila') || provId.startsWith('13')) {
+      final ncr = _psgcRegions.where((r) => r.name == '1300000000').firstOrNull;
+      if (ncr != null) return ncr.locationLabel;
+      return 'NCR';
+    }
+
+    if (provId.length >= 2) {
+      final regPrefix = provId.substring(0, 2);
+      for (var r in _psgcRegions) {
+        if (r.name.startsWith(regPrefix)) {
+          return r.locationLabel;
+        }
+      }
+      for (var r in standardRegions) {
+        if (r.code.startsWith(regPrefix)) {
+          return r.name;
+        }
+      }
+    }
+    return '';
+  }
+
+  /// Comprehensively resolves all workplace location fields (Workplace, Region, Province, City)
+  /// ensuring that NONE of them are EVER empty during HCP Profiling submissions.
+  /// 
+  /// Automatically resolves missing provinces/cities from PSGC geographic hierarchy,
+  /// institution address keywords, or regional defaults.
+  static ResolvedWorkplaceLocation resolveCompleteWorkplaceLocation({
+    String? workplaceNameOrId,
+    String? institutionIdOrName,
+    String? institutionName,
+    String? rawRegion,
+    String? regionIdOrName,
+    String? rawProvince,
+    String? provinceIdOrName,
+    String? rawCity,
+    String? cityIdOrName,
+    String? streetAddress,
+    Iterable<Institution>? institutions,
+    List<PsgcLocation>? dynamicLocations,
+  }) {
+    Institution? instMatch;
+    final wpInput = (workplaceNameOrId ?? institutionIdOrName ?? institutionName ?? '').trim();
+    if (wpInput.isNotEmpty) {
+      final pool = institutions ?? _dynamicInstitutions.entries.map((e) => Institution(name: e.key, institutionName: e.value));
+      instMatch = pool.where((i) =>
+          i.name.toLowerCase() == wpInput.toLowerCase() ||
+          i.institutionName.toLowerCase() == wpInput.toLowerCase()
+      ).firstOrNull;
+    }
+
+    final effWpName = (institutionName != null && institutionName.trim().isNotEmpty)
+        ? institutionName.trim()
+        : ((instMatch != null && instMatch.institutionName.isNotEmpty)
+            ? instMatch.institutionName
+            : resolveInstitutionName(wpInput, institutions?.toList()));
+    final effWpId = (instMatch != null && instMatch.name.isNotEmpty)
+        ? instMatch.name
+        : resolveInstitutionId(wpInput, institutions?.toList());
+    final finalWpName = effWpName.isNotEmpty ? effWpName : (wpInput.isNotEmpty ? wpInput : 'Workplace');
+    final finalWpId = effWpId.isNotEmpty ? effWpId : (wpInput.isNotEmpty ? wpInput : 'INST-00001');
+
+    final givenCity = (cityIdOrName != null && cityIdOrName.trim().isNotEmpty && cityIdOrName.trim() != '-')
+        ? cityIdOrName.trim()
+        : ((rawCity != null && rawCity.trim().isNotEmpty && rawCity.trim() != '-') ? rawCity.trim() : '');
+    final instCity = (instMatch?.rawCityMunicipality ?? instMatch?.cityMunicipality ?? '').trim();
+    String candCity = givenCity.isNotEmpty ? givenCity : (instCity.isNotEmpty && instCity != '-' ? instCity : '');
+
+    final givenProv = (provinceIdOrName != null && provinceIdOrName.trim().isNotEmpty && provinceIdOrName.trim() != '-')
+        ? provinceIdOrName.trim()
+        : ((rawProvince != null && rawProvince.trim().isNotEmpty && rawProvince.trim() != '-') ? rawProvince.trim() : '');
+    final instProv = (instMatch?.rawProvinceName ?? instMatch?.provinceName ?? '').trim();
+    String candProv = givenProv.isNotEmpty ? givenProv : (instProv.isNotEmpty && instProv != '-' ? instProv : '');
+
+    final givenReg = (regionIdOrName != null && regionIdOrName.trim().isNotEmpty && regionIdOrName.trim() != '-')
+        ? regionIdOrName.trim()
+        : ((rawRegion != null && rawRegion.trim().isNotEmpty && rawRegion.trim() != '-') ? rawRegion.trim() : '');
+    final instReg = (instMatch?.rawRegionName ?? instMatch?.regionName ?? '').trim();
+    String candReg = givenReg.isNotEmpty ? givenReg : (instReg.isNotEmpty && instReg != '-' ? instReg : '');
+
+    final combinedLocText = '$finalWpName ${instMatch?.streetAddress ?? ''} ${streetAddress ?? ''}'.toLowerCase();
+
+    // 1. Infer City if empty
+    if (candCity.isEmpty) {
+      if (combinedLocText.contains('taguig') || combinedLocText.contains('bgc') || combinedLocText.contains('bonifacio') || combinedLocText.contains('global city')) {
+        candCity = 'Taguig';
+      } else if (combinedLocText.contains('makati') || combinedLocText.contains('ayala') || combinedLocText.contains('legaspi') || combinedLocText.contains('salcedo')) {
+        candCity = 'Makati';
+      } else if (combinedLocText.contains('quezon city') || combinedLocText.contains('qc') || combinedLocText.contains('east ave') || combinedLocText.contains('quezon ave') || combinedLocText.contains('diliman') || combinedLocText.contains('cubao')) {
+        candCity = 'Quezon City';
+      } else if (combinedLocText.contains('pasig') || combinedLocText.contains('ortigas')) {
+        candCity = 'Pasig';
+      } else if (combinedLocText.contains('alabang') || combinedLocText.contains('muntinlupa') || combinedLocText.contains('filinvest')) {
+        candCity = 'Muntinlupa';
+      } else if (combinedLocText.contains('san juan') || combinedLocText.contains('greenhills')) {
+        candCity = 'San Juan';
+      } else if (combinedLocText.contains('mandaluyong') || combinedLocText.contains('shaw') || combinedLocText.contains('wack wack')) {
+        candCity = 'Mandaluyong';
+      } else if (combinedLocText.contains('manila') || combinedLocText.contains('ermita') || combinedLocText.contains('taft') || combinedLocText.contains('santa cruz') || combinedLocText.contains('sta cruz') || combinedLocText.contains('sampaloc') || combinedLocText.contains('binondo')) {
+        candCity = 'Manila';
+      } else if (combinedLocText.contains('marikina')) {
+        candCity = 'Marikina';
+      } else if (combinedLocText.contains('pasay') || combinedLocText.contains('roxas')) {
+        candCity = 'Pasay';
+      } else if (combinedLocText.contains('paranaque') || combinedLocText.contains('parañaque') || combinedLocText.contains('sucat') || combinedLocText.contains('bf homes')) {
+        candCity = 'Parañaque';
+      } else if (combinedLocText.contains('las pinas') || combinedLocText.contains('las piñas')) {
+        candCity = 'Las Piñas';
+      } else if (combinedLocText.contains('caloocan') || combinedLocText.contains('monumento')) {
+        candCity = 'Caloocan';
+      } else if (combinedLocText.contains('valenzuela')) {
+        candCity = 'Valenzuela';
+      } else if (combinedLocText.contains('malabon')) {
+        candCity = 'Malabon';
+      } else if (combinedLocText.contains('navotas')) {
+        candCity = 'Navotas';
+      } else if (combinedLocText.contains('pateros')) {
+        candCity = 'Pateros';
+      } else if (combinedLocText.contains('cebu')) {
+        candCity = 'Cebu City';
+      } else if (combinedLocText.contains('davao')) {
+        candCity = 'Davao City';
+      } else if (combinedLocText.contains('iloilo')) {
+        candCity = 'Iloilo City';
+      } else if (combinedLocText.contains('bacolod')) {
+        candCity = 'Bacolod City';
+      } else if (combinedLocText.contains('baguio')) {
+        candCity = 'Baguio City';
+      } else if (combinedLocText.contains('angeles')) {
+        candCity = 'Angeles City';
+      } else if (combinedLocText.contains('san fernando')) {
+        candCity = 'City of San Fernando';
+      } else if (combinedLocText.contains('cagayan de oro') || combinedLocText.contains('cdo')) {
+        candCity = 'Cagayan de Oro City';
+      } else if (combinedLocText.contains('general santos') || combinedLocText.contains('gensan')) {
+        candCity = 'General Santos City';
+      } else if (combinedLocText.contains('batangas')) {
+        candCity = 'Batangas City';
+      } else if (combinedLocText.contains('lipa')) {
+        candCity = 'Lipa City';
+      } else if (combinedLocText.contains('lucena')) {
+        candCity = 'Lucena City';
+      } else if (combinedLocText.contains('calamba')) {
+        candCity = 'Calamba City';
+      } else if (combinedLocText.contains('santa rosa') || combinedLocText.contains('sta rosa')) {
+        candCity = 'City of Santa Rosa';
+      } else if (combinedLocText.contains('binan') || combinedLocText.contains('biñan')) {
+        candCity = 'City of Biñan';
+      } else if (combinedLocText.contains('san pedro')) {
+        candCity = 'City of San Pedro';
+      } else if (combinedLocText.contains('cabuyao')) {
+        candCity = 'City of Cabuyao';
+      } else if (combinedLocText.contains('bacoor')) {
+        candCity = 'City of Bacoor';
+      } else if (combinedLocText.contains('imus')) {
+        candCity = 'City of Imus';
+      } else if (combinedLocText.contains('dasmarinas') || combinedLocText.contains('dasmariñas')) {
+        candCity = 'City of Dasmariñas';
+      } else if (combinedLocText.contains('general trias') || combinedLocText.contains('gen trias')) {
+        candCity = 'City of General Trias';
+      } else if (combinedLocText.contains('malolos')) {
+        candCity = 'City of Malolos';
+      } else if (combinedLocText.contains('meycauayan')) {
+        candCity = 'City of Meycauayan';
+      } else if (combinedLocText.contains('san jose del monte') || combinedLocText.contains('sjdm')) {
+        candCity = 'City of San Jose del Monte';
+      }
+    }
+
+    // 2. Infer Province if empty
+    if (candProv.isEmpty) {
+      final cityLower = candCity.toLowerCase();
+      const ncrCities = [
+        'manila', 'quezon city', 'taguig', 'makati', 'pasig', 'muntinlupa',
+        'san juan', 'mandaluyong', 'marikina', 'pasay', 'parañaque', 'paranaque',
+        'las piñas', 'las pinas', 'caloocan', 'valenzuela', 'malabon', 'navotas', 'pateros'
+      ];
+      if (ncrCities.any((c) => cityLower.contains(c))) {
+        candProv = 'Metro Manila';
+      } else if (cityLower.contains('cebu')) {
+        candProv = 'Cebu';
+      } else if (cityLower.contains('davao')) {
+        candProv = 'Davao del Sur';
+      } else if (cityLower.contains('iloilo')) {
+        candProv = 'Iloilo';
+      } else if (cityLower.contains('bacolod')) {
+        candProv = 'Negros Occidental';
+      } else if (cityLower.contains('baguio')) {
+        candProv = 'Benguet';
+      } else if (cityLower.contains('angeles') || cityLower.contains('san fernando') || combinedLocText.contains('pampanga')) {
+        candProv = 'Pampanga';
+      } else if (cityLower.contains('malolos') || cityLower.contains('meycauayan') || cityLower.contains('marilao') || combinedLocText.contains('bulacan')) {
+        candProv = 'Bulacan';
+      } else if (cityLower.contains('bacoor') || cityLower.contains('imus') || cityLower.contains('dasmarinas') || cityLower.contains('dasmariñas') || combinedLocText.contains('cavite')) {
+        candProv = 'Cavite';
+      } else if (cityLower.contains('calamba') || cityLower.contains('santa rosa') || cityLower.contains('binan') || cityLower.contains('biñan') || combinedLocText.contains('laguna')) {
+        candProv = 'Laguna';
+      } else if (cityLower.contains('batangas') || cityLower.contains('lipa')) {
+        candProv = 'Batangas';
+      } else if (cityLower.contains('lucena') || combinedLocText.contains('quezon')) {
+        candProv = 'Quezon';
+      } else if (combinedLocText.contains('rizal') || cityLower.contains('antipolo')) {
+        candProv = 'Rizal';
+      } else {
+        for (final p in standardProvinces) {
+          if (combinedLocText.contains(p.name.toLowerCase())) {
+            candProv = p.name;
+            break;
+          }
+        }
+      }
+
+      if (candProv.isEmpty && candReg.isNotEmpty) {
+        final regDigits = candReg.replaceAll(RegExp(r'\D'), '');
+        if (regDigits.startsWith('13') || candReg.toLowerCase().contains('ncr') || candReg.toLowerCase().contains('capital')) {
+          candProv = 'Metro Manila';
+        } else if (regDigits.startsWith('01')) {
+          candProv = 'Ilocos Norte';
+        } else if (regDigits.startsWith('02')) {
+          candProv = 'Isabela';
+        } else if (regDigits.startsWith('03')) {
+          candProv = 'Bulacan';
+        } else if (regDigits.startsWith('04')) {
+          candProv = 'Cavite';
+        } else if (regDigits.startsWith('05')) {
+          candProv = 'Albay';
+        } else if (regDigits.startsWith('06')) {
+          candProv = 'Iloilo';
+        } else if (regDigits.startsWith('07')) {
+          candProv = 'Cebu';
+        } else if (regDigits.startsWith('08')) {
+          candProv = 'Leyte';
+        } else if (regDigits.startsWith('09')) {
+          candProv = 'Zamboanga del Sur';
+        } else if (regDigits.startsWith('10')) {
+          candProv = 'Misamis Oriental';
+        } else if (regDigits.startsWith('11')) {
+          candProv = 'Davao del Sur';
+        } else if (regDigits.startsWith('12')) {
+          candProv = 'South Cotabato';
+        } else if (regDigits.startsWith('14')) {
+          candProv = 'Benguet';
+        } else if (regDigits.startsWith('15')) {
+          candProv = 'Maguindanao del Norte';
+        } else if (regDigits.startsWith('16')) {
+          candProv = 'Agusan del Norte';
+        } else if (regDigits.startsWith('17')) {
+          candProv = 'Palawan';
+        }
+      }
+
+      if (candProv.isEmpty) {
+        candProv = 'Metro Manila';
+      }
+    }
+
+    // 3. Infer Region if empty
+    if (candReg.isEmpty) {
+      final regFromProv = resolveRegionFromProvince(candProv);
+      if (regFromProv.isNotEmpty) {
+        candReg = regFromProv;
+      } else {
+        candReg = 'National Capital Region (NCR)';
+      }
+    }
+
+    // 4. Infer City if still empty
+    if (candCity.isEmpty) {
+      if (candProv.toLowerCase().contains('metro manila') || candReg.toLowerCase().contains('ncr')) {
+        candCity = 'Manila';
+      } else if (candProv.toLowerCase().contains('cebu')) {
+        candCity = 'Cebu City';
+      } else if (candProv.toLowerCase().contains('davao')) {
+        candCity = 'Davao City';
+      } else if (candProv.toLowerCase().contains('iloilo')) {
+        candCity = 'Iloilo City';
+      } else if (candProv.toLowerCase().contains('cavite')) {
+        candCity = 'City of Dasmariñas';
+      } else if (candProv.toLowerCase().contains('laguna')) {
+        candCity = 'Calamba City';
+      } else if (candProv.toLowerCase().contains('bulacan')) {
+        candCity = 'City of Malolos';
+      } else if (candProv.toLowerCase().contains('pampanga')) {
+        candCity = 'City of San Fernando';
+      } else {
+        candCity = 'Manila';
+      }
+    }
+
+    // 5. Final resolution to official PSGC Link IDs and human-readable names
+    final resolvedCityName = resolveCityName(candCity, dynamicLocations);
+    final resolvedCityId = resolveCityId(candCity, dynamicLocations);
+    final finalCityName = resolvedCityName.isNotEmpty ? resolvedCityName : candCity;
+    var finalCityId = resolvedCityId.isNotEmpty ? resolvedCityId : candCity;
+    if (finalCityId == '133900000' || finalCityId.startsWith('1339')) {
+      finalCityId = '1380608000'; // Ermita, Manila in ERPNext
+    }
+
+    final resolvedProvName = resolveProvinceName(candProv, dynamicLocations);
+    final resolvedProvId = resolveProvinceId(candProv, dynamicLocations);
+    final finalProvName = resolvedProvName.isNotEmpty ? resolvedProvName : candProv;
+    var finalProvId = resolvedProvId.isNotEmpty ? resolvedProvId : candProv;
+    if (finalProvId == '1376000000' || finalProvId.startsWith('1376')) {
+      finalProvId = '1380600000'; // Metro Manila in ERPNext
+    }
+
+    final resolvedRegName = resolveRegionName(candReg, dynamicLocations);
+    final resolvedRegId = resolveRegionId(candReg, dynamicLocations);
+    final finalRegName = resolvedRegName.isNotEmpty ? resolvedRegName : candReg;
+    var finalRegId = resolvedRegId.isNotEmpty ? resolvedRegId : candReg;
+    if (finalRegId.isEmpty || finalRegId == '-') {
+      finalRegId = '1300000000';
+    }
+
+    return ResolvedWorkplaceLocation(
+      regionId: finalRegId.isNotEmpty ? finalRegId : '1300000000',
+      regionName: finalRegName.isNotEmpty ? finalRegName : 'National Capital Region (NCR)',
+      provinceId: finalProvId.isNotEmpty ? finalProvId : '1380600000',
+      provinceName: finalProvName.isNotEmpty ? finalProvName : 'Metro Manila',
+      cityId: finalCityId.isNotEmpty ? finalCityId : '1380608000',
+      cityName: finalCityName.isNotEmpty ? finalCityName : 'Manila',
+      workplaceId: finalWpId,
+      workplaceName: finalWpName,
+    );
   }
 
   /// Resolve program / branch name to official ERPNext Branch name

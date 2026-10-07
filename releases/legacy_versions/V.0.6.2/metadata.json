@@ -1,0 +1,13 @@
+{
+  "version": "V.0.6.2",
+  "buildNumber": 34,
+  "releaseDate": "2026-10-06",
+  "title": "Territory Reconfiguration Web App View Mode Invariance & Anti-Revert Hardening",
+  "components": {
+    "web_portal": "V.0.6.2",
+    "mobile_app": "V.0.6.2+34"
+  },
+  "sha256_portal": "22a78b0a0e851ae7092d9ce610d13dd037d04c37d7bee71507a767564f26b380",
+  "sha256_apk": "81967929e26463860a735caa23198fdd72fd1009903db2e3b44f07c906161a50",
+  "apk_size_bytes": 61726507
+}

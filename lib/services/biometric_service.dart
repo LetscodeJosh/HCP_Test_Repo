@@ -1,9 +1,18 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_logger.dart';
 
 class BiometricService {
   static final LocalAuthentication _auth = LocalAuthentication();
+
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage(
+    aOptions: AndroidOptions(),
+    iOptions: IOSOptions(
+      accessibility: KeychainAccessibility.first_unlock_this_device,
+    ),
+  );
 
   static const String _keyUsername = 'bio_saved_username_hcp';
   static const String _keyPassword = 'bio_saved_password_hcp';
@@ -49,41 +58,80 @@ class BiometricService {
         ),
       );
     } on PlatformException catch (e) {
-      print('Biometric auth error: $e');
+      AppLogger.w('BiometricService', 'Biometric auth error: $e');
       return false;
     } catch (e) {
       return false;
     }
   }
 
-  /// Save user credentials and detected position locally for biometric login (locked to this owner)
+  /// Save user credentials and detected position locally in hardware-backed secure storage
   static Future<void> saveCredentials(
     String username,
     String password, {
     String? position,
     String? fullName,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_keyUsername, username.trim());
-    await prefs.setString(_keyPassword, password);
+    // Write credentials to hardware-backed Keystore/Keychain
+    await _secureStorage.write(key: _keyUsername, value: username.trim());
+    await _secureStorage.write(key: _keyPassword, value: password);
     if (position != null && position.isNotEmpty) {
-      await prefs.setString(_keyPosition, position);
+      await _secureStorage.write(key: _keyPosition, value: position);
     }
     if (fullName != null && fullName.isNotEmpty) {
-      await prefs.setString(_keyFullName, fullName);
+      await _secureStorage.write(key: _keyFullName, value: fullName);
     }
-    await prefs.setBool(_keyEnabled, true);
+    await _secureStorage.write(key: _keyEnabled, value: 'true');
+
+    // Scrub any legacy unencrypted SharedPreferences keys
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyUsername);
+      await prefs.remove(_keyPassword);
+      await prefs.remove(_keyPosition);
+      await prefs.remove(_keyFullName);
+      await prefs.remove(_keyEnabled);
+    } catch (_) {}
   }
 
-  /// Get saved credentials if biometric login is enabled
+  /// Get saved credentials from hardware-backed secure storage
   static Future<Map<String, String>?> getSavedCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    final bool isEnabled = prefs.getBool(_keyEnabled) ?? false;
-    final String? username = prefs.getString(_keyUsername);
-    final String? password = prefs.getString(_keyPassword);
-    final String? position = prefs.getString(_keyPosition);
-    final String? fullName = prefs.getString(_keyFullName);
+    // 1. Attempt read from hardware-backed secure storage
+    String? isEnabledStr = await _secureStorage.read(key: _keyEnabled);
+    String? username = await _secureStorage.read(key: _keyUsername);
+    String? password = await _secureStorage.read(key: _keyPassword);
+    String? position = await _secureStorage.read(key: _keyPosition);
+    String? fullName = await _secureStorage.read(key: _keyFullName);
 
+    // 2. Automatic migration from legacy unencrypted SharedPreferences if exists
+    if ((username == null || password == null) && isEnabledStr == null) {
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        final legacyEnabled = prefs.getBool(_keyEnabled) ?? false;
+        final legacyUser = prefs.getString(_keyUsername);
+        final legacyPass = prefs.getString(_keyPassword);
+        final legacyPos = prefs.getString(_keyPosition);
+        final legacyName = prefs.getString(_keyFullName);
+
+        if (legacyEnabled && legacyUser != null && legacyPass != null) {
+          // Migrate to secure storage immediately
+          await saveCredentials(
+            legacyUser,
+            legacyPass,
+            position: legacyPos,
+            fullName: legacyName,
+          );
+          return {
+            'username': legacyUser,
+            'password': legacyPass,
+            if (legacyPos != null) 'position': legacyPos,
+            if (legacyName != null) 'full_name': legacyName,
+          };
+        }
+      } catch (_) {}
+    }
+
+    final bool isEnabled = isEnabledStr == 'true';
     if (isEnabled && username != null && username.isNotEmpty && password != null && password.isNotEmpty) {
       return {
         'username': username,
@@ -118,11 +166,19 @@ class BiometricService {
 
   /// Clear/Unlink saved biometric credentials completely
   static Future<void> clearCredentials() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_keyUsername);
-    await prefs.remove(_keyPassword);
-    await prefs.remove(_keyPosition);
-    await prefs.remove(_keyFullName);
-    await prefs.remove(_keyEnabled);
+    await _secureStorage.delete(key: _keyUsername);
+    await _secureStorage.delete(key: _keyPassword);
+    await _secureStorage.delete(key: _keyPosition);
+    await _secureStorage.delete(key: _keyFullName);
+    await _secureStorage.delete(key: _keyEnabled);
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_keyUsername);
+      await prefs.remove(_keyPassword);
+      await prefs.remove(_keyPosition);
+      await prefs.remove(_keyFullName);
+      await prefs.remove(_keyEnabled);
+    } catch (_) {}
   }
 }

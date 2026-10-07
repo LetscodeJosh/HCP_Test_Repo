@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Institution Rejection, Multi-DocType Reflection & SFE Remapping Guide</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 12mm 12mm 14mm 12mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #64748b;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.45;
+    font-size: 9pt;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+
+  .header-card {
+    background: linear-gradient(135deg, #0b192c 0%, #1e3e62 100%);
+    border-radius: 10px;
+    padding: 16px 20px;
+    color: #ffffff;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 12px rgba(11, 25, 44, 0.15);
+  }
+
+  .header-card h1 {
+    font-size: 16pt;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    color: #ffffff;
+    letter-spacing: -0.3px;
+  }
+
+  .header-card .subtitle {
+    font-size: 9.5pt;
+    color: #38bdf8;
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+
+  .meta-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 8pt;
+  }
+
+  .pill {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 3px 9px;
+    border-radius: 12px;
+    color: #f1f5f9;
+  }
+
+  .pill strong {
+    color: #38bdf8;
+  }
+
+  h2 {
+    font-size: 11.5pt;
+    color: #0f172a;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 4px;
+    margin: 16px 0 10px 0;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  h3 {
+    font-size: 10pt;
+    color: #0369a1;
+    margin: 12px 0 6px 0;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0 0 8px 0;
+    text-align: justify;
+  }
+
+  ul, ol {
+    margin: 0 0 10px 0;
+    padding-left: 20px;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  /* Table styling */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 14px 0;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+
+  th {
+    background: #0f172a;
+    color: #ffffff;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 8.5pt;
+    border: 1px solid #0f172a;
+  }
+
+  td {
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    vertical-align: top;
+  }
+
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8pt;
+    background: #f1f5f9;
+    padding: 1px 4px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
+  }
+
+  /* Badges */
+  .badge-danger {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #f87171;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 7.5pt;
+    display: inline-block;
+  }
+
+  .badge-success {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #4ade80;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 7.5pt;
+    display: inline-block;
+  }
+
+  .badge-primary {
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #38bdf8;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 7.5pt;
+    display: inline-block;
+  }
+
+  .badge-purple {
+    background: #f3e8ff;
+    color: #7e22ce;
+    border: 1px solid #c084fc;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    font-size: 7.5pt;
+    display: inline-block;
+  }
+
+  /* Diagram Flow Box */
+  .diagram-box {
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin: 10px 0 14px 0;
+    page-break-inside: avoid;
+  }
+
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #e2e8f0;
+  }
+
+  .flow-step:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .step-num {
+    background: #0284c7;
+    color: #ffffff;
+    font-weight: 800;
+    font-size: 8pt;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .step-content {
+    flex-grow: 1;
+  }
+
+  .step-title {
+    font-weight: 700;
+    color: #0f172a;
+    font-size: 8.5pt;
+  }
+
+  .step-desc {
+    font-size: 8pt;
+    color: #475569;
+  }
+
+  /* Callout boxes */
+  .callout {
+    border-radius: 6px;
+    padding: 9px 12px;
+    margin: 10px 0;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+
+  .callout-alert {
+    background: #fff1f2;
+    border-left: 4px solid #e11d48;
+    color: #9f1239;
+  }
+
+  .callout-info {
+    background: #f0f9ff;
+    border-left: 4px solid #0284c7;
+    color: #0c4a6e;
+  }
+
+  .callout-success {
+    background: #f0fdf4;
+    border-left: 4px solid #16a34a;
+    color: #14532d;
+  }
+
+  .simulation-box {
+    background: #fdfdfd;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #0284c7;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+  }
+
+  .footer-bar {
+    margin-top: 20px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 7.5pt;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div class="header-card">
+  <h1>Institution Rejection & SFE Remapping Simulation Guide</h1>
+  <div class="subtitle">Multi-DocType Reflection, Lockscreen Delivery & Hard Profiling Block Specifications</div>
+  <div class="meta-pills">
+    <div class="pill"><strong>Standard:</strong> Enterprise SFE Protocol</div>
+    <div class="pill"><strong>Target System:</strong> HCP Profiling Mobile App</div>
+    <div class="pill"><strong>Active Version:</strong> V.0.6.2 (Build 34)</div>
+    <div class="pill"><strong>Backend:</strong> ERPNext v15 Production</div>
+    <div class="pill"><strong>Zero Tech Debt:</strong> Grade A+</div>
+  </div>
+</div>
+
+<h2>📋 1. Executive Summary & Core Rules</h2>
+<p>
+  When a Medical Representative (MedRep) submits an institution proposal or profiles a physician using an unverified facility that Sales Force Effectiveness (SFE) subsequently rejects, the HCP Profiling system enforces a 5-point production guarantee:
+</p>
+<ul>
+  <li><strong>Immediate Multi-DocType Reflection:</strong> The rejection cause note is atomically persisted across <code>HCP</code>, <code>HCP Account</code>, and <code>HCP Profile Submission</code>.</li>
+  <li><strong>Lockscreen Heads-Up Notification:</strong> A high-priority public notification alerts the MedRep on their lockscreen or homescreen&mdash;<strong>even when logged out of the app</strong>.</li>
+  <li><strong>Hard Profiling Block:</strong> The HCP Profiling Wizard actively detects the rejected institution and blocks submission with a red modal/snackbar, preventing corrupted facilities from entering the ERPNext masterlist.</li>
+  <li><strong>SFE Remediation & Remapping Hub:</strong> SFE Specialists can remap the rejected institution to an approved masterlist facility in 1-click, updating all affiliated records and clearing the MedRep's block.</li>
+  <li><strong>Label Standardization:</strong> Uniform terminology across all screens: <strong>Doctor Listing &rarr; HCP</strong> and <strong>Doctor Account &rarr; HCP Account</strong>.</li>
+</ul>
+
+<h2>🏗️ 2. Architectural Sequence Flowchart</h2>
+<div class="diagram-box">
+  <div class="flow-step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <div class="step-title">MedRep Submits Profiling with Proposed Institution</div>
+      <div class="step-desc">MedRep enters doctor data with proposed facility (e.g. <code>ST. JUDE COMMUNITY CLINIC</code>). App creates <code>HCP Profile Submission</code> (workflow_state: 'Pending').</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <div class="step-title">SFE Rejection & Cause Formulation</div>
+      <div class="step-desc">SFE reviews institution proposal &rarr; clicks <strong>Reject</strong> &rarr; enters cause note: <code>"Facility merged with Metropolitan Medical Center; use official hospital ID."</code></div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <div class="step-title">Atomic Multi-DocType Propagation</div>
+      <div class="step-desc">App writes to ERPNext: Updates <code>Medical Institution</code> (Rejected), <code>HCP Profile Submission</code> (status_note), <code>HCP Account</code> (remarks), and universal <code>HCP</code> (notes).</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <div class="step-title">Public Lockscreen Notification Dispatched</div>
+      <div class="step-desc"><code>flutter_local_notifications</code> fires heads-up alert with <code>visibility: NotificationVisibility.public</code> and <code>importance: max</code>. MedRep alerted even when logged out.</div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <div class="step-title">Hard Profiling Block Enforced</div>
+      <div class="step-desc">MedRep opens HCP Wizard with rejected facility &rarr; Block triggered: <code>"Cannot submit: ST. JUDE CLINIC was rejected by SFE and cannot be used for profiling."</code></div>
+    </div>
+  </div>
+  <div class="flow-step">
+    <div class="step-num">6</div>
+    <div class="step-content">
+      <div class="step-title">SFE Remap to Approved Facility</div>
+      <div class="step-desc">SFE clicks <strong>Change / Remap for MedRep</strong> &rarr; chooses <code>METROPOLITAN MEDICAL CENTER</code> &rarr; updates all records &rarr; dispatches resolution alert &rarr; MedRep completes submission!</div>
+    </div>
+  </div>
+</div>
+
+<h2>🗄️ 3. Multi-DocType Reflection Specifications</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%;">DocType</th>
+      <th style="width: 25%;">Target Field</th>
+      <th style="width: 30%;">Format & Content</th>
+      <th style="width: 20%;">Operational Purpose</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong><code>HCP Profile Submission</code></strong></td>
+      <td><code>status_note</code><br><code>workplaces[].workflow_state</code></td>
+      <td><code>[REJECTED INSTITUTION: &lt;cause&gt;]</code><br><code>workflow_state = "Rejected"</code></td>
+      <td><span class="badge-danger">Hard Block</span> Prevents submission processing; surfaces in MedRep submission list.</td>
+    </tr>
+    <tr>
+      <td><strong><code>HCP Account</code></strong></td>
+      <td><code>remarks</code></td>
+      <td><code>[REJECTED INSTITUTION: &lt;cause&gt;]</code></td>
+      <td><span class="badge-purple">Program Scope</span> Flags program-specific doctor account for SFE & DSM review.</td>
+    </tr>
+    <tr>
+      <td><strong><code>HCP</code></strong></td>
+      <td><code>notes</code><br><code>workplaces[].status</code></td>
+      <td><code>[REJECTED INSTITUTION: &lt;cause&gt;]</code><br><code>status = "Rejected"</code></td>
+      <td><span class="badge-primary">Universal Audit</span> Universal doctor directory trail preserving historical rejection reason.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>🔔 4. Lockscreen & Logged-Out Notification Engine</h2>
+<p>
+  To guarantee Medical Representatives never miss an institution rejection while in the field, notifications leverage native platform channels:
+</p>
+<ul>
+  <li><strong>Public Lockscreen Visibility:</strong> Configured with <code>NotificationVisibility.public</code> and <code>Importance.max</code> so heads-up cards display immediately on Android/iOS lockscreens without requiring device unlock.</li>
+  <li><strong>Logged-Out Detection:</strong> Active MedRep email is stored in <code>SharedPreferences</code> under <code>last_active_medrep_user</code>. During background sync or app startup before login, <code>NotificationService.checkAndNotifyPendingRejections()</code> delivers the alert.</li>
+</ul>
+
+<div class="callout callout-alert">
+  <strong>🚨 Sample Lockscreen Notification Payload:</strong><br>
+  <strong>Title:</strong> 🚨 Institution Proposal Rejected<br>
+  <strong>Body:</strong> Proposed workplace 'ST. JUDE COMMUNITY CLINIC' was rejected by SFE.<br>
+  <strong>Reason:</strong> Facility merged with Metropolitan Medical Center; use official hospital ID.
+</div>
+
+<h2>🧪 5. Step-by-Step Simulation Procedures</h2>
+
+<div class="simulation-box">
+  <h3>Option A: 1-Tap Field Simulation (Instant Dashboard Test)</h3>
+  <ol>
+    <li>Log in as SFE Specialist or Administrator (<code>admin</code>).</li>
+    <li>Open <strong>App Drawer</strong> &rarr; Select <strong>Institution Submission</strong> (or tap Dashboard card).</li>
+    <li>In top AppBar, tap the <strong>Simulate Notification</strong> bell icon (<code>notifications_active</code>).</li>
+    <li><strong>Lock your phone</strong> or press <strong>Home</strong> to exit the app.</li>
+    <li><strong>Result:</strong> Within 2 seconds, the high-priority lockscreen notification appears with full rejection cause details. Tap notification to navigate directly into the app.</li>
+  </ol>
+</div>
+
+<div class="simulation-box">
+  <h3>Option B: Complete Multi-User Lifecycle Simulation</h3>
+  <ol>
+    <li><strong>Step 1 (MedRep Proposes):</strong> Log in as MedRep (<code>rodriguez.j</code>) &rarr; Tap <strong>+ Add New Doctor</strong> &rarr; Add custom proposed workplace <code>ST. JUDE COMMUNITY CLINIC</code> &rarr; Submit.</li>
+    <li><strong>Step 2 (SFE Rejection):</strong> Log out &rarr; Log in as SFE (<code>admin</code>) &rarr; <strong>Institution Submission</strong> &rarr; Locate proposal &rarr; Tap <strong>Reject</strong> &rarr; Enter cause note &rarr; Confirm.</li>
+    <li><strong>Step 3 (Logged-Out Alert):</strong> Log out of HCP App &rarr; Lock device screen &rarr; Heads-up notification fires on lockscreen.</li>
+    <li><strong>Step 4 (Hard Block Verification):</strong> Log in as MedRep &rarr; Attempt to submit doctor profile with <code>ST. JUDE COMMUNITY CLINIC</code> &rarr; App displays red SnackBar blocking submission.</li>
+    <li><strong>Step 5 (SFE Remap & Resolution):</strong> SFE navigates to <strong>Institution Submission</strong> &rarr; Filter by <strong>Rejected</strong> &rarr; Tap <strong>Change / Remap for MedRep</strong> &rarr; Select <code>METROPOLITAN MEDICAL CENTER</code> &rarr; Apply Remap &rarr; MedRep receives resolution alert and profiling succeeds!</li>
+  </ol>
+</div>
+
+<div class="callout callout-success">
+  <strong>✅ Automated Python Verification:</strong> Run <code>python scratch/simulate_institution_rejection_workflow.py</code> to test all 8 stages with 100% programmatic backend validation.
+</div>
+
+<div class="footer-bar">
+  <div>HCP Profiling App &bull; Institution Rejection & Remapping Architecture Guide &bull; Version: V.0.6.2 (Build 34)</div>
+  <div>Confidential &bull; Professional Information Marketing Services, Inc.</div>
+</div>
+
+</body>
+</html>

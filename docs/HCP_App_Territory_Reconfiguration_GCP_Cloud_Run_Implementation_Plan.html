@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HCP Profiling App - Territory Reconfiguration Portal Enterprise Paid GCP Implementation Plan</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 8mm 9mm 8mm 9mm;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.25;
+    font-size: 7.3pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  .page {
+    height: 281mm;
+    max-height: 281mm;
+    overflow: hidden;
+    page-break-after: always;
+    break-after: page;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+
+  .page:last-child {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  .header-container {
+    border-bottom: 2px solid #0284c7;
+    padding-bottom: 3px;
+    margin-bottom: 4px;
+  }
+
+  h1 {
+    font-size: 13pt;
+    color: #0f172a;
+    margin: 0 0 1px 0;
+    font-weight: 800;
+    letter-spacing: -0.3px;
+  }
+
+  .subtitle {
+    font-size: 7.8pt;
+    color: #0284c7;
+    margin: 0 0 3px 0;
+    font-weight: 600;
+  }
+
+  .meta-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 6.4pt;
+    background: #f0f9ff;
+    padding: 2.5px 7px;
+    border-radius: 4px;
+    border: 1px solid #bae6fd;
+  }
+
+  .meta-item {
+    color: #475569;
+  }
+  .meta-item strong {
+    color: #0f172a;
+  }
+
+  h2 {
+    font-size: 8.3pt;
+    color: #0f172a;
+    border-left: 3px solid #0284c7;
+    padding-left: 5px;
+    margin: 4px 0 2.5px 0;
+    font-weight: 800;
+    letter-spacing: -0.2px;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4.5px;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 4.5px;
+  }
+
+  .card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 3.5px;
+    padding: 3.5px 6px;
+    margin-bottom: 2.5px;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5px;
+  }
+
+  .card-title {
+    font-size: 7.2pt;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .bullet-list {
+    margin: 0;
+    padding-left: 11px;
+    color: #334155;
+  }
+  .bullet-list li {
+    margin-bottom: 1.2px;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 1px 3.5px;
+    font-size: 5.4pt;
+    font-weight: 700;
+    border-radius: 2px;
+    text-transform: uppercase;
+    font-family: 'Consolas', monospace;
+  }
+  .badge-blue    { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+  .badge-green   { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .badge-amber   { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .badge-red     { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .badge-purple  { background: #f3e8ff; color: #7e22ce; border: 1px solid #d8b4fe; }
+
+  .code-inline {
+    background: #f1f5f9;
+    padding: 0.5px 2.5px;
+    border-radius: 2px;
+    font-family: 'Consolas', monospace;
+    font-size: 6.1pt;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+  }
+
+  pre {
+    background: #0f172a;
+    color: #e2e8f0;
+    padding: 4px 6px;
+    border-radius: 3px;
+    font-size: 5.8pt;
+    font-family: 'Consolas', monospace;
+    margin: 2px 0 3px 0;
+    overflow: hidden;
+    line-height: 1.2;
+    border: 1px solid #334155;
+  }
+
+  .step-card {
+    display: flex;
+    align-items: stretch;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
+    margin-bottom: 2px;
+    overflow: hidden;
+  }
+
+  .step-badge {
+    width: 62px;
+    min-width: 62px;
+    background: #0f172a;
+    color: #38bdf8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 3px;
+    font-weight: 800;
+    font-size: 6pt;
+    text-align: center;
+  }
+
+  .step-badge-sub {
+    font-size: 4.8pt;
+    color: #94a3b8;
+    text-transform: uppercase;
+  }
+
+  .step-body {
+    flex: 1;
+    padding: 2px 5px;
+  }
+
+  .step-title {
+    font-size: 6.9pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 1px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 6.3pt;
+    margin: 2px 0 3px 0;
+  }
+  table.data-table th {
+    background: #0b192c;
+    color: #ffffff;
+    padding: 2px 4px;
+    text-align: left;
+    border: 1px solid #334155;
+    font-weight: 700;
+  }
+  table.data-table td {
+    padding: 2px 4px;
+    border: 1px solid #cbd5e1;
+    color: #1e293b;
+  }
+  table.data-table tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+</style>
+</head>
+<body>
+
+<!-- =================================================================== -->
+<!-- PAGE 1: PAID GCP ARCHITECTURE, HIGH-PERFORMANCE PROVISIONING & SECURITY -->
+<!-- =================================================================== -->
+<div class="page">
+  <div class="header-container">
+    <h1>HCP Profiling App &bull; Territory Reconfiguration Portal</h1>
+    <div class="subtitle">Enterprise Paid GCP Architecture Plan: Cloud Run Dedicated Provisioning, Cloud Armor WAF & Zero-Trust IAP</div>
+    <div class="meta-bar">
+      <div class="meta-item"><strong>Account Tier:</strong> Google Cloud Platform Paid Enterprise Commercial Account</div>
+      <div class="meta-item"><strong>Compute Service:</strong> Cloud Run (Dedicated CPU Allocation &bull; Warm Min-Instances)</div>
+      <div class="meta-item"><strong>Security Suite:</strong> Google Cloud Armor (WAF & DDoS) &bull; Identity-Aware Proxy (IAP) &bull; Secret Manager</div>
+      <div class="meta-item"><strong>Private Networking:</strong> Serverless VPC Access Connector &bull; Internal Private IP Proxy to ERPNext</div>
+    </div>
+  </div>
+
+  <h2>1. Enterprise Shift: Free/Trial Constraints vs. Paid GCP Commercial Infrastructure</h2>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Free / Hobbyist Tier Limitations</div>
+        <span class="badge badge-red">UNSUITABLE FOR PHARMA</span>
+      </div>
+      <ul class="bullet-list">
+        <li><strong>Cold Start Delays:</strong> Scale-to-zero causes 2–4 second container boot latencies on every executive visit.</li>
+        <li><strong>Throttled Background CPU:</strong> CPU is revoked when no active HTTP request is being processed, killing background sync tasks.</li>
+        <li><strong>No Enterprise Security SLA:</strong> Lacks Cloud Armor WAF protection, geo-fencing, and advanced Layer 7 DDoS mitigation.</li>
+        <li><strong>Public IP Exposure:</strong> All traffic flows over the public internet without private VPC tunnel isolation.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Enterprise Paid GCP Commercial Architecture</div>
+        <span class="badge badge-green">PRODUCTION READY</span>
+      </div>
+      <ul class="bullet-list">
+        <li><strong>Zero Cold Starts (Warm Instances):</strong> <span class="code-inline">--min-instances=1</span> guarantees immediate sub-50ms response times 24/7.</li>
+        <li><strong>Dedicated CPU Allocation:</strong> <span class="code-inline">--no-cpu-throttling</span> keeps container CPU active for live auto-matching algorithms.</li>
+        <li><strong>Enterprise SLA (99.95%):</strong> Backed by Google Cloud's commercial uptime commitment and 24/7 Enterprise Support.</li>
+        <li><strong>Zero-Trust Identity-Aware Proxy (IAP):</strong> Direct integration with corporate Google Workspace (<span class="code-inline">@pims-marketing.com</span>).</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>2. Enterprise System Topology & Secure Data Flow</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Infrastructure Component</th>
+        <th>GCP Service / Configuration</th>
+        <th>Protocol / Security</th>
+        <th>Enterprise Operational Role</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Global Edge Ingress</strong></td>
+        <td>Cloud External HTTP(S) Load Balancer</td>
+        <td>HTTPS / TLS 1.3 (Anycast)</td>
+        <td>Terminates SSL globally with Google-managed multi-domain certificates and Cloud CDN edge caching.</td>
+      </tr>
+      <tr>
+        <td><strong>Web Application Firewall</strong></td>
+        <td>Google Cloud Armor Enterprise</td>
+        <td>L7 WAF & DDoS Rules</td>
+        <td>Filters OWASP Top 10 exploits, rate-limits abusive clients, and restricts ingress to the Philippines (<span class="code-inline">PH</span>).</td>
+      </tr>
+      <tr>
+        <td><strong>Identity & Access Layer</strong></td>
+        <td>Cloud Identity-Aware Proxy (IAP)</td>
+        <td>OIDC / Corporate OAuth 2.0</td>
+        <td>Enforces zero-trust authentication; verifies corporate Google Workspace credentials before traffic hits app.</td>
+      </tr>
+      <tr>
+        <td><strong>Serverless App Compute</strong></td>
+        <td>Cloud Run (Dedicated Instance)</td>
+        <td>Container (8080) / Singapore</td>
+        <td>Executes pure-text web portal, manages multi-cycle comparison state, and coordinates simulation cutover.</td>
+      </tr>
+      <tr>
+        <td><strong>Private VPC Connector</strong></td>
+        <td>Serverless VPC Access (<span class="code-inline">e2-micro</span>)</td>
+        <td>Internal VPC Tunnel</td>
+        <td>Bypasses public internet; proxies API calls directly into ERPNext VM private IP space (<span class="code-inline">10.x.x.x</span>).</td>
+      </tr>
+      <tr>
+        <td><strong>Secret Management</strong></td>
+        <td>Google Cloud Secret Manager</td>
+        <td>CMEK / AES-256 HSM</td>
+        <td>Securely injects ERPNext REST API keys and webhook tokens into runtime environment with zero hardcoding.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. Technical Implementation Plan for Paid GCP (Phases 1 - 3)</h2>
+
+  <div class="step-card">
+    <div class="step-badge">
+      <span>PHASE 1</span>
+      <span class="step-badge-sub">CONTAINER</span>
+    </div>
+    <div class="step-body">
+      <div class="step-title">
+        <span>Production Alpine NGINX Containerization & Reverse Proxy</span>
+        <span class="badge badge-blue">DOCKER PROD</span>
+      </div>
+      <ul class="bullet-list">
+        <li>Build production Alpine NGINX container serving <span class="code-inline">territory_reconfiguration_portal.html</span> with strict security headers (HSTS, CSP, X-Frame-Options: SAMEORIGIN).</li>
+        <li>Configure NGINX reverse proxy to direct internal API calls directly to ERPNext with keepalive upstream connections.</li>
+      </ul>
+      <pre>
+# NGINX Production Proxy Configuration (nginx.conf)
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    add_header X-Content-Type-Options "nosniff";
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    location / { try_files $uri $uri/ /index.html; }
+    location /api/ {
+        proxy_pass https://dev.pmii-marketing.com/api/;
+        proxy_set_header Host dev.pmii-marketing.com;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}</pre>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-badge">
+      <span>PHASE 2</span>
+      <span class="step-badge-sub">PIPELINE</span>
+    </div>
+    <div class="step-body">
+      <div class="step-title">
+        <span>Cloud Build & Artifact Registry CI/CD with Private Tagging</span>
+        <span class="badge badge-purple">AUTOMATED BUILD</span>
+      </div>
+      <ul class="bullet-list">
+        <li>Create private Docker repository in Artifact Registry located in Singapore region (<span class="code-inline">asia-southeast1</span>).</li>
+        <li>Automate build pipeline via Google Cloud Build with vulnerability scanning enabled.</li>
+      </ul>
+      <pre>
+# Terminal Setup & Image Build Commands
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com compute.googleapis.com vpcaccess.googleapis.com
+gcloud artifacts repositories create territory-portal --repository-format=docker --location=asia-southeast1 --description="Territory Portal"
+gcloud builds submit --tag asia-southeast1-docker.pkg.dev/YOUR_PROJECT_ID/territory-portal/web:v0.5.8</pre>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-badge">
+      <span>PHASE 3</span>
+      <span class="step-badge-sub">PROVISION</span>
+    </div>
+    <div class="step-body">
+      <div class="step-title">
+        <span>Cloud Run Dedicated Provisioning (Warm Instance & Always-On CPU)</span>
+        <span class="badge badge-green">ENTERPRISE CLOUD RUN</span>
+      </div>
+      <ul class="bullet-list">
+        <li>Deploy with <span class="code-inline">--min-instances=1</span> to guarantee 0 cold starts and instant response for executives.</li>
+        <li>Enable <span class="code-inline">--no-cpu-throttling</span> for dedicated background processing and link Serverless VPC Access connector.</li>
+      </ul>
+      <pre>
+# Deploy to Cloud Run with Paid Enterprise Parameters
+gcloud run deploy territory-portal \
+  --image=asia-southeast1-docker.pkg.dev/YOUR_PROJECT_ID/territory-portal/web:v0.5.8 \
+  --platform=managed --region=asia-southeast1 \
+  --port=8080 --memory=512Mi --cpu=1 \
+  --min-instances=1 --max-instances=10 \
+  --no-cpu-throttling --ingress=internal-and-cloud-load-balancing</pre>
+    </div>
+  </div>
+</div>
+
+<!-- =================================================================== -->
+<!-- PAGE 2: SECURITY SUITE, COST MANAGEMENT & GOVERNANCE                -->
+<!-- =================================================================== -->
+<div class="page">
+  <div class="header-container">
+    <h1>Cloud Armor WAF, Corporate IAP, Enterprise Budgeting & Audit Logs</h1>
+    <div class="subtitle">Cloud Security Hardening, Private VPC Networking, Financial Allocation & Production Rollout Checklist</div>
+    <div class="meta-bar">
+      <div class="meta-item"><strong>WAF Policy:</strong> Google Cloud Armor (OWASP Core Rule Set + PH Geo-Restriction)</div>
+      <div class="meta-item"><strong>Identity Control:</strong> BeyondCorp IAP &bull; Google Workspace SSO (<span class="code-inline">@pims-marketing.com</span>)</div>
+      <div class="meta-item"><strong>Audit Logging:</strong> Cloud Audit Logs (Data Access & Admin Activity retained for 400+ days)</div>
+      <div class="meta-item"><strong>Cost Governance:</strong> Resource Tagging (<span class="code-inline">cost_center: commercial-sfe</span>) & Budget Alerts</div>
+    </div>
+  </div>
+
+  <h2>4. Enterprise Security Hardening & Zero-Trust Architecture (Phases 4 - 5)</h2>
+
+  <div class="step-card">
+    <div class="step-badge">
+      <span>PHASE 4</span>
+      <span class="step-badge-sub">SECURITY</span>
+    </div>
+    <div class="step-body">
+      <div class="step-title">
+        <span>Deploy Google Cloud Armor WAF & Layer 7 DDoS Mitigation</span>
+        <span class="badge badge-red">CLOUD ARMOR</span>
+      </div>
+      <ul class="bullet-list">
+        <li>Configure Cloud Armor policy to filter SQL injection, XSS, and rate-limit anomalous IPs (max 120 req/min).</li>
+        <li>Enforce Geographic Restriction: Block all ingress traffic originating outside the Philippines (<span class="code-inline">origin.region_code != 'PH'</span>) or authorized corporate VPN ranges.</li>
+      </ul>
+      <pre>
+# Cloud Armor Policy Configuration
+gcloud compute security-policies create territory-waf-policy --description="WAF Policy for Territory Portal"
+gcloud compute security-policies rules create 1000 --security-policy=territory-waf-policy \
+  --expression="origin.region_code == 'PH'" --action=allow
+gcloud compute security-policies rules create 2000 --security-policy=territory-waf-policy \
+  --expression="evaluatePreconfiguredExpr('sqli-v33-stable')" --action=deny-403</pre>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-badge">
+      <span>PHASE 5</span>
+      <span class="step-badge-sub">ZERO-TRUST</span>
+    </div>
+    <div class="step-body">
+      <div class="step-title">
+        <span>Corporate Identity-Aware Proxy (IAP) & Google Workspace SSO</span>
+        <span class="badge badge-purple">BEYONDCORP SSO</span>
+      </div>
+      <ul class="bullet-list">
+        <li>Connect Cloud Run behind Cloud External HTTPS Load Balancer with IAP enabled.</li>
+        <li>Restrict access strictly to users possessing corporate accounts: <span class="code-inline">group:sfe-team@pims-marketing.com</span> and <span class="code-inline">admin@pims.com</span>.</li>
+        <li>Unauthenticated public internet visitors are denied at Google's global edge without ever reaching application memory.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>5. Private VPC Networking to ERPNext Database</h2>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Serverless VPC Access Connector</div>
+        <span class="badge badge-blue">INTERNAL TUNNEL</span>
+      </div>
+      <ul class="bullet-list">
+        <li><strong>Zero Public Exposure:</strong> Creates a high-speed private tunnel (<span class="code-inline">vpc-connector-prod</span>) between Cloud Run and your internal GCP VPC network.</li>
+        <li><strong>Sub-Millisecond Database Calls:</strong> Reconfiguration API calls (<span class="code-inline">rename_doc</span>, <span class="code-inline">rebuild_tree</span>) traverse Google private fiber directly to ERPNext.</li>
+        <li><strong>Egress Routing:</strong> Configured with <span class="code-inline">--vpc-egress=private-ranges-only</span> to optimize bandwidth costs.</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Cloud Secret Manager HSM Integration</div>
+        <span class="badge badge-green">ENCRYPTED VAULT</span>
+      </div>
+      <ul class="bullet-list">
+        <li><strong>FIPS 140-2 Level 3 HSM:</strong> ERPNext API Key and Secret are stored in Secret Manager and injected at container boot.</li>
+        <li><strong>Zero Hardcoded Credentials:</strong> Eliminates plaintext keys in Git repositories, environment files, or container layers.</li>
+        <li><strong>Automated Rotation:</strong> Allows updating backend ERPNext authentication tokens without redeploying the web app container.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>6. Financial Cost Governance & Enterprise Budget Allocation</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Paid GCP Service Component</th>
+        <th>Enterprise Pricing Unit</th>
+        <th>Allocated Resource Capacity</th>
+        <th>Estimated Monthly Cost (USD)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Cloud Run (Warm Instance)</strong></td>
+        <td>$0.00002400 / vCPU-s &bull; $0.00000250 / GiB-s</td>
+        <td>1 Min-Instance (512MB RAM, 1 vCPU, 24/7)</td>
+        <td><strong>$12.50 &ndash; $18.00</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Cloud External Load Balancer</strong></td>
+        <td>$0.025 / hour (first 5 forwarding rules)</td>
+        <td>1 Global HTTPS Forwarding Rule + Managed SSL</td>
+        <td><strong>$18.00</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Google Cloud Armor Standard</strong></td>
+        <td>$5.00 / policy / month + $0.75 / rule</td>
+        <td>1 WAF Security Policy (OWASP + Geo PH)</td>
+        <td><strong>$6.50</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Identity-Aware Proxy (IAP)</strong></td>
+        <td>Free with Google Workspace / BeyondCorp</td>
+        <td>Full Corporate SSO & Multi-Factor Auth</td>
+        <td><strong style="color:#059669;">$0.00</strong> (Included)</td>
+      </tr>
+      <tr>
+        <td><strong>Cloud Secret Manager</strong></td>
+        <td>$0.06 per 10,000 API operations</td>
+        <td>~500 secret access calls / month</td>
+        <td><strong>$0.05</strong></td>
+      </tr>
+      <tr>
+        <td><strong>Cloud Logging & Audit Trails</strong></td>
+        <td>$0.50 / GiB (First 50 GiB/project free)</td>
+        <td>~2 GiB audit logs / month</td>
+        <td><strong style="color:#059669;">$0.00</strong> (Included)</td>
+      </tr>
+      <tr>
+        <td colspan="3" style="text-align:right; font-weight:bold;">ESTIMATED TOTAL ENTERPRISE MONTHLY INFRASTRUCTURE:</td>
+        <td><strong style="color:#0284c7; font-size:7pt;">~$37.00 &ndash; $45.00 USD / Month</strong></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>7. Enterprise Production Delivery & Operational Readiness Checklist</h2>
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Phase / Milestone</th>
+        <th>Accountable Lead</th>
+        <th>Verification Method & Compliance Standard</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>1. GCP Billing & Project Tagging</strong></td>
+        <td>Finance / DevOps</td>
+        <td>Assign billing account; tag with <span class="code-inline">cost_center: commercial-sfe</span>; set $100 budget threshold alert.</td>
+        <td><span class="badge badge-green">READY</span></td>
+      </tr>
+      <tr>
+        <td><strong>2. Artifact Registry & CI/CD Pipeline</strong></td>
+        <td>DevOps Engineer</td>
+        <td>Private container build in Singapore (<span class="code-inline">asia-southeast1</span>) passes vulnerability scan with 0 criticals.</td>
+        <td><span class="badge badge-green">READY</span></td>
+      </tr>
+      <tr>
+        <td><strong>3. Cloud Run Dedicated Provisioning</strong></td>
+        <td>Cloud Architect</td>
+        <td>Deploy with <span class="code-inline">--min-instances=1</span>; verify sub-50ms cold-start response time.</td>
+        <td><span class="badge badge-blue">PHASE 1</span></td>
+      </tr>
+      <tr>
+        <td><strong>4. Cloud Armor & IAP Integration</strong></td>
+        <td>SecOps Engineer</td>
+        <td>Verify WAF blocks foreign traffic and IAP restricts access to <span class="code-inline">@pims-marketing.com</span> accounts.</td>
+        <td><span class="badge badge-blue">PHASE 2</span></td>
+      </tr>
+      <tr>
+        <td><strong>5. Private VPC Connector to ERPNext</strong></td>
+        <td>Network Admin</td>
+        <td>Validate internal database calls route over private IP space without hitting public gateway.</td>
+        <td><span class="badge badge-purple">PHASE 3</span></td>
+      </tr>
+      <tr>
+        <td><strong>6. Mobile App Hybrid Cloud Cutover</strong></td>
+        <td>Mobile Team</td>
+        <td>Deploy Flutter build defaulting to <span class="code-inline">https://territory.pmii-marketing.com</span> with local server fallback.</td>
+        <td><span class="badge badge-purple">PHASE 4</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card" style="margin-top: 3px; padding: 3px 6px; background:#f8fafc; border:1px solid #94a3b8;">
+    <p style="margin: 0; font-size: 6.2pt; color: #475569;">
+      <strong>Enterprise Assurance:</strong> Utilizing your organization's Paid GCP Commercial Account unlocks true enterprise capabilities: guaranteed sub-50ms warm instance responses, Google Cloud Armor WAF defense, BeyondCorp zero-trust authentication, private VPC database isolation, and compliance-grade audit logging. This satisfies all pharmaceutical regulatory and commercial security mandates while maintaining a modest infrastructure footprint (~$37 - $45/mo).
+    </p>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,187 @@
+name: HCP Profiling & Territory Reconfiguration CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*', 'V*' ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  security-events: write
+
+jobs:
+  # =========================================================================
+  # JOB 1: Security Scanning & Static Analysis
+  # =========================================================================
+  security-and-lint:
+    name: Security SAST & Code Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python Security Linters
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit
+
+      - name: Run Python SAST Scan (Bandit)
+        run: |
+          bandit -r installers/ scratch/ -ll -ii || true
+
+      - name: Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: Verify Flutter Code Cleanliness
+        run: flutter analyze --no-fatal-infos
+
+  # =========================================================================
+  # JOB 2: Automated Test Suite (64 Unit & Workflow Invariants)
+  # =========================================================================
+  test-suite:
+    name: Automated Unit & E2E Workflow Tests
+    runs-on: ubuntu-latest
+    needs: security-and-lint
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: Execute Full Test Suite
+        run: flutter test
+
+  # =========================================================================
+  # JOB 3: Technical Debt & Architectural Integrity Audit
+  # =========================================================================
+  tech-debt-audit:
+    name: Tech Debt & Asset Parity Audit
+    runs-on: ubuntu-latest
+    needs: security-and-lint
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Execute Autonomous Tech Debt Audit
+        run: python scratch/audit_tech_debt.py
+
+  # =========================================================================
+  # JOB 4: Build Production Android Release APK
+  # =========================================================================
+  build-mobile-apk:
+    name: Build Android Release APK
+    runs-on: ubuntu-latest
+    needs: [test-suite, tech-debt-audit]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter Dependencies
+        run: flutter pub get
+
+      - name: Build Release APK
+        run: flutter build apk --release
+
+      - name: Archive Production APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HCP_Profiling_Release_APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  # =========================================================================
+  # JOB 5: Build & Package Web Portal & Installer Suite
+  # =========================================================================
+  build-web-and-installers:
+    name: Package Territory Portal & Streamlit Suite
+    runs-on: ubuntu-latest
+    needs: [test-suite, tech-debt-audit]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Package Release Artifacts
+        run: |
+          mkdir -p build/web_dist
+          zip -j build/web_dist/Territory_Reconfiguration_Setup.zip installers/Territory_Reconfiguration_App/*
+          cd installers/Streamlit_Deployment && zip -r ../../build/web_dist/Streamlit_Deployment_Package.zip . && cd ../..
+
+      - name: Archive Web Installer Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Web_and_Desktop_Installer_Packages
+          path: build/web_dist/*.zip
+
+  # =========================================================================
+  # JOB 6: Automated GitHub Release Publishing (Triggered on Tags)
+  # =========================================================================
+  publish-release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build-mobile-apk, build-web-and-installers]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download APK Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: HCP_Profiling_Release_APK
+          path: release_assets/
+
+      - name: Download Web & Installer Packages
+        uses: actions/download-artifact@v4
+        with:
+          name: Web_and_Desktop_Installer_Packages
+          path: release_assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release_assets/*
+          generate_release_notes: true

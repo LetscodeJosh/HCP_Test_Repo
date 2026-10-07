@@ -307,42 +307,60 @@ class _LoginScreenState extends State<LoginScreen> {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // Apple Squircle Logo Container
+                              // Apple Squircle Logo Container with Official App Logo
                               Center(
                                 child: Container(
-                                  width: 78,
-                                  height: 78,
+                                  width: 80,
+                                  height: 80,
                                   decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [Color(0xFF0A84FF), Color(0xFF0056B3)],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
+                                    color: Colors.white,
                                     borderRadius: BorderRadius.circular(22),
                                     border: Border.all(
-                                      color: Colors.white.withOpacity(0.40),
-                                      width: 1.2,
+                                      color: Colors.white.withOpacity(0.80),
+                                      width: 1.5,
                                     ),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: const Color(0xFF007AFF).withOpacity(0.40),
+                                        color: const Color(0xFF007AFF).withOpacity(0.35),
                                         blurRadius: 20,
                                         spreadRadius: 1,
                                         offset: const Offset(0, 8),
                                       ),
                                     ],
                                   ),
-                                  child: const Icon(
-                                    Icons.donut_large_rounded,
-                                    color: Colors.white,
-                                    size: 40,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(21),
+                                    child: Image.asset(
+                                      'assets/app_logo.png',
+                                      width: 80,
+                                      height: 80,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) {
+                                        return Image.asset(
+                                          'assets/icon-512.png',
+                                          width: 80,
+                                          height: 80,
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (context, error, stackTrace) => Container(
+                                            width: 80,
+                                            height: 80,
+                                            color: const Color(0xFF0066FF),
+                                            child: const Icon(
+                                              Icons.local_hospital_rounded,
+                                              color: Colors.white,
+                                              size: 40,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
                                   ),
                                 ),
                               ),
                               const SizedBox(height: 20),
                               // App Title
                               Text(
-                                AppConfig.mode == AppMode.corenergy ? 'PIMS MCP' : 'HCP Profiling',
+                                AppConfig.mode == AppMode.corenergy ? 'PIMS MCP' : 'HCP Profiling App',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Color(0xFF00458E),
@@ -353,7 +371,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Healthcare Professional Management',
+                                'Your Health Profile Buddy',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: const Color(0xFF1D1D1F).withOpacity(0.55),

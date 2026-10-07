@@ -1,0 +1,29 @@
+{
+  "version": "V.0.5.4",
+  "build_number": 30,
+  "release_date": "October 2, 2026",
+  "portal_sha256": "04d33646670abf0dc720987bb1f335064f23581b809fc6caa7cf9b45a19840fb",
+  "apk_sha256": "c06579c96753d8b7c2ae4741430c9ba67424324d0a8df942fc02d3c2e2e5eb60",
+  "apk_size_bytes": 60486114,
+  "apk_size_mb": 57.68,
+  "security_patches": [
+    "Hardware-Backed Keystore/Keychain Credential Storage: BiometricService uses FlutterSecureStorage (AES-GCM backed by Android KeyStore / iOS Keychain); scrubs legacy plaintext keys on startup",
+    "Offline Authentication Gating: ApiService.login() strictly gates offline authentication against verified biometric enrolled device owner, preventing unauthorized offline / airplane-mode access",
+    "Embedded Web Server Token Authorization: TerritoryWebServer mandates cryptographically secure ephemeral session tokens for LAN requests on all /api/ endpoints; loopback 127.0.0.1 permitted; nosniff and SAMEORIGIN headers enforced",
+    "Android Network Security Configuration: res/xml/network_security_config.xml enforces HTTPS across all remote networks; android:usesCleartextTraffic='false' and android:allowBackup='false'",
+    "Production Release Keystore Signing: android/app/build.gradle dynamically loads release keystores from environment secrets, eliminating hardcoded debug credentials in production builds",
+    "Strict SSL/TLS Certificate Validation: Python ERPNext web proxies enforce valid trusted CA certificates without insecure SSL bypass",
+    "Streamlit CORS Protection & Memory Scrubbing: enableCORS = true enabled; passwords scrubbed immediately from memory post-authentication",
+    "Automated CI/CD Pipeline: GitHub Actions workflow (.github/workflows/ci_cd.yml) with Bandit SAST, flutter analyze, 64 unit/workflow tests, tech debt audits"
+  ],
+  "features": [
+    "Fully Responsive Viewport Layout: Nested flexbox architecture (flex: 1 1 0; min-height: 0) and internal scroll container preventing clipped content on laptop screens",
+    "Sticky Centered Table Pagination: Docked .table-pagination-center (position: sticky; bottom: 12px; z-index: 30) accessible at 100%, 125%, 150%, and 80% zoom levels without zooming out",
+    "Automatic Session Notification Auto-Removal: Logged-in user notification (#activeUserSessionToast) displays upon authentication and completely dismisses after 4.5 seconds with zero lingering UI cards or pills",
+    "Zoom In/Out Anti-Popup Gating: State guard loginNotificationShown prevents repetitive notifications during browser zoom changes or streamlit:render events",
+    "High-Performance Fast Backend Authentication: ThreadedTCPServer with 6-second timeout watchdogs and fast-path administrator authentication",
+    "Dynamic Streamlit Viewport Frame Sizing: sendStreamlitFrameHeight dynamically synchronizes iframe height to actual window.innerHeight",
+    "Full ERPNext 1:1 Territory Tree: Interactive tree view with Add Child (folders only), Edit, Rename, Delete, and MedRep reassignment",
+    "Universal Asset Parity: Verified 100% byte-for-byte SHA256 parity across all 6 deployment copies"
+  ]
+}

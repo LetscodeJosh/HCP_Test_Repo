@@ -424,7 +424,7 @@ class _DetailScreenState extends State<DetailScreen> {
                             child: Image.network(
                               widget.engagement!.picture!.startsWith('http')
                                   ? widget.engagement!.picture!
-                                  : 'https://dev.pmii-marketing.com${widget.engagement!.picture}',
+                                  : '${Provider.of<ApiService>(context, listen: false).baseUrl}${widget.engagement!.picture}',
                               fit: BoxFit.cover,
                               width: double.infinity,
                             ),
@@ -796,7 +796,6 @@ class SearchableInstitutionPicker extends StatefulWidget {
 
 class _SearchableInstitutionPickerState extends State<SearchableInstitutionPicker> {
   List<Institution> _filteredList = [];
-  String _searchQuery = '';
 
   @override
   void initState() {
@@ -806,12 +805,7 @@ class _SearchableInstitutionPickerState extends State<SearchableInstitutionPicke
 
   void _filter(String query) {
     setState(() {
-      _searchQuery = query;
-      _filteredList = widget.institutions.where((inst) {
-        final matchesName = inst.institutionName.toLowerCase().contains(query.toLowerCase());
-        final matchesId = inst.name.toLowerCase().contains(query.toLowerCase());
-        return matchesName || matchesId;
-      }).toList();
+      _filteredList = LocationResolver.fuzzySearchInstitutions(query, widget.institutions);
     });
   }
 

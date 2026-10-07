@@ -12,12 +12,17 @@ import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../models/hcp_account.dart';
 import '../models/corenergy_engage.dart';
+import '../app_config.dart';
 import 'db_helper.dart';
+import 'biometric_service.dart';
+import 'notification_service.dart';
+import 'app_logger.dart';
 
 enum UserPosition {
   admin,
   manager,
   medRep,
+  sfe,
 }
 
 class ApiService extends ChangeNotifier {
@@ -46,14 +51,23 @@ class ApiService extends ChangeNotifier {
   String? employeeDepartment;
   String? employeeBranch;
 
-  bool get isAdmin => _userPosition == UserPosition.admin;
-  bool get isManager => _userPosition == UserPosition.manager;
-  bool get isMedRep => _userPosition == UserPosition.medRep;
-  bool get canManageAllDoctypes => isAdmin || isManager;
-  bool get canCreateOrEditDoctor => isAdmin || isManager;
-  bool get canCreateOrEditDoctorAccount => isAdmin || isManager;
+  bool _sfeModeOverride = false;
+  bool get sfeModeOverride => _sfeModeOverride;
+  void toggleSfeMode() {
+    _sfeModeOverride = !_sfeModeOverride;
+    notifyListeners();
+  }
+
+  bool get isAdmin => _userPosition == UserPosition.admin && !_sfeModeOverride;
+  bool get isManager => _userPosition == UserPosition.manager && !_sfeModeOverride;
+  bool get isMedRep => _userPosition == UserPosition.medRep && !_sfeModeOverride;
+  bool get isSfe => _userPosition == UserPosition.sfe || (_userPosition == UserPosition.admin && _sfeModeOverride);
+  bool get canManageAllDoctypes => isAdmin || isSfe;
+  bool get canCreateOrEditDoctor => isAdmin || isSfe;
+  bool get canCreateOrEditDoctorAccount => isAdmin || isSfe;
 
   String get userPositionTitle {
+    if (isSfe) return 'SFE';
     switch (_userPosition) {
       case UserPosition.admin:
         return 'Admin';
@@ -61,11 +75,14 @@ class ApiService extends ChangeNotifier {
         return 'Manager';
       case UserPosition.medRep:
         return 'MedRep';
+      case UserPosition.sfe:
+        return 'SFE';
     }
   }
 
   /// Returns clean short / acronym title for the designation (e.g. Sales Rep, PHSR, PHSS, DSM, GM, etc.)
   String get userDesignationTitle {
+    if (isSfe) return 'SFE';
     if (_userDesignation.isEmpty) {
       return userPositionTitle;
     }
@@ -73,6 +90,8 @@ class ApiService extends ChangeNotifier {
     final lower = des.toLowerCase();
 
     // Exact PMII / PIMS ERPNext Designations
+    if (lower.contains('sales force effectiveness manager')) return 'SFE Mgr';
+    if (lower.contains('sales force effectiveness') || lower == 'sfe') return 'SFE';
     if (lower == 'sales representative') return 'Sales Rep';
     if (lower.contains('professional health specialist representative') || lower == 'phsr') return 'PHSR';
     if (lower.contains('professional health specialist supervisor') || lower == 'phss') return 'PHSS';
@@ -499,17 +518,17 @@ class ApiService extends ChangeNotifier {
     }
   }
 
-  static const String devServerUrl = 'https://dev.pmii-marketing.com';
+  static String get devServerUrl => AppConfig.serverUrl;
   static const String _keyServerUrl = 'hcp_saved_server_url';
 
-  String _baseUrl = devServerUrl;
+  String _baseUrl = AppConfig.serverUrl;
   String get baseUrl => _baseUrl;
 
   Future<void> initServerConfig() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_keyServerUrl);
-      _baseUrl = devServerUrl;
+      _baseUrl = AppConfig.serverUrl;
     } catch (_) {}
   }
 
@@ -665,15 +684,40 @@ class ApiService extends ChangeNotifier {
   /// Authenticate against ERPNext v15
   Future<bool> login(String username, String password) async {
     if (_isOffline) {
-      loggedInEmail = username.trim().isEmpty ? 'offline_user@pims-marketing.com' : username.trim();
-      _applyPositionFromRoleProfile(
-        roleProfile: _userRoleProfile,
-        roleNames: [],
-        email: loggedInEmail ?? '',
-        designation: _userDesignation,
-      );
-      await fetchAvailablePrograms();
-      return true;
+      final inputUser = username.trim().toLowerCase();
+      if (inputUser.isEmpty || password.isEmpty) {
+        loginErrorMessage = 'Username and password are required for offline authentication.';
+        return false;
+      }
+      final savedCreds = await BiometricService.getSavedCredentials();
+      if (savedCreds != null) {
+        final savedUser = (savedCreds['username'] ?? '').trim().toLowerCase();
+        final savedPass = savedCreds['password'] ?? '';
+        if (savedUser == inputUser && savedPass == password) {
+          loggedInEmail = savedCreds['username']!.trim();
+          NotificationService.saveLastActiveUser(loggedInEmail!);
+          NotificationService.checkAndNotifyPendingRejections(_cachedInstitutions, userEmail: loggedInEmail);
+          if (savedCreds['full_name'] != null && savedCreds['full_name']!.isNotEmpty) {
+            loggedInFullName = savedCreds['full_name']!;
+          }
+          final savedPos = savedCreds['position'] ?? '';
+          _applyPositionFromRoleProfile(
+            roleProfile: savedPos,
+            roleNames: [savedPos],
+            email: loggedInEmail ?? '',
+            designation: _userDesignation,
+          );
+          await fetchAvailablePrograms();
+          loginErrorMessage = null;
+          return true;
+        } else {
+          loginErrorMessage = 'Offline authentication failed: Invalid credentials for this device.';
+          return false;
+        }
+      } else {
+        loginErrorMessage = 'Offline login unavailable: No authorized session enrolled on this device. Please connect to internet to authenticate.';
+        return false;
+      }
     }
     loginErrorMessage = null;
     final url = Uri.parse('$baseUrl/api/method/login');
@@ -695,6 +739,8 @@ class ApiService extends ChangeNotifier {
         if (body['message'] == 'Logged In') {
           // Store username as the logged-in email
           loggedInEmail = username.trim();
+          NotificationService.saveLastActiveUser(loggedInEmail!);
+          NotificationService.checkAndNotifyPendingRejections(_cachedInstitutions, userEmail: loggedInEmail);
           if (body['full_name'] != null && body['full_name'].toString().isNotEmpty) {
             loggedInFullName = body['full_name'].toString();
           } else if (body['user_fullname'] != null && body['user_fullname'].toString().isNotEmpty) {
@@ -724,7 +770,7 @@ class ApiService extends ChangeNotifier {
             final unauthProfile = _userRoleProfile.isNotEmpty ? _userRoleProfile : 'Unassigned';
             final unauthDesig = _userDesignation.isNotEmpty ? 'Designation: "$_userDesignation"' : 'Unassigned Designation';
             logout();
-            loginErrorMessage = 'Access Restricted: Your account ($unauthDesig, Role Profile: "$unauthProfile") is not authorized to access this application. Only System Manager, Sales Manager, and Sales User roles are permitted.';
+            loginErrorMessage = 'Access Restricted: Your account ($unauthDesig, Role Profile: "$unauthProfile") is not authorized to access this application. Only System Manager, Sales Manager, Sales User, and Sales Force Effectiveness roles are permitted.';
             return false;
           }
           loginErrorMessage = null;
@@ -964,7 +1010,9 @@ class ApiService extends ChangeNotifier {
 
           // Fallback role profile derivation if hidden on User doc
           if (roleProfile.isEmpty) {
-            if (roleNames.contains('system manager') || roleNames.contains('administrator')) {
+            if (roleNames.contains('sales force effectiveness') || roleNames.contains('sfe') || userEmail.toLowerCase() == 'lesantos@pims-marketing.com') {
+              roleProfile = 'Sales Force Effectiveness';
+            } else if (roleNames.contains('system manager') || roleNames.contains('administrator')) {
               roleProfile = 'Administrator';
             } else if (roleNames.contains('sales manager') || roleNames.contains('superior') || roleNames.contains('field force manager')) {
               roleProfile = 'Sales Manager';
@@ -1118,8 +1166,23 @@ class ApiService extends ChangeNotifier {
     final lowerDesignation = _userDesignation.toLowerCase().trim();
     final normalizedRoles = roleNames.map((r) => r.toLowerCase().trim()).toList();
 
-    // 1. System Manager / Administrator (Admin position - Allowed Role 1)
-    if (lowerEmail == 'administrator' ||
+    // 1. Sales Force Effectiveness (SFE Specialist position - Institution Approver Only)
+    // SFE specialists only have access to Institution submission and MUST NOT see all program HCPs.
+    if (lowerEmail == 'lesantos@pims-marketing.com' ||
+        ((normalizedRoles.any((r) => r == 'sales force effectiveness' || r == 'sfe') ||
+          lowerRoleProfile.contains('sales force effectiveness') ||
+          lowerRoleProfile.contains('sfe') ||
+          lowerDesignation.contains('sales force effectiveness') ||
+          lowerDesignation.contains('sfe')) &&
+         lowerEmail != 'jptan@profinsights.biz' &&
+         lowerEmail != 'administrator')) {
+      _userPosition = UserPosition.sfe;
+      _isRoleAuthorized = true;
+      if (_userRoleProfile.isEmpty) _userRoleProfile = 'Sales Force Effectiveness';
+      if (_userDesignation.isEmpty) _userDesignation = 'SFE Specialist';
+    }
+    // 2. System Manager / Administrator (Admin position - Allowed Role 1)
+    else if (lowerEmail == 'administrator' ||
         lowerEmail == 'jptan@profinsights.biz' ||
         lowerEmail.contains('cig-it') ||
         normalizedRoles.any((r) => r == 'system manager' || r == 'administrator' || r.contains('it staff')) ||
@@ -1136,7 +1199,7 @@ class ApiService extends ChangeNotifier {
       if (_userRoleProfile.isEmpty) _userRoleProfile = 'Administrator';
       if (_userDesignation.isEmpty) _userDesignation = 'Administrator';
     } 
-    // 2. Sales & Marketing Manager / Sales Manager / Superior (Manager position - Allowed Role 2)
+    // 3. Sales & Marketing Manager / Sales Manager / Superior (Manager position - Allowed Role 2)
     else if (normalizedRoles.any((r) => r == 'sales manager' || r == 'superior' || r == 'field force manager' || r == 'next level manager' || r.contains('sales manager')) ||
              lowerRoleProfile.contains('sales manager') ||
              lowerRoleProfile.contains('sales & marketing manager') ||
@@ -1165,8 +1228,8 @@ class ApiService extends ChangeNotifier {
       _isRoleAuthorized = true;
       if (_userRoleProfile.isEmpty) _userRoleProfile = 'Sales Manager';
       if (_userDesignation.isEmpty) _userDesignation = 'District Sales Manager';
-    } 
-    // 3. Sales User / Field Sales Representative (MedRep position - Allowed Role 3)
+    }
+    // 4. Sales User / Field Sales Representative (MedRep position - Allowed Role 4)
     else if (normalizedRoles.any((r) => r == 'sales user' || r.contains('sales user') || r.contains('medical representative')) ||
              lowerRoleProfile.contains('sales user') ||
              lowerRoleProfile.contains('employee + sales user') ||
@@ -1187,7 +1250,7 @@ class ApiService extends ChangeNotifier {
       if (_userRoleProfile.isEmpty) _userRoleProfile = 'Employee + Sales User';
       if (_userDesignation.isEmpty) _userDesignation = 'Sales Representative';
     } 
-    // 4. Any other role is NOT authorized to access the HCP Profiling App
+    // 5. Any other role is NOT authorized to access the HCP Profiling App
     else {
       _isRoleAuthorized = false;
       _userPosition = UserPosition.medRep;
@@ -1243,6 +1306,18 @@ class ApiService extends ChangeNotifier {
     }
   }
 
+  List<Institution> _cachedInstitutions = [];
+  List<Institution> get cachedInstitutions => _cachedInstitutions;
+
+  List<Hcp> _cachedDoctors = [];
+  List<Hcp> get cachedDoctors => _cachedDoctors;
+
+  List<HcpAccount> _cachedHcpAccounts = [];
+  List<HcpAccount> get cachedHcpAccounts => _cachedHcpAccounts;
+
+  List<HcpProfileSubmission> _cachedSubmissions = [];
+  List<HcpProfileSubmission> get cachedSubmissions => _cachedSubmissions;
+
   /// Retrieve list of Company Institutions with region, province, city, and street address fields
   Future<List<Institution>> fetchInstitutions() async {
     if (_isOffline) {
@@ -1250,21 +1325,25 @@ class ApiService extends ChangeNotifier {
       if (cache != null) {
         try {
           final List<dynamic> dataList = jsonDecode(cache);
-          return dataList.map((json) => Institution.fromJson(json)).toList();
+          final list = dataList.map((json) => Institution.fromJson(json)).toList();
+          _cachedInstitutions = list;
+          return list;
         } catch (_) {}
       }
       // Fallback to local asset
       try {
         final String localData = await rootBundle.loadString('assets/institutions.json');
         final List<dynamic> dataList = jsonDecode(localData);
-        return dataList.map((json) => Institution.fromJson(json)).toList();
+        final list = dataList.map((json) => Institution.fromJson(json)).toList();
+        _cachedInstitutions = list;
+        return list;
       } catch (err) {
         print('Failed to load local fallback institutions: $err');
         return [];
       }
     }
     final url = Uri.parse(
-      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address"]&limit_page_length=5000&limit=5000',
+      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address","workflow_state","rejection_reason","is_resubmission","owner","creation","modified","docstatus","ownership","institution_type","service_capability","requires_dsm_approval","linked_doctor_name"]&order_by=name%20desc&limit_page_length=5000&limit=5000',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -1274,6 +1353,9 @@ class ApiService extends ChangeNotifier {
         await _writeToCache('institutions_cache.json', jsonEncode(dataList));
         final list = dataList.map((json) => Institution.fromJson(json)).toList();
         LocationResolver.registerInstitutions(list);
+        _cachedInstitutions = list;
+        NotificationService.checkAndNotifyPendingRejections(list, userEmail: loggedInEmail);
+        notifyListeners();
         return list;
       } else {
         throw Exception('Server returned ${response.statusCode}');
@@ -1285,11 +1367,1201 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = jsonDecode(localData);
         final list = dataList.map((json) => Institution.fromJson(json)).toList();
         LocationResolver.registerInstitutions(list);
+        _cachedInstitutions = list;
+        NotificationService.checkAndNotifyPendingRejections(list, userEmail: loggedInEmail);
         return list;
       } catch (err) {
         print('Failed to load local fallback institutions: $err');
         rethrow;
       }
+    }
+  }
+
+  /// List of actual active masterlist institutions for doctor profiling.
+  /// Strictly excludes rejected institutions and unapproved pending proposals.
+  List<Institution> get actualInstitutions {
+    return _cachedInstitutions.where((i) => i.isApprovedForProfiling).toList();
+  }
+
+  /// List of institutions submitted by the currently logged-in user
+  List<Institution> get mySubmittedInstitutions {
+    final email = (loggedInEmail ?? '').trim().toLowerCase();
+    if (email.isEmpty) return [];
+    return _cachedInstitutions.where((i) {
+      final o = (i.owner ?? '').trim().toLowerCase();
+      return o == email;
+    }).toList();
+  }
+
+  int get myPendingInstitutionCount => mySubmittedInstitutions.where((i) => i.isPendingApproval).length;
+  int get myRejectedInstitutionCount => mySubmittedInstitutions.where((i) => i.isRejected).length;
+  int get myApprovedInstitutionCount => mySubmittedInstitutions.where((i) => i.isApproved).length;
+  int get pendingInstitutionApprovalsCount => actualInstitutions.where((i) => i.isPendingApproval).length;
+
+  /// Submit a newly added Institution request with Workplace, Region, Province, City
+  Future<Institution> createInstitutionRequest({
+    required String workplaceName,
+    String? region,
+    required String city,
+    required String province,
+    String? ownership,
+    String? institutionType,
+    String? serviceCapability,
+    bool requiresDsmApproval = false,
+    String? linkedDoctorName,
+    String? streetAddress,
+  }) async {
+    final cleanWp = workplaceName.trim();
+    final resolvedCity = LocationResolver.resolveCityName(city);
+    final resolvedProv = LocationResolver.resolveProvinceName(province);
+    final cityId = LocationResolver.resolveCityId(city);
+    final provId = LocationResolver.resolveProvinceId(province);
+
+    // Resolve Region: explicit selection, or auto-derived from province
+    String regId = LocationResolver.resolveRegionId(region);
+    if (regId.isEmpty || !RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(regId)) {
+      final autoReg = LocationResolver.resolveRegionFromProvince(province);
+      if (autoReg.isNotEmpty) {
+        regId = LocationResolver.resolveRegionId(autoReg);
+      }
+    }
+    final resolvedReg = LocationResolver.resolveRegionName(regId.isNotEmpty ? regId : region);
+    final now = DateTime.now();
+
+    if (_isOffline) {
+      final localInst = Institution(
+        name: cleanWp,
+        institutionName: cleanWp,
+        regionName: resolvedReg.isNotEmpty ? resolvedReg : region,
+        provinceName: resolvedProv.isNotEmpty ? resolvedProv : province,
+        cityMunicipality: resolvedCity.isNotEmpty ? resolvedCity : city,
+        streetAddress: streetAddress,
+        rawRegionName: regId.isNotEmpty ? regId : region,
+        rawProvinceName: provId.isNotEmpty ? provId : province,
+        rawCityMunicipality: cityId.isNotEmpty ? cityId : city,
+        workflowState: 'Pending Approval',
+        owner: loggedInEmail,
+        docstatus: 0,
+        ownership: ownership,
+        institutionType: institutionType,
+        serviceCapability: serviceCapability,
+        resubmissionCount: 0,
+        lastSubmittedAt: now,
+        requiresDsmApproval: requiresDsmApproval,
+        linkedDoctorName: linkedDoctorName,
+      );
+      _cachedInstitutions.insert(0, localInst);
+      notifyListeners();
+      return localInst;
+    }
+
+    await ensureCsrfToken();
+
+    // In ERPNext, region_name, province_name and city_municipality link to PSGC Location (e.g. 1380200000 or 1380200000C)
+    final bool validRegId = regId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(regId);
+    final bool validCityId = cityId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(cityId);
+    final bool validProvId = provId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(provId);
+
+    final payload = <String, dynamic>{
+      'institution_name': cleanWp,
+      if (validRegId) 'region_name': regId,
+      if (validCityId) 'city_municipality': cityId,
+      if (validProvId) 'province_name': provId,
+      if (streetAddress != null && streetAddress.trim().isNotEmpty) 'street_address': streetAddress.trim(),
+      if (ownership != null) 'ownership': ownership,
+      if (institutionType != null) 'institution_type': institutionType,
+      if (serviceCapability != null) 'service_capability': serviceCapability,
+      'requires_dsm_approval': requiresDsmApproval ? 1 : 0,
+      if (linkedDoctorName != null) 'linked_doctor_name': linkedDoctorName,
+      'last_submitted_at': now.toIso8601String(),
+    };
+
+    final url = Uri.parse('$baseUrl/api/resource/Institution');
+    http.Response res = await http.post(
+      url,
+      headers: _headers,
+      body: jsonEncode(payload),
+    );
+
+    // If LinkValidationError occurs, retry inserting with clean institution_name
+    if ((res.statusCode != 200 && res.statusCode != 201) &&
+        (res.body.contains('LinkValidationError') || res.body.contains('Could not find') || res.body.contains('field not found'))) {
+      res = await http.post(
+        url,
+        headers: _headers,
+        body: jsonEncode({
+          'institution_name': cleanWp,
+          if (ownership != null) 'ownership': ownership,
+          if (institutionType != null) 'institution_type': institutionType,
+          if (serviceCapability != null) 'service_capability': serviceCapability,
+        }),
+      );
+    }
+
+    if (res.statusCode == 200 || res.statusCode == 201) {
+      final data = jsonDecode(res.body)['data'];
+      final created = Institution.fromJson(data);
+      final assignedId = created.name;
+
+      // Apply workflow action 'Submit for Approval' to transition Draft -> Pending Approval
+      try {
+        final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+        final wfRes = await http.post(
+          wfUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'Institution',
+              'name': assignedId,
+            },
+            'action': 'Submit for Approval',
+          }),
+        );
+        if (wfRes.statusCode != 200) {
+          print('Submit for Approval workflow transition returned ${wfRes.statusCode}: ${wfRes.body}');
+        }
+      } catch (wfErr) {
+        print('Apply Submit for Approval workflow error: $wfErr');
+      }
+
+      final initialAudit = [
+        InstitutionAuditLogEntry(
+          timestamp: now,
+          user: loggedInFullName ?? loggedInEmail ?? 'MedRep',
+          role: isManager ? 'DSM' : (isSfe ? 'SFE Specialist' : 'MedRep'),
+          action: 'Initial Proposal',
+          details: 'Proposed new $institutionType ($ownership) with capability: $serviceCapability at $resolvedCity, $resolvedProv',
+          snapshot: {
+            'institution_name': cleanWp,
+            'ownership': ownership,
+            'institution_type': institutionType,
+            'service_capability': serviceCapability,
+            'location': '$resolvedCity, $resolvedProv',
+          },
+        ),
+      ];
+
+      final newInst = Institution(
+        name: assignedId.isNotEmpty ? assignedId : cleanWp,
+        institutionName: cleanWp,
+        regionName: resolvedReg.isNotEmpty ? resolvedReg : region,
+        provinceName: resolvedProv.isNotEmpty ? resolvedProv : province,
+        cityMunicipality: resolvedCity.isNotEmpty ? resolvedCity : city,
+        rawRegionName: validRegId ? regId : region,
+        rawProvinceName: validProvId ? provId : province,
+        rawCityMunicipality: validCityId ? cityId : city,
+        workflowState: 'Pending Approval',
+        owner: loggedInEmail,
+        docstatus: 0,
+        ownership: ownership,
+        institutionType: institutionType,
+        serviceCapability: serviceCapability,
+        resubmissionCount: 0,
+        lastSubmittedAt: now,
+        requiresDsmApproval: requiresDsmApproval,
+        linkedDoctorName: linkedDoctorName,
+        auditTrail: initialAudit,
+      );
+      _cachedInstitutions.removeWhere((i) => i.name == newInst.name);
+      _cachedInstitutions.insert(0, newInst);
+      notifyListeners();
+
+      // Trigger background refresh so server-assigned metadata is fully in sync
+      fetchInstitutions().catchError((_) => <Institution>[]);
+
+      return newInst;
+    } else {
+      String errMsg = 'Server returned HTTP ${res.statusCode}';
+      try {
+        final errJson = jsonDecode(res.body);
+        if (errJson['exception'] != null) {
+          errMsg = errJson['exception'].toString().split('\n').first;
+        } else if (errJson['_server_messages'] != null) {
+          final msgs = jsonDecode(errJson['_server_messages']);
+          if (msgs is List && msgs.isNotEmpty) {
+            final first = jsonDecode(msgs[0]);
+            errMsg = first['message'] ?? errMsg;
+          }
+        }
+      } catch (_) {}
+      throw Exception('Failed to create institution on server: $errMsg');
+    }
+  }
+
+  /// Resubmit an edited Institution after SFE rejection (Max 2 resubmissions, 1-min cooldown)
+  Future<Institution> resubmitInstitutionRequest({
+    required String name,
+    required String workplaceName,
+    String? region,
+    required String city,
+    required String province,
+    String? ownership,
+    String? institutionType,
+    String? serviceCapability,
+    bool requiresDsmApproval = false,
+  }) async {
+    final existingIdx = _cachedInstitutions.indexWhere((i) => i.name == name);
+    final existing = existingIdx >= 0 ? _cachedInstitutions[existingIdx] : null;
+
+    if (existing != null) {
+      if (existing.isCooldownActive) {
+        throw Exception(
+          'Concurrency Lock Active: Please wait ${existing.cooldownRemainingSeconds}s before submitting to prevent concurrent edits.',
+        );
+      }
+      if (existing.resubmissionCount >= 2) {
+        throw Exception(
+          'Maximum resubmissions reached (2 attempts). Please contact the SFE Specialist directly to resolve this facility.',
+        );
+      }
+    }
+
+    final newCount = (existing?.resubmissionCount ?? 0) + 1;
+    final now = DateTime.now();
+
+    final cleanWp = workplaceName.trim();
+    final resolvedCity = LocationResolver.resolveCityName(city);
+    final resolvedProv = LocationResolver.resolveProvinceName(province);
+    final cityId = LocationResolver.resolveCityId(city);
+    final provId = LocationResolver.resolveProvinceId(province);
+
+    // Resolve Region: explicit selection, or auto-derived from province
+    String regId = LocationResolver.resolveRegionId(region);
+    if (regId.isEmpty || !RegExp(r'^\d{10}$').hasMatch(regId)) {
+      final autoReg = LocationResolver.resolveRegionFromProvince(province);
+      if (autoReg.isNotEmpty) {
+        regId = LocationResolver.resolveRegionId(autoReg);
+      }
+    }
+    final resolvedReg = LocationResolver.resolveRegionName(regId.isNotEmpty ? regId : region);
+
+    await ensureCsrfToken();
+
+    final bool validRegId = regId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(regId);
+    final bool validCityId = cityId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(cityId);
+    final bool validProvId = provId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(provId);
+
+    final payload = <String, dynamic>{
+      'institution_name': cleanWp,
+      if (validRegId) 'region_name': regId,
+      if (validCityId) 'city_municipality': cityId,
+      if (validProvId) 'province_name': provId,
+      if (ownership != null) 'ownership': ownership,
+      if (institutionType != null) 'institution_type': institutionType,
+      if (serviceCapability != null) 'service_capability': serviceCapability,
+      'rejection_reason': '',
+      'is_resubmission': 1,
+      'resubmission_count': newCount,
+      'last_submitted_at': now.toIso8601String(),
+    };
+
+    if (!_isOffline) {
+      final url = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(name)}');
+      http.Response putRes = await http.put(
+        url,
+        headers: _headers,
+        body: jsonEncode(payload),
+      );
+
+      if ((putRes.statusCode != 200 && putRes.statusCode != 201) &&
+          (putRes.body.contains('LinkValidationError') || putRes.body.contains('Could not find'))) {
+        putRes = await http.put(
+          url,
+          headers: _headers,
+          body: jsonEncode({
+            'institution_name': cleanWp,
+            'rejection_reason': '',
+            'is_resubmission': 1,
+          }),
+        );
+      }
+
+      try {
+        final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+        await http.post(
+          wfUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'doc': {
+              'doctype': 'Institution',
+              'name': name,
+            },
+            'action': 'Submit for Approval',
+          }),
+        );
+      } catch (_) {}
+    }
+
+    final updatedAudit = List<InstitutionAuditLogEntry>.from(existing?.auditTrail ?? []);
+    updatedAudit.add(
+      InstitutionAuditLogEntry(
+        timestamp: now,
+        user: loggedInFullName ?? loggedInEmail ?? 'MedRep',
+        role: isManager ? 'DSM' : 'MedRep',
+        action: 'Resubmitted (Attempt $newCount/2)',
+        details: 'Updated facility: $cleanWp ($ownership, $institutionType, $serviceCapability) at $resolvedCity, $resolvedProv',
+        snapshot: {
+          'institution_name': cleanWp,
+          'ownership': ownership,
+          'institution_type': institutionType,
+          'service_capability': serviceCapability,
+          'location': '$resolvedCity, $resolvedProv',
+        },
+      ),
+    );
+
+    final resubmitted = Institution(
+      name: name,
+      institutionName: cleanWp,
+      regionName: resolvedReg.isNotEmpty ? resolvedReg : region,
+      provinceName: resolvedProv.isNotEmpty ? resolvedProv : province,
+      cityMunicipality: resolvedCity.isNotEmpty ? resolvedCity : city,
+      rawRegionName: validRegId ? regId : region,
+      rawProvinceName: validProvId ? provId : province,
+      rawCityMunicipality: validCityId ? cityId : city,
+      workflowState: requiresDsmApproval ? 'Pending DSM Approval' : 'Pending Approval',
+      owner: existing?.owner ?? loggedInEmail,
+      rejectionReason: '',
+      docstatus: 0,
+      isResubmission: true,
+      resubmissionCount: newCount,
+      lastSubmittedAt: now,
+      activeEditingLock: null,
+      editingUser: null,
+      ownership: ownership ?? existing?.ownership,
+      institutionType: institutionType ?? existing?.institutionType,
+      serviceCapability: serviceCapability ?? existing?.serviceCapability,
+      requiresDsmApproval: requiresDsmApproval || (existing?.requiresDsmApproval ?? false),
+      creation: existing?.creation,
+      modified: now.toIso8601String(),
+      auditTrail: updatedAudit,
+    );
+
+    if (existingIdx >= 0) {
+      _cachedInstitutions[existingIdx] = resubmitted;
+    } else {
+      _cachedInstitutions.insert(0, resubmitted);
+    }
+    notifyListeners();
+
+    fetchInstitutions().catchError((_) => <Institution>[]);
+
+    return resubmitted;
+  }
+
+  /// SFE Normalize Feature: Normalize institution details in database and approve
+  Future<Institution> normalizeInstitution({
+    required String name,
+    required String workplaceName,
+    String? region,
+    required String city,
+    required String province,
+    String? ownership,
+    String? institutionType,
+    String? serviceCapability,
+    bool autoApprove = true,
+  }) async {
+    final existingIdx = _cachedInstitutions.indexWhere((i) => i.name == name);
+    final existing = existingIdx >= 0 ? _cachedInstitutions[existingIdx] : null;
+    final cleanWp = workplaceName.trim();
+    final resolvedCity = LocationResolver.resolveCityName(city);
+    final resolvedProv = LocationResolver.resolveProvinceName(province);
+    final cityId = LocationResolver.resolveCityId(city);
+    final provId = LocationResolver.resolveProvinceId(province);
+
+    String regId = LocationResolver.resolveRegionId(region);
+    if (regId.isEmpty || !RegExp(r'^\d{10}$').hasMatch(regId)) {
+      final autoReg = LocationResolver.resolveRegionFromProvince(province);
+      if (autoReg.isNotEmpty) {
+        regId = LocationResolver.resolveRegionId(autoReg);
+      }
+    }
+    final resolvedReg = LocationResolver.resolveRegionName(regId.isNotEmpty ? regId : region);
+
+    await ensureCsrfToken();
+
+    final bool validRegId = regId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(regId);
+    final bool validCityId = cityId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(cityId);
+    final bool validProvId = provId.isNotEmpty && RegExp(r'^\d{9,10}[A-Za-z]?$').hasMatch(provId);
+
+    final payload = <String, dynamic>{
+      'institution_name': cleanWp,
+      if (validRegId) 'region_name': regId,
+      if (validCityId) 'city_municipality': cityId,
+      if (validProvId) 'province_name': provId,
+      if (ownership != null) 'ownership': ownership,
+      if (institutionType != null) 'institution_type': institutionType,
+      if (serviceCapability != null) 'service_capability': serviceCapability,
+      if (autoApprove) 'rejection_reason': '',
+    };
+
+    if (!_isOffline) {
+      final url = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(name)}');
+      await http.put(url, headers: _headers, body: jsonEncode(payload));
+    }
+
+    if (autoApprove) {
+      await approveInstitution(name);
+    }
+
+    final updatedAudit = List<InstitutionAuditLogEntry>.from(existing?.auditTrail ?? []);
+    updatedAudit.add(
+      InstitutionAuditLogEntry(
+        timestamp: DateTime.now(),
+        user: loggedInFullName ?? loggedInEmail ?? 'SFE Specialist',
+        role: isSfe ? 'SFE Specialist' : 'Admin',
+        action: 'Normalized by SFE',
+        details: 'Standardized facility metadata: $cleanWp ($ownership, $institutionType, $serviceCapability) at $resolvedCity, $resolvedProv',
+        snapshot: {
+          'institution_name': cleanWp,
+          'ownership': ownership,
+          'institution_type': institutionType,
+          'service_capability': serviceCapability,
+          'location': '$resolvedCity, $resolvedProv',
+        },
+      ),
+    );
+
+    final normalized = Institution(
+      name: name,
+      institutionName: cleanWp,
+      regionName: resolvedReg.isNotEmpty ? resolvedReg : region,
+      provinceName: resolvedProv.isNotEmpty ? resolvedProv : province,
+      cityMunicipality: resolvedCity.isNotEmpty ? resolvedCity : city,
+      rawRegionName: validRegId ? regId : region,
+      rawProvinceName: validProvId ? provId : province,
+      rawCityMunicipality: validCityId ? cityId : city,
+      workflowState: autoApprove
+          ? ((existing?.requiresDsmApproval == true) ? 'Pending DSM Approval' : 'Approved')
+          : (existing?.workflowState ?? 'Pending Approval'),
+      docstatus: autoApprove ? ((existing?.requiresDsmApproval == true) ? 0 : 1) : 0,
+      ownership: ownership ?? existing?.ownership,
+      institutionType: institutionType ?? existing?.institutionType,
+      serviceCapability: serviceCapability ?? existing?.serviceCapability,
+      resubmissionCount: existing?.resubmissionCount ?? 0,
+      rejectionReason: autoApprove ? null : existing?.rejectionReason,
+      requiresDsmApproval: existing?.requiresDsmApproval ?? false,
+      linkedDoctorName: existing?.linkedDoctorName,
+      activeEditingLock: null,
+      editingUser: null,
+      owner: existing?.owner,
+      creation: existing?.creation,
+      modified: DateTime.now().toIso8601String(),
+      auditTrail: updatedAudit,
+    );
+
+    if (existingIdx >= 0) {
+      _cachedInstitutions[existingIdx] = normalized;
+    } else {
+      _cachedInstitutions.insert(0, normalized);
+    }
+
+    // Propagate normalized workplace name and approval to linked HCP Accounts & Doctors
+    final oldInstName = existing?.institutionName ?? name;
+    for (int i = 0; i < _cachedHcpAccounts.length; i++) {
+      final acc = _cachedHcpAccounts[i];
+      final bool hasMatch = (acc.workplaceId != null && (acc.workplaceId == name || acc.workplaceId == oldInstName)) ||
+          acc.workplaces.any((w) => w.hcpWorkplace == name || w.hcpWorkplace == oldInstName);
+      if (hasMatch) {
+        final updatedWps = acc.workplaces.map((w) {
+          if (w.hcpWorkplace == name || w.hcpWorkplace == oldInstName) {
+            return HcpAccountWorkplace(
+              hcpWorkplace: cleanWp,
+              isPrimary: w.isPrimary,
+              preferred: w.preferred,
+            );
+          }
+          return w;
+        }).toList();
+
+        _cachedHcpAccounts[i] = acc.copyWith(
+          workplaceId: (acc.workplaceId == name || acc.workplaceId == oldInstName) ? cleanWp : acc.workplaceId,
+          workplaceApprovalNote: autoApprove ? 'this institution is now approved' : acc.workplaceApprovalNote,
+          workplaces: updatedWps,
+        );
+      }
+    }
+
+    for (int i = 0; i < _cachedDoctors.length; i++) {
+      final doc = _cachedDoctors[i];
+      final bool hasMatch = (doc.institution != null && (doc.institution == name || doc.institution == oldInstName)) ||
+          doc.workplaces.any((w) => w.workplace == name || w.workplace == oldInstName);
+      if (hasMatch) {
+        final updatedWps = doc.workplaces.map((w) {
+          if (w.workplace == name || w.workplace == oldInstName) {
+            return HcpWorkplace(
+              workplace: cleanWp,
+              address: w.address,
+              cityMunicipality: resolvedCity.isNotEmpty ? resolvedCity : w.cityMunicipality,
+              provinceName: resolvedProv.isNotEmpty ? resolvedProv : w.provinceName,
+            );
+          }
+          return w;
+        }).toList();
+
+        _cachedDoctors[i] = doc.copyWith(
+          institution: (doc.institution == name || doc.institution == oldInstName) ? cleanWp : doc.institution,
+          workplaces: updatedWps,
+        );
+      }
+    }
+
+    notifyListeners();
+    return normalized;
+  }
+
+  /// SFE Approval Action:
+  /// - If doctor and inst -> DSM approval
+  /// - If institution only -> Done (Approved)
+  Future<bool> approveInstitution(String name) async {
+    try {
+      await ensureCsrfToken();
+
+      final idx = _cachedInstitutions.indexWhere((i) => i.name == name);
+      final existing = idx >= 0 ? _cachedInstitutions[idx] : null;
+      final bool needsDsm = existing?.requiresDsmApproval == true;
+
+      final targetWorkflowState = needsDsm ? 'Pending DSM Approval' : 'Approved';
+      final targetDocstatus = needsDsm ? 0 : 1;
+      final actionName = needsDsm ? 'Route to DSM' : 'Approve';
+
+      final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+      final res = await http.post(
+        wfUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'doc': {
+            'doctype': 'Institution',
+            'name': name,
+          },
+          'action': actionName,
+        }),
+      );
+
+      bool success = res.statusCode == 200;
+
+      // Fallback: If workflow action fails but user has write/system manager permissions
+      if (!success) {
+        final instUrl = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(name)}');
+        final putRes = await http.put(
+          instUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'workflow_state': targetWorkflowState,
+            'docstatus': targetDocstatus,
+          }),
+        );
+        if (!success) {
+          try {
+            final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+            final setRes = await http.post(
+              setValueUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doctype': 'Institution',
+                'name': name,
+                'fieldname': {
+                  'workflow_state': targetWorkflowState,
+                  'docstatus': targetDocstatus,
+                },
+              }),
+            );
+            success = setRes.statusCode == 200;
+          } catch (_) {}
+          if (!success) {
+            print('approveInstitution workflow failed (${res.statusCode}: ${res.body}) and fallback failed (${putRes.statusCode}: ${putRes.body})');
+          }
+        }
+      }
+
+      if (success) {
+        final now = DateTime.now();
+        final user = loggedInFullName ?? loggedInEmail ?? (isSfe ? 'SFE Specialist' : 'System Admin');
+        final role = isSfe ? 'SFE Specialist' : (isManager ? 'DSM' : 'System Admin');
+        final updatedAudit = List<InstitutionAuditLogEntry>.from(existing?.auditTrail ?? []);
+        updatedAudit.add(
+          InstitutionAuditLogEntry(
+            timestamp: now,
+            user: user,
+            role: role,
+            action: needsDsm ? 'Routed to DSM' : 'Approved',
+            details: needsDsm ? 'Validated by SFE and routed to DSM for regional approval' : 'Institution validated and approved by SFE',
+            snapshot: {
+              'workflow_state': targetWorkflowState,
+              'institution_name': existing?.institutionName ?? name,
+            },
+          ),
+        );
+
+        if (idx >= 0 && existing != null) {
+          _cachedInstitutions[idx] = existing.copyWith(
+            workflowState: targetWorkflowState,
+            docstatus: targetDocstatus,
+            auditTrail: updatedAudit,
+            activeEditingLock: null,
+            editingUser: null,
+          );
+        }
+        notifyListeners();
+        fetchInstitutions().catchError((_) => <Institution>[]);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      print('approveInstitution exception: $e');
+      return false;
+    }
+  }
+
+  /// DSM Approval Action: District Sales Manager approves an institution validated by SFE
+  Future<bool> dsmApproveInstitution(String name) async {
+    try {
+      await ensureCsrfToken();
+      final idx = _cachedInstitutions.indexWhere((i) => i.name == name);
+      final existing = idx >= 0 ? _cachedInstitutions[idx] : null;
+
+      const targetWorkflowState = 'Approved';
+      const targetDocstatus = 1;
+
+      final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+      final res = await http.post(
+        wfUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'doc': {
+            'doctype': 'Institution',
+            'name': name,
+          },
+          'action': 'Approve',
+        }),
+      );
+
+      bool success = res.statusCode == 200;
+
+      if (!success) {
+        final instUrl = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(name)}');
+        final putRes = await http.put(
+          instUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'workflow_state': targetWorkflowState,
+            'docstatus': targetDocstatus,
+          }),
+        );
+        success = putRes.statusCode == 200;
+        if (!success) {
+          try {
+            final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+            final setRes = await http.post(
+              setValueUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doctype': 'Institution',
+                'name': name,
+                'fieldname': {
+                  'workflow_state': targetWorkflowState,
+                  'docstatus': targetDocstatus,
+                },
+              }),
+            );
+            success = setRes.statusCode == 200;
+          } catch (_) {}
+        }
+      }
+
+      if (success) {
+        final now = DateTime.now();
+        final user = loggedInFullName ?? loggedInEmail ?? 'DSM';
+        final updatedAudit = List<InstitutionAuditLogEntry>.from(existing?.auditTrail ?? []);
+        updatedAudit.add(
+          InstitutionAuditLogEntry(
+            timestamp: now,
+            user: user,
+            role: 'DSM',
+            action: 'Approved by DSM',
+            details: 'Regional endorsement and final approval granted by District Sales Manager',
+            snapshot: {
+              'workflow_state': targetWorkflowState,
+              'institution_name': existing?.institutionName ?? name,
+            },
+          ),
+        );
+
+        if (idx >= 0 && existing != null) {
+          _cachedInstitutions[idx] = existing.copyWith(
+            workflowState: targetWorkflowState,
+            docstatus: targetDocstatus,
+            auditTrail: updatedAudit,
+            activeEditingLock: null,
+            editingUser: null,
+          );
+        }
+        notifyListeners();
+        fetchInstitutions().catchError((_) => <Institution>[]);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      print('dsmApproveInstitution exception: $e');
+      return false;
+    }
+  }
+
+  /// Permanently deletes an institution request from ERPNext and local cache
+  Future<bool> deleteInstitution(String name) async {
+    if (_isOffline) {
+      _cachedInstitutions.removeWhere((i) => i.name == name);
+      notifyListeners();
+      return true;
+    }
+
+    try {
+      await ensureCsrfToken();
+      final url = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(name)}');
+      http.Response res = await http.delete(url, headers: _headers);
+
+      // If document is submitted (docstatus: 1), ERPNext requires cancellation first.
+      if (res.statusCode != 200 && res.statusCode != 202 && res.statusCode != 204 && res.statusCode != 404 &&
+          (res.body.contains('Submitted Record cannot be deleted') || res.body.contains('Cancel'))) {
+        try {
+          final cancelUrl = Uri.parse('$baseUrl/api/method/frappe.client.cancel');
+          await http.post(
+            cancelUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doctype': 'Institution',
+              'name': name,
+            }),
+          );
+          res = await http.delete(url, headers: _headers);
+        } catch (_) {}
+      }
+
+      if (res.statusCode == 200 || res.statusCode == 202 || res.statusCode == 204 || res.statusCode == 404) {
+        _cachedInstitutions.removeWhere((i) => i.name == name);
+        notifyListeners();
+        return true;
+      } else {
+        String errMsg = 'Server returned HTTP ${res.statusCode}';
+        try {
+          final errJson = jsonDecode(res.body);
+          if (errJson['exception'] != null) {
+            errMsg = errJson['exception'].toString().split('\n').first;
+          } else if (errJson['_server_messages'] != null) {
+            final msgs = jsonDecode(errJson['_server_messages']);
+            if (msgs is List && msgs.isNotEmpty) {
+              final first = jsonDecode(msgs[0]);
+              errMsg = first['message'] ?? errMsg;
+            }
+          }
+        } catch (_) {}
+        throw Exception('Failed to delete institution from server: $errMsg');
+      }
+    } catch (e) {
+      print('deleteInstitution exception: $e');
+      rethrow;
+    }
+  }
+
+  /// SFE Rejection Action: Updates rejection_reason and transitions state to Rejected.
+  /// MedReps can continuously modify and resubmit rejected institutions without deletion (up to 2 times).
+  /// Rejection automatically propagates across DocTypes (HCP Account, HCP, Institution).
+  Future<bool> rejectInstitution(String name, String reason) async {
+    try {
+      await ensureCsrfToken();
+      final cleanReason = reason.trim();
+
+      // 1. Update rejection_reason on the Institution
+      final instUrl = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(name)}');
+      await http.put(
+        instUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'rejection_reason': cleanReason,
+        }),
+      );
+
+      // 2. Apply workflow action 'Reject'
+      final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+      final res = await http.post(
+        wfUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'doc': {
+            'doctype': 'Institution',
+            'name': name,
+          },
+          'action': 'Reject',
+        }),
+      );
+
+      bool success = res.statusCode == 200;
+
+      // Fallback: If apply_workflow failed but user has direct update rights, apply state directly
+      if (!success) {
+        final putRes = await http.put(
+          instUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'rejection_reason': cleanReason,
+            'workflow_state': 'Rejected',
+            'docstatus': 0,
+          }),
+        );
+        success = putRes.statusCode == 200;
+        if (!success) {
+          print('rejectInstitution workflow failed (${res.statusCode}: ${res.body}) and fallback failed (${putRes.statusCode}: ${putRes.body})');
+        }
+      }
+
+      if (success) {
+        final idx = _cachedInstitutions.indexWhere((i) => i.name == name);
+        String targetInstName = name;
+        final now = DateTime.now();
+        final user = loggedInFullName ?? loggedInEmail ?? (isSfe ? 'SFE Specialist' : 'Reviewer');
+        final role = isSfe ? 'SFE Specialist' : (isManager ? 'DSM' : 'System Admin');
+
+        if (idx >= 0) {
+          final old = _cachedInstitutions[idx];
+          targetInstName = old.institutionName;
+          final updatedAudit = List<InstitutionAuditLogEntry>.from(old.auditTrail);
+          updatedAudit.add(
+            InstitutionAuditLogEntry(
+              timestamp: now,
+              user: user,
+              role: role,
+              action: 'Rejected',
+              details: 'Rejected with reason: $cleanReason',
+              snapshot: {
+                'rejection_reason': cleanReason,
+                'institution_name': old.institutionName,
+                'resubmission_count': old.resubmissionCount,
+              },
+            ),
+          );
+
+          _cachedInstitutions[idx] = old.copyWith(
+            workflowState: 'Rejected',
+            rejectionReason: cleanReason,
+            docstatus: 0,
+            auditTrail: updatedAudit,
+            activeEditingLock: null,
+            editingUser: null,
+          );
+        }
+
+        // 3. Propagate rejection with cause note to linked HCP Accounts
+        final rejectionTag = '[REJECTED INSTITUTION: $cleanReason]';
+        for (int i = 0; i < _cachedHcpAccounts.length; i++) {
+          final acc = _cachedHcpAccounts[i];
+          final bool hasMatch = (acc.workplaceId != null && (acc.workplaceId == name || acc.workplaceId == targetInstName)) ||
+              acc.workplaces.any((w) => w.hcpWorkplace == name || w.hcpWorkplace == targetInstName);
+          if (hasMatch) {
+            _cachedHcpAccounts[i] = acc.copyWith(
+              workplaceApprovalNote: rejectionTag,
+            );
+            if (acc.name != null && acc.name!.isNotEmpty) {
+              http.put(
+                Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(acc.name!)}'),
+                headers: _headers,
+                body: jsonEncode({'workplace_approval_note': rejectionTag}),
+              ).catchError((_) => http.Response('', 500));
+            }
+          }
+        }
+
+        // 4. Propagate rejection with cause note to linked HCP Profile Submissions
+        for (int i = 0; i < _cachedSubmissions.length; i++) {
+          final sub = _cachedSubmissions[i];
+          final bool hasMatch = (sub.institution != null && (sub.institution == name || sub.institution == targetInstName)) ||
+              sub.workplaces.any((w) => w.hcpWorkplace == name || w.hcpWorkplace == targetInstName || w.workplaceName == targetInstName);
+          if (hasMatch) {
+            final updatedWps = sub.workplaces.map((w) {
+              if (w.hcpWorkplace == name || w.hcpWorkplace == targetInstName || w.workplaceName == targetInstName) {
+                return w.copyWith(workflowState: 'Rejected', rejectionReason: cleanReason);
+              }
+              return w;
+            }).toList();
+            _cachedSubmissions[i] = sub.copyWith(
+              workplaces: updatedWps,
+              rejectionRemarks: rejectionTag,
+            );
+            if (sub.name != null && sub.name!.isNotEmpty) {
+              http.put(
+                Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(sub.name!)}'),
+                headers: _headers,
+                body: jsonEncode({
+                  'rejection_remarks': rejectionTag,
+                  'table_workplaces': updatedWps.map((w) => w.toJson()).toList(),
+                }),
+              ).catchError((_) => http.Response('', 500));
+            }
+          }
+        }
+
+        // 5. Propagate rejection to linked HCP Doctors
+        for (int i = 0; i < _cachedDoctors.length; i++) {
+          final doc = _cachedDoctors[i];
+          final bool hasMatch = (doc.institution != null && (doc.institution == name || doc.institution == targetInstName)) ||
+              doc.workplaces.any((w) => w.workplace == name || w.workplace == targetInstName);
+          if (hasMatch && doc.name != null && doc.name!.isNotEmpty) {
+            http.put(
+              Uri.parse('$baseUrl/api/resource/HCP/${Uri.encodeComponent(doc.name!)}'),
+              headers: _headers,
+              body: jsonEncode({'rejection_reason': cleanReason}),
+            ).catchError((_) => http.Response('', 500));
+          }
+        }
+
+        // 6. Trigger Pop-up Lockscreen & Homescreen System Notification
+        final oldInst = (idx >= 0) ? _cachedInstitutions[idx] : null;
+        NotificationService.showInstitutionRejectedNotification(
+          institutionName: targetInstName,
+          reason: cleanReason,
+          submittedBy: oldInst?.owner,
+          institutionId: name,
+        ).catchError((e) => AppLogger.e('ApiService', 'Notification dispatch failed: $e'));
+
+        notifyListeners();
+        fetchInstitutions().catchError((_) => <Institution>[]);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (e) {
+      print('rejectInstitution exception: $e');
+      return false;
+    }
+  }
+
+  /// SFE Remediation Action: Remaps a rejected institution to a valid approved masterlist facility.
+  /// Replaces the rejected institution in HCP Profile Submission, HCP Account, and HCP DocTypes,
+  /// updating status notes and allowing MedReps to immediately continue HCP profiling.
+  Future<bool> remapRejectedInstitution({
+    required String rejectedInstitutionNameOrId,
+    required Institution replacementInstitution,
+    String? resolutionNote,
+  }) async {
+    try {
+      await ensureCsrfToken();
+      final String note = (resolutionNote != null && resolutionNote.trim().isNotEmpty)
+          ? resolutionNote.trim()
+          : 'Remapped duplicate/unprofiled institution to approved facility: ${replacementInstitution.institutionName}';
+
+      final String remappedTag = 'Remapped by SFE to: ${replacementInstitution.institutionName}';
+
+      // 1. Update the rejected institution document in ERPNext
+      final instUrl = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(rejectedInstitutionNameOrId)}');
+      await http.put(
+        instUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'workflow_state': 'Remapped',
+          'rejection_reason': '$remappedTag ($note)',
+        }),
+      );
+
+      // 2. Update local cached institution
+      final idx = _cachedInstitutions.indexWhere(
+          (i) => i.name == rejectedInstitutionNameOrId || i.institutionName.toLowerCase() == rejectedInstitutionNameOrId.toLowerCase());
+      String oldName = rejectedInstitutionNameOrId;
+      if (idx >= 0) {
+        final old = _cachedInstitutions[idx];
+        oldName = old.institutionName;
+        final updatedAudit = List<InstitutionAuditLogEntry>.from(old.auditTrail);
+        updatedAudit.add(
+          InstitutionAuditLogEntry(
+            timestamp: DateTime.now(),
+            user: loggedInFullName ?? loggedInEmail ?? 'SFE Specialist',
+            role: 'SFE Specialist',
+            action: 'Remapped by SFE',
+            details: '$remappedTag. $note',
+            snapshot: {
+              'original_rejected': old.institutionName,
+              'replacement': replacementInstitution.institutionName,
+              'replacement_id': replacementInstitution.name,
+              'note': note,
+            },
+          ),
+        );
+        _cachedInstitutions[idx] = old.copyWith(
+          workflowState: 'Remapped',
+          rejectionReason: '$remappedTag ($note)',
+          auditTrail: updatedAudit,
+        );
+      }
+
+      // 3. Remap across linked HCP Accounts
+      for (int i = 0; i < _cachedHcpAccounts.length; i++) {
+        final acc = _cachedHcpAccounts[i];
+        final bool hasMatch = (acc.workplaceId != null && (acc.workplaceId == rejectedInstitutionNameOrId || acc.workplaceId == oldName)) ||
+            acc.workplaces.any((w) => w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName);
+
+        if (hasMatch) {
+          final updatedWps = acc.workplaces.map((w) {
+            if (w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName) {
+              return HcpAccountWorkplace(
+                hcpWorkplace: replacementInstitution.name,
+                address: replacementInstitution.institutionName,
+                cityMunicipality: replacementInstitution.cityMunicipality,
+                provinceName: replacementInstitution.provinceName,
+                isPrimary: w.isPrimary,
+                preferred: w.preferred,
+              );
+            }
+            return w;
+          }).toList();
+
+          _cachedHcpAccounts[i] = acc.copyWith(
+            workplaceId: (acc.workplaceId == rejectedInstitutionNameOrId || acc.workplaceId == oldName)
+                ? replacementInstitution.name
+                : acc.workplaceId,
+            workplaces: updatedWps,
+            workplaceApprovalNote: remappedTag,
+          );
+
+          if (acc.name != null && acc.name!.isNotEmpty) {
+            http.put(
+              Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(acc.name!)}'),
+              headers: _headers,
+              body: jsonEncode({
+                'workplace_id': replacementInstitution.name,
+                'workplace_approval_note': remappedTag,
+                'table_workplaces': updatedWps.map((w) => w.toJson()).toList(),
+              }),
+            ).catchError((_) => http.Response('', 500));
+          }
+        }
+      }
+
+      // 4. Remap across linked HCP Profile Submissions
+      for (int i = 0; i < _cachedSubmissions.length; i++) {
+        final sub = _cachedSubmissions[i];
+        final bool hasMatch = (sub.institution != null && (sub.institution == rejectedInstitutionNameOrId || sub.institution == oldName)) ||
+            sub.workplaces.any((w) => w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName || w.workplaceName == oldName);
+
+        if (hasMatch) {
+          final updatedWps = sub.workplaces.map((w) {
+            if (w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName || w.workplaceName == oldName) {
+              return w.copyWith(
+                hcpWorkplace: replacementInstitution.name,
+                workplaceName: replacementInstitution.institutionName,
+                cityMunicipality: replacementInstitution.cityMunicipality,
+                provinceName: replacementInstitution.provinceName,
+                regionName: replacementInstitution.regionName,
+                workflowState: 'Approved',
+                rejectionReason: null,
+              );
+            }
+            return w;
+          }).toList();
+
+          _cachedSubmissions[i] = sub.copyWith(
+            institution: (sub.institution == rejectedInstitutionNameOrId || sub.institution == oldName)
+                ? replacementInstitution.institutionName
+                : sub.institution,
+            workplaces: updatedWps,
+            rejectionRemarks: remappedTag,
+          );
+
+          if (sub.name != null && sub.name!.isNotEmpty) {
+            http.put(
+              Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(sub.name!)}'),
+              headers: _headers,
+              body: jsonEncode({
+                'institution': replacementInstitution.institutionName,
+                'rejection_remarks': remappedTag,
+                'table_workplaces': updatedWps.map((w) => w.toJson()).toList(),
+              }),
+            ).catchError((_) => http.Response('', 500));
+          }
+        }
+      }
+
+      // 5. Remap across linked HCP Doctors
+      for (int i = 0; i < _cachedDoctors.length; i++) {
+        final doc = _cachedDoctors[i];
+        final bool hasMatch = (doc.institution != null && (doc.institution == rejectedInstitutionNameOrId || doc.institution == oldName)) ||
+            doc.workplaces.any((w) => w.workplace == rejectedInstitutionNameOrId || w.workplace == oldName);
+
+        if (hasMatch) {
+          final updatedWps = doc.workplaces.map((w) {
+            if (w.workplace == rejectedInstitutionNameOrId || w.workplace == oldName) {
+              return HcpWorkplace(
+                workplace: replacementInstitution.name,
+                address: replacementInstitution.institutionName,
+                cityMunicipality: replacementInstitution.cityMunicipality,
+                provinceName: replacementInstitution.provinceName,
+                isPrimary: w.isPrimary,
+              );
+            }
+            return w;
+          }).toList();
+
+          _cachedDoctors[i] = doc.copyWith(
+            workplaces: updatedWps,
+            institution: replacementInstitution.name,
+          );
+
+          if (doc.name != null && doc.name!.isNotEmpty) {
+            http.put(
+              Uri.parse('$baseUrl/api/resource/HCP/${Uri.encodeComponent(doc.name!)}'),
+              headers: _headers,
+              body: jsonEncode({
+                'institution': replacementInstitution.name,
+                'table_workplaces': updatedWps.map((w) => {
+                  'workplace': w.workplace,
+                  'address': w.address,
+                  'is_primary': w.isPrimary ? 1 : 0,
+                }).toList(),
+              }),
+            ).catchError((_) => http.Response('', 500));
+          }
+        }
+      }
+
+      // 6. Notify MedRep of Remapping
+      NotificationService.showInstitutionRemappedNotification(
+        oldInstitutionName: oldName,
+        newInstitutionName: replacementInstitution.institutionName,
+        reason: note,
+      ).catchError((e) => AppLogger.e('ApiService', 'Notification dispatch failed: $e'));
+
+      notifyListeners();
+      AppLogger.i('ApiService', 'Successfully remapped rejected institution $oldName to ${replacementInstitution.institutionName}');
+      return true;
+    } catch (e, st) {
+      AppLogger.e('ApiService', 'remapRejectedInstitution error: $e', e, st);
+      return false;
+    }
+  }
+
+  /// Starts 60-second editing lock on an institution when user clicks "Edit"
+  void startEditingCooldown(String nameOrId, {String? user}) {
+    final idx = _cachedInstitutions.indexWhere((i) => i.name == nameOrId || i.institutionName.toLowerCase() == nameOrId.toLowerCase());
+    if (idx >= 0) {
+      final old = _cachedInstitutions[idx];
+      final editor = user ?? loggedInFullName ?? loggedInEmail ?? 'User';
+      _cachedInstitutions[idx] = old.copyWith(
+        activeEditingLock: DateTime.now(),
+        editingUser: editor,
+      );
+      notifyListeners();
+    }
+  }
+
+  /// Clears active editing cooldown on cancel or submit
+  void clearEditingCooldown(String nameOrId) {
+    final idx = _cachedInstitutions.indexWhere((i) => i.name == nameOrId || i.institutionName.toLowerCase() == nameOrId.toLowerCase());
+    if (idx >= 0) {
+      final old = _cachedInstitutions[idx];
+      _cachedInstitutions[idx] = old.copyWith(
+        activeEditingLock: null,
+        editingUser: null,
+      );
+      notifyListeners();
     }
   }
 
@@ -1631,10 +2903,12 @@ class ApiService extends ChangeNotifier {
       if (cache != null) {
         try {
           final List<dynamic> dataList = jsonDecode(cache);
-          return dataList.map((json) => Hcp.fromJson(json)).toList();
+          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          _cachedDoctors = list;
+          return list;
         } catch (_) {}
       }
-      return [];
+      return _cachedDoctors;
     }
 
     // Tier 1: Query HCP doctype with fields=["*"] via REST Resource API
@@ -1646,6 +2920,7 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['data'] ?? [];
         if (dataList.isNotEmpty) {
           final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          _cachedDoctors = list;
           await _writeToCache('doctors_cache.json', jsonEncode(dataList));
           return list;
         }
@@ -1665,6 +2940,7 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
         if (dataList.isNotEmpty) {
           final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          _cachedDoctors = list;
           await _writeToCache('doctors_cache.json', jsonEncode(dataList));
           return list;
         }
@@ -1684,6 +2960,7 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['data'] ?? [];
         if (dataList.isNotEmpty) {
           final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          _cachedDoctors = list;
           await _writeToCache('doctors_cache.json', jsonEncode(dataList));
           return list;
         }
@@ -1703,6 +2980,7 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
         if (dataList.isNotEmpty) {
           final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+          _cachedDoctors = list;
           await _writeToCache('doctors_cache.json', jsonEncode(dataList));
           return list;
         }
@@ -1716,10 +2994,13 @@ class ApiService extends ChangeNotifier {
     if (cache != null) {
       try {
         final List<dynamic> dataList = jsonDecode(cache);
-        return dataList.map((json) => Hcp.fromJson(json)).toList();
+        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        _cachedDoctors = list;
+        return list;
       } catch (_) {}
     }
 
+    if (_cachedDoctors.isNotEmpty) return _cachedDoctors;
     return [];
   }
 
@@ -1898,25 +3179,34 @@ class ApiService extends ChangeNotifier {
 
       // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
       final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+      final psgc = await fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
       final List<Map<String, dynamic>> cleanWps = [];
       if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
         for (var item in (payload['hcp_workplace'] as List)) {
           if (item is Map<String, dynamic>) {
             final map = Map<String, dynamic>.from(item);
             final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['address'] ?? map['workplace_name'] ?? '').toString().trim();
-            final wpId = rawWp.isNotEmpty ? LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null) : 'INST-00001';
-            final finalWpId = wpId.isNotEmpty ? wpId : 'INST-00001';
+            final rawProv = (map['province_name'] ?? map['province'] ?? '').toString().trim();
+            final rawCity = (map['city_municipality'] ?? map['city'] ?? '').toString().trim();
+
+            final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+              institutionIdOrName: rawWp,
+              cityIdOrName: rawCity,
+              provinceIdOrName: rawProv,
+              institutions: insts,
+              dynamicLocations: psgc,
+            );
 
             final isPref = (map['is_primary'] == 1 || map['is_primary'] == true ||
                 map['primary'] == 1 || map['primary'] == true ||
                 map['preferred'] == 1 || map['preferred'] == true ||
                 map['is_preferred'] == 1 || map['is_preferred'] == true);
 
-            // In ERPNext, HCP Workplace child table links to Institution via hcp_workplace.
-            // Do NOT send numeric PSGC province/city codes (e.g. 1376000000) which fail Link validation.
             cleanWps.add({
-              'hcp_workplace': finalWpId,
-              'workplace': finalWpId,
+              'hcp_workplace': resolvedLoc.workplaceId,
+              'workplace': resolvedLoc.workplaceId,
+              'province_name': resolvedLoc.provinceId,
+              'city_municipality': resolvedLoc.cityId,
               'is_primary': isPref ? 1 : 0,
               'primary': isPref ? 1 : 0,
               'preferred': isPref ? 1 : 0,
@@ -1929,11 +3219,32 @@ class ApiService extends ChangeNotifier {
         cleanWps.add({
           'hcp_workplace': 'INST-00001',
           'workplace': 'INST-00001',
+          'province_name': '1380600000',
+          'city_municipality': '1380608000',
           'is_primary': 1,
           'preferred': 1,
         });
       }
       payload['hcp_workplace'] = cleanWps;
+
+      // Ensure parent level region_name, province_name, city_municipality, institution are NEVER blank!
+      if (cleanWps.isNotEmpty) {
+        final prefMap = cleanWps.firstWhere((w) => w['is_primary'] == 1, orElse: () => cleanWps.first);
+        if (payload['institution'] == null || payload['institution'].toString().trim().isEmpty) {
+          payload['institution'] = prefMap['hcp_workplace'];
+        }
+        if (payload['province_name'] == null || payload['province_name'].toString().trim().isEmpty) {
+          payload['province_name'] = prefMap['province_name'];
+        }
+        if (payload['city_municipality'] == null || payload['city_municipality'].toString().trim().isEmpty) {
+          payload['city_municipality'] = prefMap['city_municipality'];
+        }
+        if (payload['region_name'] == null || payload['region_name'].toString().trim().isEmpty) {
+          final reg = LocationResolver.resolveRegionFromProvince(prefMap['province_name']);
+          final regId = LocationResolver.resolveRegionId(reg);
+          payload['region_name'] = regId.isNotEmpty ? regId : '1300000000';
+        }
+      }
 
       // Ensure contacts are properly structured
       if (payload['contacts'] is List) {
@@ -2173,20 +3484,53 @@ class ApiService extends ChangeNotifier {
       // Ensure hcp_workplace Link fields map to valid ERPNext Institution primary keys
       if (payload['hcp_workplace'] is List && (payload['hcp_workplace'] as List).isNotEmpty) {
         final insts = await fetchInstitutions().catchError((_) => <Institution>[]);
+        final psgc = await fetchPsgcLocations().catchError((_) => <PsgcLocation>[]);
         final List<Map<String, dynamic>> cleanWps = [];
         for (var item in (payload['hcp_workplace'] as List)) {
           if (item is Map<String, dynamic>) {
             final map = Map<String, dynamic>.from(item);
-            final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['address'] ?? '').toString().trim();
-            if (rawWp.isNotEmpty) {
-              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
-              map['hcp_workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
-              map['workplace'] = wpId.isNotEmpty ? wpId : 'INST-00001';
-            }
-            cleanWps.add(map);
+            final rawWp = (map['hcp_workplace'] ?? map['workplace'] ?? map['address'] ?? map['workplace_name'] ?? '').toString().trim();
+            final rawProv = (map['province_name'] ?? map['province'] ?? '').toString().trim();
+            final rawCity = (map['city_municipality'] ?? map['city'] ?? '').toString().trim();
+
+            final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+              institutionIdOrName: rawWp,
+              cityIdOrName: rawCity,
+              provinceIdOrName: rawProv,
+              institutions: insts,
+              dynamicLocations: psgc,
+            );
+
+            cleanWps.add({
+              'hcp_workplace': resolvedLoc.workplaceId,
+              'workplace': resolvedLoc.workplaceId,
+              'province_name': resolvedLoc.provinceId,
+              'city_municipality': resolvedLoc.cityId,
+              'is_primary': map['is_primary'] == 1 ? 1 : 0,
+              'preferred': map['preferred'] == 1 ? 1 : 0,
+            });
           }
         }
         payload['hcp_workplace'] = cleanWps;
+
+        // Ensure parent level region_name, province_name, city_municipality, institution are NEVER blank!
+        if (cleanWps.isNotEmpty) {
+          final prefMap = cleanWps.firstWhere((w) => w['is_primary'] == 1, orElse: () => cleanWps.first);
+          if (payload['institution'] == null || payload['institution'].toString().trim().isEmpty) {
+            payload['institution'] = prefMap['hcp_workplace'];
+          }
+          if (payload['province_name'] == null || payload['province_name'].toString().trim().isEmpty) {
+            payload['province_name'] = prefMap['province_name'];
+          }
+          if (payload['city_municipality'] == null || payload['city_municipality'].toString().trim().isEmpty) {
+            payload['city_municipality'] = prefMap['city_municipality'];
+          }
+          if (payload['region_name'] == null || payload['region_name'].toString().trim().isEmpty) {
+            final reg = LocationResolver.resolveRegionFromProvince(prefMap['province_name']);
+            final regId = LocationResolver.resolveRegionId(reg);
+            payload['region_name'] = regId.isNotEmpty ? regId : '1300000000';
+          }
+        }
       }
 
       final response = await http.put(
@@ -2230,14 +3574,244 @@ class ApiService extends ChangeNotifier {
     }
   }
 
-  /// Retrieve list of HCP Account doctype records
-  Future<List<HcpAccount>> fetchHcpAccounts() async {
+  /// Applies monthly auto-rollover on a list of HCP Accounts.
+  /// For any doctor account that was active in a prior month (and not archived),
+  /// if they do not yet have an account for the target current month, this automatically
+  /// carries them forward into the current month without modifying past archived cycles.
+  List<HcpAccount> applyMonthlyAutoRollover(
+    List<HcpAccount> rawAccounts, {
+    DateTime? referenceDate,
+    bool persistToServer = true,
+  }) {
+    if (rawAccounts.isEmpty) return rawAccounts;
+    final now = referenceDate ?? DateTime.now();
+    final targetMonthStart = DateTime(now.year, now.month, 1);
+    final targetValidFrom = HcpAccount.calculateMonthValidFrom(now);
+
+    // Group accounts by doctor ID and resolved program
+    final Map<String, List<HcpAccount>> byDocProg = {};
+    for (final acc in rawAccounts) {
+      final hcpId = (acc.hcp ?? '').trim().toLowerCase();
+      if (hcpId.isEmpty) continue;
+      final prog = LocationResolver.resolveProgramBranch(acc.accountOrProgram).toLowerCase();
+      final key = '$hcpId::$prog';
+      byDocProg.putIfAbsent(key, () => []).add(acc);
+    }
+
+    final List<HcpAccount> rolledOverAccounts = [];
+
+    byDocProg.forEach((key, accs) {
+      // 1. Check if doctor already has an active account for current month
+      final hasCurrentMonth = accs.any((a) {
+        if (a.isArchived) return false;
+        final vFrom = a.validFrom ?? a.startDate;
+        if (vFrom != null && vFrom.startsWith(targetValidFrom)) return true;
+        return a.isCurrentMonthActive(now);
+      });
+
+      if (hasCurrentMonth) return;
+
+      // 2. Find the most recent active account from previous cycles
+      final candidates = accs.where((a) {
+        if (a.isArchived || !a.isActive) return false;
+        final toStr = a.validTo ?? a.endDate;
+        if (toStr != null && toStr.isNotEmpty) {
+          try {
+            final toDate = DateTime.parse(toStr);
+            return toDate.isBefore(targetMonthStart);
+          } catch (_) {}
+        }
+        return true;
+      }).toList();
+
+      if (candidates.isEmpty) return;
+
+      // Sort by validTo descending to pick the most recent cycle
+      candidates.sort((a, b) {
+        final aTo = a.validTo ?? a.endDate ?? '';
+        final bTo = b.validTo ?? b.endDate ?? '';
+        return bTo.compareTo(aTo);
+      });
+
+      final sourceAccount = candidates.first;
+      final rolledOver = sourceAccount.copyForNewMonth(targetMonth: now);
+      rolledOverAccounts.add(rolledOver);
+    });
+
+    if (rolledOverAccounts.isEmpty) return rawAccounts;
+
+    return [...rawAccounts, ...rolledOverAccounts];
+  }
+
+  /// Deduplicates HCP Accounts so each doctor under a program only has one canonical record
+  List<HcpAccount> _deduplicateHcpAccounts(List<HcpAccount> accounts) {
+    final Map<String, HcpAccount> canonicalMap = {};
+    for (final acc in accounts) {
+      final hcpId = (acc.hcp ?? '').trim().toLowerCase();
+      if (hcpId.isEmpty) continue;
+      final prog = LocationResolver.resolveProgramBranch(acc.accountOrProgram).toLowerCase();
+      final mKey = acc.monthKey;
+      final key = '$hcpId::$prog::$mKey';
+      if (!canonicalMap.containsKey(key)) {
+        canonicalMap[key] = acc;
+      } else {
+        final existing = canonicalMap[key]!;
+        // Keep the richest record with populated child tables or more recent
+        if (existing.workplaces.isEmpty && acc.workplaces.isNotEmpty) {
+          canonicalMap[key] = acc;
+        } else if (existing.specialties.isEmpty && acc.specialties.isNotEmpty) {
+          canonicalMap[key] = acc;
+        } else if (existing.contacts.isEmpty && acc.contacts.isNotEmpty) {
+          canonicalMap[key] = acc;
+        }
+      }
+    }
+    return canonicalMap.values.toList();
+  }
+
+  /// Enriches an HCP Account with doctor masterlist data if child tables or fields are missing
+  HcpAccount _enrichSingleAccountWithMasterData(HcpAccount account) {
+    if (account.specialties.isNotEmpty && account.workplaces.isNotEmpty && account.contacts.isNotEmpty) {
+      return account;
+    }
+
+    // 1. Try finding matching doctor in cachedDoctors
+    final doc = _cachedDoctors.where((d) {
+      if (account.hcp != null && account.hcp!.isNotEmpty && d.name == account.hcp) {
+        return true;
+      }
+      if (account.hcpName != null && account.hcpName!.isNotEmpty && d.fullName.toLowerCase() == account.hcpName!.toLowerCase()) {
+        return true;
+      }
+      return false;
+    }).firstOrNull;
+
+    // 2. Try finding in previous cached accounts for this doctor
+    final prevAcc = _cachedHcpAccounts.where((a) =>
+        a != account &&
+        ((a.hcp != null && a.hcp == account.hcp) || (a.hcpName != null && a.hcpName == account.hcpName)) &&
+        (a.specialties.isNotEmpty || a.workplaces.isNotEmpty || a.contacts.isNotEmpty)
+    ).firstOrNull;
+
+    List<HcpAccountSpecialization> effectiveSpecs = List.from(account.specialties);
+    if (effectiveSpecs.isEmpty) {
+      if (prevAcc != null && prevAcc.specialties.isNotEmpty) {
+        effectiveSpecs = List.from(prevAcc.specialties);
+      } else if (doc != null && doc.specialties.isNotEmpty) {
+        effectiveSpecs = doc.specialties.map((s) => HcpAccountSpecialization(
+          hcpSpecialty: LocationResolver.resolveSpecialtyName(s.hcpSpecialty),
+          subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-')
+              ? LocationResolver.resolveSpecialtyName(s.subSpecialty)
+              : null,
+          isPrimary: s.isPrimary,
+          preferred: true,
+        )).toList();
+      } else if (account.specialty != null && account.specialty!.isNotEmpty) {
+        final specResolved = LocationResolver.resolveSpecialtyName(account.specialty);
+        final subResolved = (account.subSpecialty != null && account.subSpecialty!.isNotEmpty && account.subSpecialty != '-')
+            ? LocationResolver.resolveSpecialtyName(account.subSpecialty)
+            : null;
+        effectiveSpecs = [
+          HcpAccountSpecialization(
+            hcpSpecialty: specResolved,
+            subSpecialty: subResolved,
+            isPrimary: true,
+            preferred: true,
+          ),
+        ];
+      }
+    }
+
+    List<HcpAccountWorkplace> effectiveWps = List.from(account.workplaces);
+    if (effectiveWps.isEmpty) {
+      if (prevAcc != null && prevAcc.workplaces.isNotEmpty) {
+        effectiveWps = List.from(prevAcc.workplaces);
+      } else if (doc != null && doc.workplaces.isNotEmpty) {
+        effectiveWps = doc.workplaces.map((w) {
+          final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+            workplaceNameOrId: w.workplace,
+            rawCity: w.cityMunicipality,
+            rawProvince: w.provinceName,
+          );
+          return HcpAccountWorkplace(
+            hcpWorkplace: LocationResolver.resolveInstitutionName(w.workplace),
+            cityMunicipality: loc.cityName,
+            provinceName: loc.provinceName,
+            address: w.address,
+            isPrimary: w.isPrimary,
+            preferred: true,
+          );
+        }).toList();
+      } else if (account.workplaceId != null && account.workplaceId!.isNotEmpty) {
+        final wpResolved = LocationResolver.resolveInstitutionName(account.workplaceId);
+        final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+          workplaceNameOrId: wpResolved,
+        );
+        effectiveWps = [
+          HcpAccountWorkplace(
+            hcpWorkplace: wpResolved,
+            cityMunicipality: loc.cityName,
+            provinceName: loc.provinceName,
+            isPrimary: true,
+            preferred: true,
+          ),
+        ];
+      }
+    }
+
+    List<HcpAccountContact> effectiveContacts = List.from(account.contacts);
+    if (effectiveContacts.isEmpty) {
+      if (prevAcc != null && prevAcc.contacts.isNotEmpty) {
+        effectiveContacts = List.from(prevAcc.contacts);
+      } else if (doc != null && doc.contacts.isNotEmpty) {
+        final cNum = doc.contacts.first.contactNumber;
+        final cEm = doc.contacts.first.emailAddress;
+        if ((cNum != null && cNum.isNotEmpty) || (cEm != null && cEm.isNotEmpty)) {
+          effectiveContacts = [
+            HcpAccountContact(
+              contactNumber: cNum,
+              emailAddress: cEm,
+              isPrimary: true,
+              preferred: true,
+            ),
+          ];
+        }
+      } else if ((account.contactNumber != null && account.contactNumber!.isNotEmpty) ||
+          (account.contactEmail != null && account.contactEmail!.isNotEmpty)) {
+        effectiveContacts = [
+          HcpAccountContact(
+            contactNumber: account.contactNumber,
+            emailAddress: account.contactEmail,
+            isPrimary: true,
+            preferred: true,
+          ),
+        ];
+      }
+    }
+
+    return account.copyWith(
+      specialties: effectiveSpecs,
+      workplaces: effectiveWps,
+      contacts: effectiveContacts,
+    );
+  }
+
+  /// Batch enriches list of accounts with doctor masterlist data
+  List<HcpAccount> _enrichAccountsWithMasterDoctors(List<HcpAccount> accounts) {
+    return accounts.map((acc) => _enrichSingleAccountWithMasterData(acc)).toList();
+  }
+
+  /// Retrieve list of HCP Account doctype records with automatic monthly rollover
+  Future<List<HcpAccount>> fetchHcpAccounts({bool enableAutoRollover = true, DateTime? referenceDate}) async {
     if (_isOffline) {
       final cache = await _readFromCache('hcp_accounts_cache.json');
       if (cache != null) {
         try {
           final List<dynamic> dataList = jsonDecode(cache);
-          return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+          final raw = dataList.map((json) => HcpAccount.fromJson(json)).toList();
+          final deduplicated = _deduplicateHcpAccounts(raw);
+          final enriched = _enrichAccountsWithMasterDoctors(deduplicated);
+          return enableAutoRollover ? applyMonthlyAutoRollover(enriched, referenceDate: referenceDate, persistToServer: false) : enriched;
         } catch (_) {}
       }
       return [];
@@ -2251,8 +3825,13 @@ class ApiService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
-        await _writeToCache('hcp_accounts_cache.json', jsonEncode(dataList));
-        return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+        final raw = dataList.map((json) => HcpAccount.fromJson(json)).toList();
+        final deduplicated = _deduplicateHcpAccounts(raw);
+        final enriched = _enrichAccountsWithMasterDoctors(deduplicated);
+        final processed = enableAutoRollover ? applyMonthlyAutoRollover(enriched, referenceDate: referenceDate) : enriched;
+        _cachedHcpAccounts = processed;
+        await _writeToCache('hcp_accounts_cache.json', jsonEncode(deduplicated.map((a) => a.toJson()).toList()));
+        return processed;
       }
     } catch (e) {
       print('Fetch HCP Accounts direct error: $e');
@@ -2268,8 +3847,13 @@ class ApiService extends ChangeNotifier {
         final body = jsonDecode(clientResp.body);
         final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
         if (dataList.isNotEmpty) {
-          await _writeToCache('hcp_accounts_cache.json', jsonEncode(dataList));
-          return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+          final raw = dataList.map((json) => HcpAccount.fromJson(json)).toList();
+          final deduplicated = _deduplicateHcpAccounts(raw);
+          final enriched = _enrichAccountsWithMasterDoctors(deduplicated);
+          final processed = enableAutoRollover ? applyMonthlyAutoRollover(enriched, referenceDate: referenceDate) : enriched;
+          _cachedHcpAccounts = processed;
+          await _writeToCache('hcp_accounts_cache.json', jsonEncode(deduplicated.map((a) => a.toJson()).toList()));
+          return processed;
         }
       }
     } catch (e) {
@@ -2281,7 +3865,12 @@ class ApiService extends ChangeNotifier {
     if (cache != null) {
       try {
         final List<dynamic> dataList = jsonDecode(cache);
-        return dataList.map((json) => HcpAccount.fromJson(json)).toList();
+        final raw = dataList.map((json) => HcpAccount.fromJson(json)).toList();
+        final deduplicated = _deduplicateHcpAccounts(raw);
+        final enriched = _enrichAccountsWithMasterDoctors(deduplicated);
+        final processed = enableAutoRollover ? applyMonthlyAutoRollover(enriched, referenceDate: referenceDate, persistToServer: false) : enriched;
+        _cachedHcpAccounts = processed;
+        return processed;
       } catch (_) {}
     }
 
@@ -2297,7 +3886,8 @@ class ApiService extends ChangeNotifier {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return HcpAccount.fromJson(body['data']);
+        final acc = HcpAccount.fromJson(body['data']);
+        return _enrichSingleAccountWithMasterData(acc);
       }
     } catch (e) {
       print('Fetch HCP Account detail direct error: $e');
@@ -2312,9 +3902,16 @@ class ApiService extends ChangeNotifier {
       if (clientResp.statusCode == 200) {
         final body = jsonDecode(clientResp.body);
         final data = body['message'] ?? body['data'];
-        if (data != null) return HcpAccount.fromJson(data);
+        if (data != null) {
+          final acc = HcpAccount.fromJson(data);
+          return _enrichSingleAccountWithMasterData(acc);
+        }
       }
     } catch (_) {}
+
+    // Fallback from cache or _cachedHcpAccounts
+    final cached = _cachedHcpAccounts.where((a) => a.name == name).firstOrNull;
+    if (cached != null) return _enrichSingleAccountWithMasterData(cached);
 
     throw Exception('Failed to load HCP Account details: $name');
   }
@@ -2366,7 +3963,7 @@ class ApiService extends ChangeNotifier {
       return [];
     }
 
-    const submissionFields = '["name","owner","creation","modified","docstatus","workflow_state","profile_action","application_status","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
+    const submissionFields = '["name","owner","creation","modified","docstatus","workflow_state","profile_action","application_status","rejection_reason","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
     final encodedFields = Uri.encodeQueryComponent(submissionFields);
     final url = Uri.parse(
       '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit_page_length=5000&limit=5000&order_by=creation%20desc',
@@ -2376,8 +3973,93 @@ class ApiService extends ChangeNotifier {
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
+
+        // Map dedicated rejection_reason field directly from ERPNext DocType (ONLY for rejected status)
+        for (var d in dataList) {
+          if (d is Map) {
+            final wf = (d['workflow_state'] ?? d['status'] ?? '').toString().toLowerCase();
+            final isRej = wf == 'rejected' || wf.contains('reject') || d['docstatus'] == 2;
+            if (isRej) {
+              final reason = d['rejection_reason']?.toString().trim();
+              if (reason != null && reason.isNotEmpty) {
+                d['rejection_remarks'] = cleanCommentHtml(reason);
+              }
+            } else {
+              d['rejection_remarks'] = null;
+              d['rejection_reason'] = null;
+              d['rejected_by'] = null;
+            }
+          }
+        }
+
+        // Enrich rejected submissions with latest Frappe timeline comments if rejection_reason was empty
+        try {
+          final commentsUrl = Uri.parse(
+            '$baseUrl/api/resource/Comment?filters=[["reference_doctype","=","HCP Profile Submission"]]&fields=["reference_name","content","comment_by","creation"]&order_by=creation%20desc&limit_page_length=200',
+          );
+          final commResp = await http.get(commentsUrl, headers: _headers);
+          if (commResp.statusCode == 200) {
+            final commBody = jsonDecode(commResp.body);
+            final List<dynamic> commData = commBody['data'] ?? [];
+            final Map<String, Map<String, dynamic>> latestComments = {};
+            for (var c in commData) {
+              if (c is Map) {
+                final ref = c['reference_name']?.toString() ?? '';
+                if (ref.isNotEmpty && !latestComments.containsKey(ref)) {
+                  latestComments[ref] = c.cast<String, dynamic>();
+                }
+              }
+            }
+            for (var d in dataList) {
+              if (d is Map) {
+                final wf = (d['workflow_state'] ?? d['status'] ?? '').toString().toLowerCase();
+                final isRej = wf == 'rejected' || wf.contains('reject') || d['docstatus'] == 2;
+                if (!isRej) {
+                  d['rejection_remarks'] = null;
+                  d['rejected_by'] = null;
+                  continue;
+                }
+                final name = d['name']?.toString() ?? '';
+                if (latestComments.containsKey(name)) {
+                  if (d['rejection_remarks'] == null || d['rejection_remarks'].toString().trim().isEmpty) {
+                    d['rejection_remarks'] = cleanCommentHtml(latestComments[name]!['content']?.toString() ?? '');
+                  }
+                  d['rejected_by'] ??= latestComments[name]!['comment_by'];
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
+        // Fallback/Dedicated enrichment for MedRep/Sales User via getdoc if Comment resource returned 403
+        final unpopulatedRejected = dataList.where((d) {
+          if (d is! Map) return false;
+          final wf = (d['workflow_state'] ?? d['status'] ?? '').toString().toLowerCase();
+          final isRej = wf == 'rejected' || wf.contains('reject') || d['docstatus'] == 2;
+          final hasRemark = d['rejection_remarks'] != null && d['rejection_remarks'].toString().trim().isNotEmpty;
+          return isRej && !hasRemark;
+        }).toList();
+
+        if (unpopulatedRejected.isNotEmpty) {
+          await Future.wait(unpopulatedRejected.map((d) async {
+            final name = d['name']?.toString() ?? '';
+            if (name.isNotEmpty) {
+              try {
+                final comments = await fetchSubmissionComments(name);
+                if (comments.isNotEmpty) {
+                  final latest = comments.first;
+                  d['rejection_remarks'] = latest['content'];
+                  d['rejected_by'] = latest['comment_by'] ?? latest['owner'];
+                }
+              } catch (_) {}
+            }
+          }));
+        }
+
         await _writeToCache('submissions_cache.json', jsonEncode(dataList));
-        return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+        final list = dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+        _cachedSubmissions = list;
+        return list;
       } else {
         print('Fetch submissions error: ${response.statusCode} - ${response.body}');
       }
@@ -2396,7 +4078,9 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
         if (dataList.isNotEmpty) {
           await _writeToCache('submissions_cache.json', jsonEncode(dataList));
-          return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+          final list = dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+          _cachedSubmissions = list;
+          return list;
         }
       }
     } catch (e) {
@@ -2408,7 +4092,9 @@ class ApiService extends ChangeNotifier {
     if (cache != null) {
       try {
         final List<dynamic> dataList = jsonDecode(cache);
-        return dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+        final list = dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+        _cachedSubmissions = list;
+        return list;
       } catch (_) {}
     }
 
@@ -2424,7 +4110,29 @@ class ApiService extends ChangeNotifier {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        return HcpProfileSubmission.fromJson(body['data']);
+        final base = HcpProfileSubmission.fromJson(body['data']);
+        final isRej = base.isRejected;
+        if (!isRej) {
+          return base.copyWith(rejectionRemarks: null, rejectedBy: null);
+        }
+        if (base.rejectionRemarks != null && base.rejectionRemarks!.trim().isNotEmpty) {
+          return base;
+        }
+        try {
+          final comments = await fetchSubmissionComments(name);
+          if (comments.isNotEmpty) {
+            final latest = comments.first;
+            final commentText = latest['content']?.toString() ?? '';
+            final commentAuthor = latest['comment_by']?.toString() ?? latest['owner']?.toString() ?? '';
+            if (commentText.isNotEmpty) {
+              return base.copyWith(
+                rejectionRemarks: commentText,
+                rejectedBy: commentAuthor.isNotEmpty ? commentAuthor : base.rejectedBy,
+              );
+            }
+          }
+        } catch (_) {}
+        return base;
       }
     } catch (e) {
       print('Fetch submission detail direct error: $e');
@@ -2439,7 +4147,28 @@ class ApiService extends ChangeNotifier {
       if (resp.statusCode == 200) {
         final body = jsonDecode(resp.body);
         final data = body['message'] ?? body['data'];
-        if (data != null) return HcpProfileSubmission.fromJson(data);
+        if (data != null) {
+          final base = HcpProfileSubmission.fromJson(data);
+          final isRej = base.isRejected;
+          if (!isRej) {
+            return base.copyWith(rejectionRemarks: null, rejectedBy: null);
+          }
+          try {
+            final comments = await fetchSubmissionComments(name);
+            if (comments.isNotEmpty) {
+              final latest = comments.first;
+              final commentText = latest['content']?.toString() ?? '';
+              final commentAuthor = latest['comment_by']?.toString() ?? latest['owner']?.toString() ?? '';
+              if (commentText.isNotEmpty) {
+                return base.copyWith(
+                  rejectionRemarks: commentText,
+                  rejectedBy: commentAuthor.isNotEmpty ? commentAuthor : base.rejectedBy,
+                );
+              }
+            }
+          } catch (_) {}
+          return base;
+        }
       }
     } catch (_) {}
 
@@ -2658,58 +4387,67 @@ class ApiService extends ChangeNotifier {
             final rawWp = (map['workplace_name'] ?? map['workplace'] ?? map['hcp_workplace'] ?? map['address'] ?? '').toString().trim();
             final rawCity = (map['city_municipality'] ?? map['city_title'] ?? map['city_name'] ?? map['city'] ?? '').toString().trim();
             final rawProv = (map['province_name'] ?? map['province_title'] ?? map['province'] ?? '').toString().trim();
+            final rawReg = (map['region_name'] ?? map['region_title'] ?? map['region'] ?? '').toString().trim();
 
             if (rawWp.isNotEmpty) {
-              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
-              final wpName = LocationResolver.resolveInstitutionName(rawWp, insts.isNotEmpty ? insts : null);
-              final finalWpId = wpId.isNotEmpty ? wpId : rawWp;
-              final finalWpName = wpName.isNotEmpty ? wpName : rawWp;
-              map['hcp_workplace'] = finalWpId;
-              map['workplace'] = finalWpId;
-              map['workplace_name'] = finalWpName;
-              map['address'] = finalWpName;
-
-              final instMatch = insts.where((i) =>
+              final candidateMatch = insts.where((i) =>
                   i.name == rawWp ||
-                  i.name == wpId ||
                   i.name.toLowerCase() == rawWp.toLowerCase() ||
-                  i.institutionName.toLowerCase() == rawWp.toLowerCase() ||
-                  i.institutionName.toLowerCase() == wpName.toLowerCase()
+                  i.institutionName.toLowerCase() == rawWp.toLowerCase()
               ).firstOrNull;
 
-              final rawInstCity = instMatch?.rawCityMunicipality ?? instMatch?.cityMunicipality ?? '';
-              final cityInput = rawInstCity.isNotEmpty ? rawInstCity : rawCity;
-              if (cityInput.isNotEmpty) {
-                var cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
-                final cityName = LocationResolver.resolveCityName(cityInput, psgc.isNotEmpty ? psgc : null);
-                if (cityId == '133900000' || cityId.startsWith('1339')) {
-                  cityId = '1380608000'; // Ermita, Manila in ERPNext
-                }
-                final finalCityLink = cityId.isNotEmpty ? cityId : (rawInstCity.isNotEmpty ? rawInstCity : cityInput);
-                map['city_municipality'] = finalCityLink;
-                map['city'] = finalCityLink;
-                map['city_title'] = cityName.isNotEmpty ? cityName : cityInput;
-                map['city_name'] = cityName.isNotEmpty ? cityName : cityInput;
+              if (candidateMatch != null && candidateMatch.isRejected) {
+                throw Exception('Cannot submit doctor profile: Workplace "${candidateMatch.institutionName}" was rejected by SFE Specialist. Please modify and resubmit via Institution Submission.');
               }
 
-              final rawInstProv = instMatch?.rawProvinceName ?? instMatch?.provinceName ?? '';
-              final provInput = rawInstProv.isNotEmpty ? rawInstProv : rawProv;
-              if (provInput.isNotEmpty) {
-                var provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
-                final provName = LocationResolver.resolveProvinceName(provInput, psgc.isNotEmpty ? psgc : null);
-                if (provId == '1376000000' || provId.startsWith('1376')) {
-                  provId = '1380600000'; // Metro Manila-Manila in ERPNext
-                }
-                final finalProvLink = provId.isNotEmpty ? provId : (rawInstProv.isNotEmpty ? rawInstProv : provInput);
-                map['province_name'] = finalProvLink;
-                map['province'] = finalProvLink;
-                map['province_title'] = provName.isNotEmpty ? provName : provInput;
-              }
+              final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+                institutionIdOrName: rawWp,
+                institutionName: candidateMatch?.institutionName ?? rawWp,
+                cityIdOrName: rawCity.isNotEmpty ? rawCity : (candidateMatch?.rawCityMunicipality ?? candidateMatch?.cityMunicipality),
+                provinceIdOrName: rawProv.isNotEmpty ? rawProv : (candidateMatch?.rawProvinceName ?? candidateMatch?.provinceName),
+                regionIdOrName: rawReg.isNotEmpty ? rawReg : (candidateMatch?.rawRegionName ?? candidateMatch?.regionName),
+                streetAddress: candidateMatch?.streetAddress,
+                institutions: insts,
+                dynamicLocations: psgc,
+              );
+
+              map['hcp_workplace'] = resolvedLoc.workplaceId;
+              map['workplace'] = resolvedLoc.workplaceId;
+              map['workplace_name'] = resolvedLoc.workplaceName;
+              map['address'] = resolvedLoc.workplaceName;
+              map['city_municipality'] = resolvedLoc.cityId;
+              map['city'] = resolvedLoc.cityId;
+              map['city_title'] = resolvedLoc.cityName;
+              map['city_name'] = resolvedLoc.cityName;
+              map['province_name'] = resolvedLoc.provinceId;
+              map['province'] = resolvedLoc.provinceId;
+              map['province_title'] = resolvedLoc.provinceName;
+              map['region_name'] = resolvedLoc.regionId;
+              map['region_title'] = resolvedLoc.regionName;
             }
             cleanWps.add(map);
           }
         }
         payload['table_workplaces'] = cleanWps;
+
+        // Guarantee parent payload region_name, province_name, city_municipality, institution are NEVER blank!
+        if (cleanWps.isNotEmpty) {
+          final prefMap = cleanWps.firstWhere((w) => w['preferred'] == 1, orElse: () => cleanWps.first);
+          if (payload['institution'] == null || payload['institution'].toString().trim().isEmpty) {
+            payload['institution'] = prefMap['hcp_workplace'] ?? prefMap['workplace_name'];
+          }
+          if (payload['city_municipality'] == null || payload['city_municipality'].toString().trim().isEmpty) {
+            payload['city_municipality'] = prefMap['city_municipality'];
+          }
+          if (payload['province_name'] == null || payload['province_name'].toString().trim().isEmpty) {
+            payload['province_name'] = prefMap['province_name'];
+          }
+          if (payload['region_name'] == null || payload['region_name'].toString().trim().isEmpty) {
+            final regFromProv = LocationResolver.resolveRegionFromProvince(prefMap['province_title'] ?? prefMap['province_name']);
+            final regId = LocationResolver.resolveRegionId(regFromProv);
+            payload['region_name'] = regId.isNotEmpty ? regId : (prefMap['region_name'] ?? '1300000000');
+          }
+        }
       }
 
       // Ensure table_contact_info fields preserve preferred flags
@@ -2927,6 +4665,14 @@ class ApiService extends ChangeNotifier {
                 ? 'Submit for Processing'
                 : 'Submit for Approval');
 
+        final String targetWfState = (actionToApply == 'Approve')
+            ? 'Approved'
+            : (actionToApply == 'Submit for Processing' ? 'Processed' : 'Pending Approval');
+        final String targetAppStatus = (targetWfState == 'Processed' || targetWfState == 'Approved')
+            ? 'Applied'
+            : 'Not Applied';
+        final int targetDocstatus = (targetWfState == 'Approved') ? 1 : 0;
+
         try {
           final wfResp = await http.post(
             wfUrl,
@@ -2943,20 +4689,63 @@ class ApiService extends ChangeNotifier {
           print('apply_workflow error: $e');
         }
 
+        // Direct state alignment via frappe.client.set_value to ensure ERPNext Desk is immediately 100% aligned
+        // This guarantees IT Managers reviewing in ERPNext Desk see Processed + Applied for Existing HCP immediately
+        try {
+          final setValUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+          await http.post(
+            setValUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doctype': 'HCP Profile Submission',
+              'name': createdName,
+              'fieldname': {
+                'workflow_state': targetWfState,
+                'status': targetWfState,
+                'application_status': targetAppStatus,
+                'profile_action': effectiveProfileAction,
+                'docstatus': targetDocstatus,
+              },
+            }),
+          );
+        } catch (e) {
+          print('State alignment set_value error: $e');
+        }
+
+        // Automatic non-destructive masterlist merge & HCP Account sync for Existing HCP
+        if (actionToApply == 'Submit for Processing' || targetWfState == 'Processed') {
+          try {
+            await processExistingSubmission(HcpProfileSubmission.fromJson(liveDoc.isNotEmpty ? liveDoc : fullDocParam));
+          } catch (e) {
+            print('[SUBMISSION] Existing HCP auto-merge notice: $e');
+          }
+        }
+
         // Re-fetch the final clean state from ERPNext to return accurate data
         // No redundant frappe.client.save call, preventing dirty/Not Saved state in ERPNext Desk
         try {
           final freshResp = await http.get(updateUrl, headers: _headers);
           if (freshResp.statusCode == 200) {
             final freshBody = jsonDecode(freshResp.body);
-            final freshSub = HcpProfileSubmission.fromJson(freshBody['data']);
+            final rawData = Map<String, dynamic>.from(freshBody['data']);
+            rawData['workflow_state'] = rawData['workflow_state'] ?? targetWfState;
+            rawData['status'] = rawData['status'] ?? targetWfState;
+            rawData['application_status'] = rawData['application_status'] ?? targetAppStatus;
+            rawData['profile_action'] = rawData['profile_action'] ?? effectiveProfileAction;
+            final freshSub = HcpProfileSubmission.fromJson(rawData);
             await _updateSubmissionInLocalCache(freshSub);
             return freshSub;
           }
         } catch (_) {}
       }
 
-      final result = HcpProfileSubmission.fromJson(createdData ?? payload);
+      final fallbackData = Map<String, dynamic>.from(createdData ?? payload);
+      fallbackData['name'] = createdName ?? fallbackData['name'];
+      fallbackData['workflow_state'] = (effectiveProfileAction == 'Existing HCP' || targetWorkflow == 'Processed') ? 'Processed' : 'Pending Approval';
+      fallbackData['status'] = fallbackData['workflow_state'];
+      fallbackData['application_status'] = (fallbackData['workflow_state'] == 'Processed') ? 'Applied' : 'Not Applied';
+      fallbackData['profile_action'] = effectiveProfileAction;
+      final result = HcpProfileSubmission.fromJson(fallbackData);
       await _updateSubmissionInLocalCache(result);
       return result;
     } catch (e) {
@@ -2996,6 +4785,9 @@ class ApiService extends ChangeNotifier {
       payload['application_status'] = targetAppStatus;
       payload['status'] = targetWorkflow;
       payload['docstatus'] = targetDocstatus;
+      if (targetWorkflow == 'Pending Approval') {
+        payload['rejection_reason'] = '';
+      }
 
       // Handle consent_photo if base64
       if (payload['consent_photo'] != null) {
@@ -3113,58 +4905,67 @@ class ApiService extends ChangeNotifier {
             final rawWp = (map['workplace_name'] ?? map['workplace'] ?? map['hcp_workplace'] ?? map['address'] ?? '').toString().trim();
             final rawCity = (map['city_municipality'] ?? map['city_title'] ?? map['city_name'] ?? map['city'] ?? '').toString().trim();
             final rawProv = (map['province_name'] ?? map['province_title'] ?? map['province'] ?? '').toString().trim();
+            final rawReg = (map['region_name'] ?? map['region_title'] ?? map['region'] ?? '').toString().trim();
 
             if (rawWp.isNotEmpty) {
-              final wpId = LocationResolver.resolveInstitutionId(rawWp, insts.isNotEmpty ? insts : null);
-              final wpName = LocationResolver.resolveInstitutionName(rawWp, insts.isNotEmpty ? insts : null);
-              final finalWpId = wpId.isNotEmpty ? wpId : rawWp;
-              final finalWpName = wpName.isNotEmpty ? wpName : rawWp;
-              map['hcp_workplace'] = finalWpId;
-              map['workplace'] = finalWpId;
-              map['workplace_name'] = finalWpName;
-              map['address'] = finalWpName;
-
-              final instMatch = insts.where((i) =>
+              final candidateMatch = insts.where((i) =>
                   i.name == rawWp ||
-                  i.name == wpId ||
                   i.name.toLowerCase() == rawWp.toLowerCase() ||
-                  i.institutionName.toLowerCase() == rawWp.toLowerCase() ||
-                  i.institutionName.toLowerCase() == wpName.toLowerCase()
+                  i.institutionName.toLowerCase() == rawWp.toLowerCase()
               ).firstOrNull;
 
-              final rawInstCity = instMatch?.rawCityMunicipality ?? instMatch?.cityMunicipality ?? '';
-              final cityInput = rawInstCity.isNotEmpty ? rawInstCity : rawCity;
-              if (cityInput.isNotEmpty) {
-                var cityId = LocationResolver.resolveCityId(cityInput, psgc.isNotEmpty ? psgc : null);
-                final cityName = LocationResolver.resolveCityName(cityInput, psgc.isNotEmpty ? psgc : null);
-                if (cityId == '133900000' || cityId.startsWith('1339')) {
-                  cityId = '1380608000'; // Ermita, Manila in ERPNext
-                }
-                final finalCityLink = cityId.isNotEmpty ? cityId : (rawInstCity.isNotEmpty ? rawInstCity : cityInput);
-                map['city_municipality'] = finalCityLink;
-                map['city'] = finalCityLink;
-                map['city_title'] = cityName.isNotEmpty ? cityName : cityInput;
-                map['city_name'] = cityName.isNotEmpty ? cityName : cityInput;
+              if (candidateMatch != null && candidateMatch.isRejected) {
+                throw Exception('Cannot update doctor profile: Workplace "${candidateMatch.institutionName}" was rejected by SFE Specialist. Please modify and resubmit via Institution Submission.');
               }
 
-              final rawInstProv = instMatch?.rawProvinceName ?? instMatch?.provinceName ?? '';
-              final provInput = rawInstProv.isNotEmpty ? rawInstProv : rawProv;
-              if (provInput.isNotEmpty) {
-                var provId = LocationResolver.resolveProvinceId(provInput, psgc.isNotEmpty ? psgc : null);
-                final provName = LocationResolver.resolveProvinceName(provInput, psgc.isNotEmpty ? psgc : null);
-                if (provId == '1376000000' || provId.startsWith('1376')) {
-                  provId = '1380600000'; // Metro Manila-Manila in ERPNext
-                }
-                final finalProvLink = provId.isNotEmpty ? provId : (rawInstProv.isNotEmpty ? rawInstProv : provInput);
-                map['province_name'] = finalProvLink;
-                map['province'] = finalProvLink;
-                map['province_title'] = provName.isNotEmpty ? provName : provInput;
-              }
+              final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+                institutionIdOrName: rawWp,
+                institutionName: candidateMatch?.institutionName ?? rawWp,
+                cityIdOrName: rawCity.isNotEmpty ? rawCity : (candidateMatch?.rawCityMunicipality ?? candidateMatch?.cityMunicipality),
+                provinceIdOrName: rawProv.isNotEmpty ? rawProv : (candidateMatch?.rawProvinceName ?? candidateMatch?.provinceName),
+                regionIdOrName: rawReg.isNotEmpty ? rawReg : (candidateMatch?.rawRegionName ?? candidateMatch?.regionName),
+                streetAddress: candidateMatch?.streetAddress,
+                institutions: insts,
+                dynamicLocations: psgc,
+              );
+
+              map['hcp_workplace'] = resolvedLoc.workplaceId;
+              map['workplace'] = resolvedLoc.workplaceId;
+              map['workplace_name'] = resolvedLoc.workplaceName;
+              map['address'] = resolvedLoc.workplaceName;
+              map['city_municipality'] = resolvedLoc.cityId;
+              map['city'] = resolvedLoc.cityId;
+              map['city_title'] = resolvedLoc.cityName;
+              map['city_name'] = resolvedLoc.cityName;
+              map['province_name'] = resolvedLoc.provinceId;
+              map['province'] = resolvedLoc.provinceId;
+              map['province_title'] = resolvedLoc.provinceName;
+              map['region_name'] = resolvedLoc.regionId;
+              map['region_title'] = resolvedLoc.regionName;
             }
             cleanWps.add(map);
           }
         }
         payload['table_workplaces'] = cleanWps;
+
+        // Guarantee parent payload region_name, province_name, city_municipality, institution are NEVER blank!
+        if (cleanWps.isNotEmpty) {
+          final prefMap = cleanWps.firstWhere((w) => w['preferred'] == 1, orElse: () => cleanWps.first);
+          if (payload['institution'] == null || payload['institution'].toString().trim().isEmpty) {
+            payload['institution'] = prefMap['hcp_workplace'] ?? prefMap['workplace_name'];
+          }
+          if (payload['city_municipality'] == null || payload['city_municipality'].toString().trim().isEmpty) {
+            payload['city_municipality'] = prefMap['city_municipality'];
+          }
+          if (payload['province_name'] == null || payload['province_name'].toString().trim().isEmpty) {
+            payload['province_name'] = prefMap['province_name'];
+          }
+          if (payload['region_name'] == null || payload['region_name'].toString().trim().isEmpty) {
+            final regFromProv = LocationResolver.resolveRegionFromProvince(prefMap['province_title'] ?? prefMap['province_name']);
+            final regId = LocationResolver.resolveRegionId(regFromProv);
+            payload['region_name'] = regId.isNotEmpty ? regId : (prefMap['region_name'] ?? '1300000000');
+          }
+        }
       }
 
       // Sanitize table_contact_info
@@ -3384,7 +5185,6 @@ class ApiService extends ChangeNotifier {
       }
 
       final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
-      bool wfSuccess = false;
       String targetState = '';
       int targetDocStatus = 0;
 
@@ -3429,32 +5229,16 @@ class ApiService extends ChangeNotifier {
       }
 
       if (action == 'Reject') {
-        await rejectSubmission(subName, remarks: remarks, submission: liveSubmission);
+        final rejectedSub = await rejectSubmission(subName, remarks: remarks, submission: liveSubmission);
+        return rejectedSub;
+      }
 
-        // Update local cache immediately
+      if (action == 'Submit for Processing' || action == 'Select for Processing') {
         try {
-          final cache = await _readFromCache('submissions_cache.json');
-          if (cache != null) {
-            final List<dynamic> dataList = jsonDecode(cache);
-            final index = dataList.indexWhere((item) => (item is Map && item['name'] == subName));
-            if (index >= 0) {
-              dataList[index]['workflow_state'] = 'Rejected';
-              dataList[index]['status'] = 'Rejected';
-              dataList[index]['docstatus'] = 0;
-              await _writeToCache('submissions_cache.json', jsonEncode(dataList));
-            }
-          }
-        } catch (_) {}
-
-        final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
-        try {
-          final freshResp = await http.get(updateUrl, headers: _headers);
-          if (freshResp.statusCode == 200) {
-            final freshBody = jsonDecode(freshResp.body);
-            return HcpProfileSubmission.fromJson(freshBody['data']);
-          }
-        } catch (_) {}
-        return liveSubmission.copyWith(workflowState: 'Rejected', status: 'Rejected', docstatus: 0);
+          await processExistingSubmission(liveSubmission);
+        } catch (e) {
+          print('[WORKFLOW] processExistingSubmission notice: $e');
+        }
       }
 
       // For "Submit for Processing" and "Submit for Approval":
@@ -3485,7 +5269,7 @@ class ApiService extends ChangeNotifier {
       }
 
     try {
-      final wfResp = await http.post(
+      await http.post(
         wfUrl,
         headers: _headers,
         body: jsonEncode({
@@ -3493,13 +5277,13 @@ class ApiService extends ChangeNotifier {
           'action': effectiveAction,
         }),
       );
-      if (wfResp.statusCode == 200) {
-        wfSuccess = true;
-      }
     } catch (_) {}
 
-    // Fallback: If workflow hook failed or needs explicit update via set_value
-    if (!wfSuccess && targetState.isNotEmpty) {
+    // Seal state fields directly via frappe.client.set_value to ensure ERPNext Desk is 100% aligned
+    final targetAppStatus = (targetState == 'Processed' || targetState == 'Approved')
+        ? 'Applied'
+        : 'Not Applied';
+    if (targetState.isNotEmpty) {
       try {
         final setValUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
         await http.post(
@@ -3512,29 +5296,13 @@ class ApiService extends ChangeNotifier {
               'profile_action': effectiveActionProfile,
               'workflow_state': targetState,
               'status': targetState,
+              'application_status': targetAppStatus,
               'docstatus': targetDocStatus,
             },
           }),
         );
       } catch (_) {}
     }
-
-    // Clean save to clear any unsaved/dirty state in Desk
-    try {
-      final saveUrl = Uri.parse('$baseUrl/api/method/frappe.client.save');
-      await http.post(
-        saveUrl,
-        headers: _headers,
-        body: jsonEncode({
-          'doc': {
-            ...docWorkflowPayload,
-            'workflow_state': targetState,
-            'status': targetState,
-            'docstatus': targetDocStatus,
-          }
-        }),
-      );
-    } catch (_) {}
 
     // Update local cache
     try {
@@ -3545,13 +5313,19 @@ class ApiService extends ChangeNotifier {
         if (index >= 0) {
           dataList[index]['workflow_state'] = targetState;
           dataList[index]['status'] = targetState;
+          dataList[index]['application_status'] = targetAppStatus;
           dataList[index]['docstatus'] = targetDocStatus;
           await _writeToCache('submissions_cache.json', jsonEncode(dataList));
         }
       }
     } catch (_) {}
 
-      return liveSubmission.copyWith(workflowState: targetState, status: targetState, docstatus: targetDocStatus);
+    return liveSubmission.copyWith(
+      workflowState: targetState,
+      status: targetState,
+      applicationStatus: targetAppStatus,
+      docstatus: targetDocStatus,
+    );
     } finally {
       _inFlightSubmissions.remove(subName);
     }
@@ -3616,10 +5390,12 @@ class ApiService extends ChangeNotifier {
     }
     try {
       final cleanProgram = LocationResolver.resolveProgramBranch(program);
+      final validFrom = HcpAccount.calculateMonthValidFrom();
+      final validTo = HcpAccount.calculateMonthValidTo();
 
-      // Check if HCP Account already exists for this doctor and program
+      // Check if HCP Account already exists for this doctor and program in the CURRENT active month
       final searchUrl = Uri.parse(
-        '$baseUrl/api/resource/HCP%20Account?filters=[["hcp","=","$hcpId"]]&fields=["name","account_or_program"]&limit_page_length=50',
+        '$baseUrl/api/resource/HCP%20Account?filters=[["hcp","=","$hcpId"]]&fields=["name","account_or_program","valid_from","valid_to"]&limit_page_length=50',
       );
       final searchResp = await http.get(searchUrl, headers: _headers);
       String? existingAccountName;
@@ -3628,13 +5404,12 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> data = searchBody['data'] ?? [];
         for (var d in data) {
           final aProg = (d['account_or_program'] ?? '').toString().trim();
-          if (LocationResolver.isSameProgram(aProg, cleanProgram)) {
+          final vFrom = (d['valid_from'] ?? '').toString().trim();
+          // Strictly match existing account in the current month so historical months are never overwritten
+          if (LocationResolver.isSameProgram(aProg, cleanProgram) && vFrom.startsWith(validFrom)) {
             existingAccountName = d['name'];
             break;
           }
-        }
-        if (existingAccountName == null && data.isNotEmpty) {
-          existingAccountName = data[0]['name'];
         }
       }
 
@@ -3642,70 +5417,75 @@ class ApiService extends ChangeNotifier {
           ? salesPerson.trim()
           : getTerritoryManagerForTerritory(territory);
 
-      final validFrom = HcpAccount.calculateMonthValidFrom();
-      final validTo = HcpAccount.calculateMonthValidTo();
-
-      // Filter strictly to preferred items for this program's HCP Account
+      // Filter strictly to the single preferred item for this program's HCP Account
       final prefSpecsList = specialties.where((s) => s.preferred || s.isPrimary).toList();
-      final effectiveSpecs = prefSpecsList.isNotEmpty ? prefSpecsList : specialties;
+      final effectiveSpec = prefSpecsList.isNotEmpty
+          ? prefSpecsList.first
+          : (specialties.isNotEmpty ? specialties.first : null);
 
-      // Clean specialization child table links
+      // Clean specialization child table links - strictly 1 preferred row
       final List<Map<String, dynamic>> cleanSpecs = [];
-      for (var s in effectiveSpecs) {
-        final sId = LocationResolver.resolveSpecialtyId(s.hcpSpecialty);
+      if (effectiveSpec != null) {
+        final sId = LocationResolver.resolveSpecialtyId(effectiveSpec.hcpSpecialty);
         if (sId.isNotEmpty) {
-          final subId = (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-')
-              ? LocationResolver.resolveSpecialtyId(s.subSpecialty)
+          final subId = (effectiveSpec.subSpecialty != null &&
+                  effectiveSpec.subSpecialty!.isNotEmpty &&
+                  effectiveSpec.subSpecialty != '-')
+              ? LocationResolver.resolveSpecialtyId(effectiveSpec.subSpecialty)
               : null;
           cleanSpecs.add({
             'hcp_specialty': sId,
-            'specialty': sId,
             if (subId != null && subId.isNotEmpty) 'sub_specialty': subId,
-            'is_primary': 1,
-            'preferred': 1,
           });
         }
       }
 
-      final prefWpsList = workplaces.where((w) => w.preferred || w.isPrimary).toList();
-      final effectiveWps = prefWpsList.isNotEmpty ? prefWpsList : workplaces;
+      final usableWorkplaces = workplaces.where((w) {
+        final wpRaw = w.hcpWorkplace.trim();
+        return wpRaw.isNotEmpty;
+      }).toList();
 
-      // Clean workplace child table links
+      final prefWpsList = usableWorkplaces.where((w) => w.preferred || w.isPrimary).toList();
+      final effectiveWp = prefWpsList.isNotEmpty
+          ? prefWpsList.first
+          : (usableWorkplaces.isNotEmpty ? usableWorkplaces.first : null);
+
+      // Clean workplace child table links - strictly 1 preferred row
       final List<Map<String, dynamic>> cleanWps = [];
-      for (var w in effectiveWps) {
-        final wpId = LocationResolver.resolveInstitutionId(w.hcpWorkplace);
-        if (wpId.isNotEmpty) {
-          cleanWps.add({
-            'hcp_workplace': wpId,
-            'workplace': wpId,
-            'is_primary': 1,
-            'preferred': 1,
-          });
-        }
+      if (effectiveWp != null) {
+        final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+          institutionIdOrName: effectiveWp.hcpWorkplace,
+          cityIdOrName: effectiveWp.cityMunicipality,
+          provinceIdOrName: effectiveWp.provinceName,
+        );
+        cleanWps.add({
+          'hcp_workplace': resolvedLoc.workplaceId,
+          'city_municipality': resolvedLoc.cityId,
+          'province_name': resolvedLoc.provinceId,
+        });
       }
       if (cleanWps.isEmpty) {
         cleanWps.add({
           'hcp_workplace': 'INST-00001',
-          'workplace': 'INST-00001',
-          'is_primary': 1,
-          'preferred': 1,
+          'city_municipality': '1380608000',
+          'province_name': '1380600000',
         });
       }
 
       final prefContactsList = contacts.where((c) => c.preferred || c.isPrimary).toList();
-      final effectiveContacts = prefContactsList.isNotEmpty ? prefContactsList : contacts;
+      final effectiveContact = prefContactsList.isNotEmpty
+          ? prefContactsList.first
+          : (contacts.isNotEmpty ? contacts.first : null);
 
-      // Clean contact child table
+      // Clean contact child table - strictly 1 preferred row
       final List<Map<String, dynamic>> cleanContacts = [];
-      for (var c in effectiveContacts) {
-        final num = (c.contactNumber ?? '').trim();
-        final em = (c.emailAddress ?? '').trim();
+      if (effectiveContact != null) {
+        final num = (effectiveContact.contactNumber ?? '').trim();
+        final em = (effectiveContact.emailAddress ?? '').trim();
         if (num.isNotEmpty || em.isNotEmpty) {
           cleanContacts.add({
             if (num.isNotEmpty) 'contact_number': num,
             if (em.isNotEmpty) 'email_address': em,
-            'is_primary': 1,
-            'preferred': 1,
           });
         }
       }
@@ -3714,6 +5494,7 @@ class ApiService extends ChangeNotifier {
       final primarySpecId = cleanSpecs.isNotEmpty ? cleanSpecs.first['hcp_specialty'] : null;
       final primarySubSpecId = cleanSpecs.isNotEmpty ? cleanSpecs.first['sub_specialty'] : null;
       final primaryWpId = cleanWps.isNotEmpty ? cleanWps.first['hcp_workplace'] : null;
+      final wpApprovalNote = LocationResolver.getInstitutionApprovalStatusNote(primaryWpId);
       final primaryContactNum = cleanContacts.isNotEmpty ? cleanContacts.first['contact_number'] : null;
       final primaryEmail = cleanContacts.isNotEmpty ? cleanContacts.first['email_address'] : null;
 
@@ -3729,6 +5510,7 @@ class ApiService extends ChangeNotifier {
         if (primarySpecId != null) 'specialty': primarySpecId,
         if (primarySubSpecId != null) 'sub_specialty': primarySubSpecId,
         if (primaryWpId != null) 'workplace_id': primaryWpId,
+        'workplace_approval_note': wpApprovalNote,
         if (primaryContactNum != null) 'contact_number': primaryContactNum,
         if (primaryEmail != null) 'contact_email': primaryEmail,
         'specialization': cleanSpecs,
@@ -3737,85 +5519,12 @@ class ApiService extends ChangeNotifier {
       };
 
       if (existingAccountName != null) {
-        // Fetch existing HCP Account to merge child tables additively (Eliminates Lost Updates)
-        try {
-          final getAccUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(existingAccountName)}');
-          final accResp = await http.get(getAccUrl, headers: _headers);
-          if (accResp.statusCode == 200) {
-            final accData = jsonDecode(accResp.body)['data'] ?? {};
-
-            // 1. Additive Merge for Specializations
-            final existingSpecs = (accData['specialization'] as List? ?? []);
-            final Map<String, Map<String, dynamic>> specMap = {};
-            for (var item in existingSpecs) {
-              if (item is Map) {
-                final sId = (item['hcp_specialty'] ?? item['specialty'] ?? '').toString().trim();
-                if (sId.isNotEmpty) {
-                  final m = Map<String, dynamic>.from(item);
-                  m['preferred'] = 0; // demote prior preferred unless newly re-asserted
-                  m['is_primary'] = 0;
-                  specMap[sId] = m;
-                }
-              }
-            }
-            for (var s in cleanSpecs) {
-              final sId = (s['hcp_specialty'] ?? s['specialty'] ?? '').toString().trim();
-              if (sId.isNotEmpty) specMap[sId] = s;
-            }
-            final mergedSpecs = specMap.values.toList();
-            if (mergedSpecs.isNotEmpty) payload['specialization'] = mergedSpecs;
-
-            // 2. Additive Merge for Workplaces
-            final existingWps = (accData['workplace_info'] as List? ?? []);
-            final Map<String, Map<String, dynamic>> wpMap = {};
-            for (var item in existingWps) {
-              if (item is Map) {
-                final wId = (item['hcp_workplace'] ?? item['workplace'] ?? '').toString().trim();
-                if (wId.isNotEmpty) {
-                  final m = Map<String, dynamic>.from(item);
-                  m['preferred'] = 0;
-                  m['is_primary'] = 0;
-                  wpMap[wId] = m;
-                }
-              }
-            }
-            for (var w in cleanWps) {
-              final wId = (w['hcp_workplace'] ?? w['workplace'] ?? '').toString().trim();
-              if (wId.isNotEmpty) wpMap[wId] = w;
-            }
-            final mergedWps = wpMap.values.toList();
-            if (mergedWps.isNotEmpty) payload['workplace_info'] = mergedWps;
-
-            // 3. Additive Merge for Contacts
-            final existingContacts = (accData['contact_info'] as List? ?? []);
-            final Map<String, Map<String, dynamic>> contactMap = {};
-            for (var item in existingContacts) {
-              if (item is Map) {
-                final key = '${item['contact_number'] ?? ""}_${item['email_address'] ?? ""}';
-                if (key != '_') {
-                  final m = Map<String, dynamic>.from(item);
-                  m['preferred'] = 0;
-                  m['is_primary'] = 0;
-                  contactMap[key] = m;
-                }
-              }
-            }
-            for (var c in cleanContacts) {
-              final key = '${c['contact_number'] ?? ""}_${c['email_address'] ?? ""}';
-              if (key != '_') contactMap[key] = c;
-            }
-            final mergedContacts = contactMap.values.toList();
-            if (mergedContacts.isNotEmpty) payload['contact_info'] = mergedContacts;
-          }
-        } catch (e) {
-          print('[SYNC HCP ACCOUNT] Additive merge warning: $e');
-        }
-
+        // Direct update with clean single-row child tables (overwrites legacy duplicates and keeps strictly preferred)
         final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(existingAccountName)}');
         final resp = await http.put(updateUrl, headers: _headers, body: jsonEncode(payload));
         if (resp.statusCode != 200) {
           final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.save');
-          await http.post(
+          final rpcResp = await http.post(
             rpcUrl,
             headers: _headers,
             body: jsonEncode({
@@ -3826,13 +5535,16 @@ class ApiService extends ChangeNotifier {
               }
             }),
           );
+          if (rpcResp.statusCode != 200) {
+            throw Exception('Failed to update HCP Account ($existingAccountName): HTTP ${resp.statusCode}, RPC ${rpcResp.statusCode}');
+          }
         }
       } else {
         final createUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account');
         final resp = await http.post(createUrl, headers: _headers, body: jsonEncode(payload));
         if (resp.statusCode != 200) {
           final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
-          await http.post(
+          final rpcResp = await http.post(
             rpcUrl,
             headers: _headers,
             body: jsonEncode({
@@ -3842,6 +5554,9 @@ class ApiService extends ChangeNotifier {
               }
             }),
           );
+          if (rpcResp.statusCode != 200) {
+            throw Exception('Failed to create HCP Account: HTTP ${resp.statusCode}, RPC ${rpcResp.statusCode}');
+          }
         }
       }
     } catch (e) {
@@ -3851,6 +5566,181 @@ class ApiService extends ChangeNotifier {
       if (!isAlreadyLocked && hcpId.isNotEmpty) {
         _inFlightHcpIds.remove(hcpId);
       }
+    }
+  }
+
+  /// Process an Existing HCP submission (Direct Auto-Merge into HCP Masterlist & HCP Account Sync)
+  /// Aligned with AGENTS.md:
+  /// - Action: 'Submit for Processing' -> State: 'Processed'
+  /// - Requires NO Managerial Approval
+  /// - Merges automatically upon submission directly into universal HCP record and syncs HCP Account with preferred features active.
+  Future<void> processExistingSubmission(HcpProfileSubmission submission) async {
+    final subName = submission.name;
+    HcpProfileSubmission fullSub = submission;
+    if (subName != null && subName.isNotEmpty) {
+      try {
+        fullSub = await fetchSubmissionDetail(subName);
+      } catch (_) {}
+    }
+
+    String effectiveHcpId = (fullSub.hcpName).trim();
+    if (effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP') {
+      print('[PROCESS EXISTING] Notice: hcpName is empty, cannot update existing doctor masterlist.');
+      return;
+    }
+
+    // 1. Additive Merge into universal HCP Masterlist
+    try {
+      final existing = await fetchDoctorDetail(effectiveHcpId);
+
+      // Additive merge of specialties
+      final Map<String, HcpSpecialty> mergedSpecs = {};
+      for (var s in existing.specialties) {
+        mergedSpecs[s.hcpSpecialty] = s;
+      }
+      for (var s in fullSub.specialties) {
+        final specId = LocationResolver.resolveSpecialtyId(s.hcpSpecialty);
+        if (specId.isNotEmpty) {
+          mergedSpecs[specId] = HcpSpecialty(
+            hcpSpecialty: specId,
+            subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-')
+                ? LocationResolver.resolveSpecialtyId(s.subSpecialty)
+                : null,
+            isPrimary: s.preferred,
+          );
+        }
+      }
+
+      // Additive merge of workplaces
+      final Map<String, HcpWorkplace> mergedWps = {};
+      for (var w in existing.workplaces) {
+        mergedWps[w.workplace] = w;
+      }
+      for (var w in fullSub.workplaces) {
+        final wpId = LocationResolver.resolveInstitutionId(w.hcpWorkplace);
+        if (wpId.isNotEmpty) {
+          mergedWps[wpId] = HcpWorkplace(
+            workplace: wpId,
+            provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
+            cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
+            address: w.workplaceName,
+            isPrimary: w.preferred,
+          );
+        }
+      }
+
+      // Additive merge of contacts
+      final Map<String, HcpContact> mergedContacts = {};
+      for (var c in existing.contacts) {
+        final key = '${c.contactNumber ?? ""}_${c.emailAddress ?? ""}';
+        if (key != '_') mergedContacts[key] = c;
+      }
+      for (var c in fullSub.contacts) {
+        final key = '${c.contactNumber ?? ""}_${c.emailAddress ?? ""}';
+        if (key != '_') {
+          mergedContacts[key] = HcpContact(
+            contactNumber: c.contactNumber,
+            emailAddress: c.emailAddress,
+            isPrimary: c.preferred,
+          );
+        }
+      }
+
+      final updatedDoctor = Hcp(
+        name: existing.name,
+        firstName: (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) ? fullSub.firstName! : existing.firstName,
+        middleName: (fullSub.middleName != null && fullSub.middleName!.isNotEmpty) ? fullSub.middleName : existing.middleName,
+        lastName: (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) ? fullSub.lastName! : existing.lastName,
+        birthDate: (fullSub.birthDate != null && fullSub.birthDate!.isNotEmpty) ? fullSub.birthDate : existing.birthDate,
+        hcpPhoto: (fullSub.hcpPhoto != null && fullSub.hcpPhoto!.isNotEmpty) ? fullSub.hcpPhoto : existing.hcpPhoto,
+        hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType ?? existing.hcpType),
+        hcpPractice: fullSub.hcpPractice ?? existing.hcpPractice,
+        specialties: mergedSpecs.values.toList(),
+        workplaces: mergedWps.values.toList(),
+        contacts: mergedContacts.values.toList(),
+        profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
+      );
+      await updateDoctor(effectiveHcpId, updatedDoctor);
+      print('[PROCESS EXISTING] Universal HCP record $effectiveHcpId updated successfully.');
+    } catch (e) {
+      print('[PROCESS EXISTING] Doctor update notice: $e');
+    }
+
+    // 2. Sync Program-Specific HCP Account with Strictly Preferred Data
+    final docParts = [
+      if (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) fullSub.firstName!,
+      if (fullSub.middleName != null && fullSub.middleName!.isNotEmpty && fullSub.middleName != '-') fullSub.middleName!,
+      if (fullSub.lastName != null && fullSub.lastName!.isNotEmpty) fullSub.lastName!,
+    ];
+    final docFullName = (fullSub.hcpFullName != null && fullSub.hcpFullName!.isNotEmpty)
+        ? fullSub.hcpFullName!
+        : (docParts.isNotEmpty ? docParts.join(' ') : '${fullSub.firstName ?? ''} ${fullSub.lastName ?? ''}'.trim());
+
+    final submittingUser = (fullSub.userId != null && fullSub.userId!.trim().isNotEmpty)
+        ? fullSub.userId!.trim()
+        : ((fullSub.medrepEmail != null && fullSub.medrepEmail!.trim().isNotEmpty)
+            ? fullSub.medrepEmail!.trim()
+            : (fullSub.owner ?? loggedInEmail ?? ''));
+
+    final targetProg = (fullSub.accountOrProgram != null && fullSub.accountOrProgram!.trim().isNotEmpty)
+        ? fullSub.accountOrProgram!.trim()
+        : selectedProgram;
+
+    final resolvedTerritory = await resolveUserTerritory(
+      userEmail: submittingUser,
+      program: targetProg,
+      currentTerritory: fullSub.territory,
+      currentSalesPerson: fullSub.salesPerson,
+    );
+
+    final prefSubSpecs = fullSub.specialties.where((s) => s.preferred).toList();
+    final effectiveSubSpecs = prefSubSpecs.isNotEmpty ? prefSubSpecs : fullSub.specialties;
+
+    final prefSubWps = fullSub.workplaces.where((w) => w.preferred).toList();
+    final effectiveSubWps = prefSubWps.isNotEmpty ? prefSubWps : fullSub.workplaces;
+
+    final prefSubContacts = fullSub.contacts.where((c) => c.preferred).toList();
+    final effectiveSubContacts = prefSubContacts.isNotEmpty ? prefSubContacts : fullSub.contacts;
+
+    try {
+      await syncHcpAccount(
+        hcpId: effectiveHcpId,
+        hcpFullName: docFullName.isNotEmpty ? docFullName : 'Doctor',
+        program: targetProg,
+        territory: resolvedTerritory.territoryCode,
+        salesPerson: resolvedTerritory.territoryManager,
+        userId: submittingUser.isNotEmpty ? submittingUser : loggedInEmail,
+        specialties: effectiveSubSpecs
+            .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
+            .map((s) => HcpAccountSpecialization(
+                  hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
+                  subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
+                  isPrimary: true,
+                  preferred: true,
+                ))
+            .toList(),
+        workplaces: effectiveSubWps
+            .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
+            .map((w) => HcpAccountWorkplace(
+                  hcpWorkplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
+                  address: w.workplaceName,
+                  isPrimary: true,
+                  preferred: true,
+                ))
+            .toList(),
+        contacts: effectiveSubContacts
+            .where((c) => ((c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)))
+            .map((c) => HcpAccountContact(
+                  contactNumber: c.contactNumber,
+                  emailAddress: c.emailAddress,
+                  isPrimary: true,
+                  preferred: true,
+                ))
+            .toList(),
+      );
+      print('[PROCESS EXISTING] Program HCP Account synced with single preferred rows for $effectiveHcpId');
+    } catch (e) {
+      print('[PROCESS EXISTING] syncHcpAccount notice: $e');
     }
   }
 
@@ -3889,6 +5779,15 @@ class ApiService extends ChangeNotifier {
 
       if (fullSub.workflowState == 'Rejected') {
         throw Exception('Cannot approve submission $subName: it was already rejected.');
+      }
+
+      // District / Territory Enforcement: Manager cannot approve submission from another district
+      if (isManager && !isAdmin) {
+        final managedTerrs = getManagedTerritoryCodes();
+        final subTerr = (fullSub.territory ?? '').trim();
+        if (managedTerrs.isNotEmpty && subTerr.isNotEmpty && !managedTerrs.contains(subTerr)) {
+          throw Exception('Cannot approve submission: Doctor belongs to territory "$subTerr", which is outside your assigned district.');
+        }
       }
 
       String effectiveHcpId = fullSub.hcpName.trim();
@@ -3933,6 +5832,17 @@ class ApiService extends ChangeNotifier {
           _inFlightHcpIds.add(effectiveHcpId);
           lockedHcpId = effectiveHcpId;
         } else {
+          SubmissionWorkplace? primaryWp;
+          if (fullSub.workplaces.isNotEmpty) {
+            primaryWp = fullSub.workplaces.firstWhere((w) => w.preferred, orElse: () => fullSub.workplaces.first);
+          }
+          final primaryLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+            institutionIdOrName: primaryWp?.hcpWorkplace ?? primaryWp?.workplaceName ?? fullSub.institution,
+            cityIdOrName: primaryWp?.cityMunicipality ?? primaryWp?.cityTitle ?? fullSub.cityMunicipality,
+            provinceIdOrName: primaryWp?.provinceName ?? primaryWp?.provinceTitle ?? fullSub.provinceName,
+            regionIdOrName: primaryWp?.regionName ?? primaryWp?.regionTitle ?? fullSub.regionName,
+          );
+
           final newDoctor = Hcp(
             firstName: (fullSub.firstName != null && fullSub.firstName!.trim().isNotEmpty) ? fullSub.firstName!.trim() : 'Doctor',
             middleName: (fullSub.middleName != null && fullSub.middleName!.trim().isNotEmpty && fullSub.middleName!.trim() != '-') ? fullSub.middleName!.trim() : '-',
@@ -3941,6 +5851,10 @@ class ApiService extends ChangeNotifier {
             hcpPhoto: fullSub.hcpPhoto,
             hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType),
             hcpPractice: (fullSub.hcpPractice != null && fullSub.hcpPractice!.isNotEmpty) ? fullSub.hcpPractice! : 'Prescribing',
+            regionName: primaryLoc.regionId,
+            provinceName: primaryLoc.provinceId,
+            cityMunicipality: primaryLoc.cityId,
+            institution: primaryLoc.workplaceId,
             specialties: fullSub.specialties
                 .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
                 .map((s) => HcpSpecialty(
@@ -3951,13 +5865,22 @@ class ApiService extends ChangeNotifier {
                 .toList(),
             workplaces: fullSub.workplaces
                 .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
-                .map((w) => HcpWorkplace(
-                      workplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
-                      provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
-                      cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
-                      address: w.workplaceName,
-                      isPrimary: w.preferred,
-                    ))
+                .map((w) {
+                  final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+                    institutionIdOrName: w.hcpWorkplace,
+                    institutionName: w.workplaceName,
+                    cityIdOrName: w.cityMunicipality ?? w.cityTitle,
+                    provinceIdOrName: w.provinceName ?? w.provinceTitle,
+                    regionIdOrName: w.regionName ?? w.regionTitle,
+                  );
+                  return HcpWorkplace(
+                    workplace: loc.workplaceId,
+                    provinceName: loc.provinceId,
+                    cityMunicipality: loc.cityId,
+                    address: loc.workplaceName,
+                    isPrimary: w.preferred,
+                  );
+                })
                 .toList(),
             contacts: fullSub.contacts
                 .where((c) => (c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty))
@@ -4010,13 +5933,19 @@ class ApiService extends ChangeNotifier {
             mergedWps[w.workplace] = w;
           }
           for (var w in fullSub.workplaces) {
-            final wpId = LocationResolver.resolveInstitutionId(w.hcpWorkplace);
-            if (wpId.isNotEmpty) {
-              mergedWps[wpId] = HcpWorkplace(
-                workplace: wpId,
-                provinceName: (w.provinceName != null && w.provinceName!.isNotEmpty) ? LocationResolver.resolveProvinceId(w.provinceName) : null,
-                cityMunicipality: (w.cityMunicipality != null && w.cityMunicipality!.isNotEmpty) ? LocationResolver.resolveCityId(w.cityMunicipality) : null,
-                address: w.workplaceName,
+            final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+              institutionIdOrName: w.hcpWorkplace,
+              institutionName: w.workplaceName,
+              cityIdOrName: w.cityMunicipality ?? w.cityTitle,
+              provinceIdOrName: w.provinceName ?? w.provinceTitle,
+              regionIdOrName: w.regionName ?? w.regionTitle,
+            );
+            if (loc.workplaceId.isNotEmpty) {
+              mergedWps[loc.workplaceId] = HcpWorkplace(
+                workplace: loc.workplaceId,
+                provinceName: loc.provinceId,
+                cityMunicipality: loc.cityId,
+                address: loc.workplaceName,
                 isPrimary: w.preferred,
               );
             }
@@ -4039,6 +5968,17 @@ class ApiService extends ChangeNotifier {
             }
           }
 
+          SubmissionWorkplace? primaryWp;
+          if (fullSub.workplaces.isNotEmpty) {
+            primaryWp = fullSub.workplaces.firstWhere((w) => w.preferred, orElse: () => fullSub.workplaces.first);
+          }
+          final primaryLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+            institutionIdOrName: primaryWp?.hcpWorkplace ?? primaryWp?.workplaceName ?? existing.institution,
+            cityIdOrName: primaryWp?.cityMunicipality ?? primaryWp?.cityTitle ?? existing.cityMunicipality,
+            provinceIdOrName: primaryWp?.provinceName ?? primaryWp?.provinceTitle ?? existing.provinceName,
+            regionIdOrName: primaryWp?.regionName ?? primaryWp?.regionTitle ?? existing.regionName,
+          );
+
           final updatedDoctor = Hcp(
             name: existing.name,
             firstName: (fullSub.firstName != null && fullSub.firstName!.isNotEmpty) ? fullSub.firstName! : existing.firstName,
@@ -4048,6 +5988,10 @@ class ApiService extends ChangeNotifier {
             hcpPhoto: (fullSub.hcpPhoto != null && fullSub.hcpPhoto!.isNotEmpty) ? fullSub.hcpPhoto : existing.hcpPhoto,
             hcpType: LocationResolver.resolveHcpTypeId(fullSub.hcpType ?? existing.hcpType),
             hcpPractice: fullSub.hcpPractice ?? existing.hcpPractice,
+            regionName: primaryLoc.regionId,
+            provinceName: primaryLoc.provinceId,
+            cityMunicipality: primaryLoc.cityId,
+            institution: primaryLoc.workplaceId,
             specialties: mergedSpecs.values.toList(),
             workplaces: mergedWps.values.toList(),
             contacts: mergedContacts.values.toList(),
@@ -4111,6 +6055,15 @@ class ApiService extends ChangeNotifier {
         }
       }
 
+      final prefSubSpecs = fullSub.specialties.where((s) => s.preferred).toList();
+      final effectiveSubSpecs = prefSubSpecs.isNotEmpty ? prefSubSpecs : fullSub.specialties;
+
+      final prefSubWps = fullSub.workplaces.where((w) => w.preferred).toList();
+      final effectiveSubWps = prefSubWps.isNotEmpty ? prefSubWps : fullSub.workplaces;
+
+      final prefSubContacts = fullSub.contacts.where((c) => c.preferred).toList();
+      final effectiveSubContacts = prefSubContacts.isNotEmpty ? prefSubContacts : fullSub.contacts;
+
       try {
         await syncHcpAccount(
           hcpId: effectiveHcpId,
@@ -4119,8 +6072,8 @@ class ApiService extends ChangeNotifier {
           territory: resolvedTerritory.territoryCode,
           salesPerson: resolvedTerritory.territoryManager,
           userId: submittingUser.isNotEmpty ? submittingUser : loggedInEmail,
-          specialties: fullSub.specialties
-              .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty && s.preferred)
+          specialties: effectiveSubSpecs
+              .where((s) => s.hcpSpecialty != null && s.hcpSpecialty!.isNotEmpty)
               .map((s) => HcpAccountSpecialization(
                     hcpSpecialty: LocationResolver.resolveSpecialtyId(s.hcpSpecialty),
                     subSpecialty: (s.subSpecialty != null && s.subSpecialty!.isNotEmpty && s.subSpecialty != '-') ? LocationResolver.resolveSpecialtyId(s.subSpecialty) : null,
@@ -4128,8 +6081,8 @@ class ApiService extends ChangeNotifier {
                     preferred: true,
                   ))
               .toList(),
-          workplaces: fullSub.workplaces
-              .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty && w.preferred)
+          workplaces: effectiveSubWps
+              .where((w) => w.hcpWorkplace != null && w.hcpWorkplace!.isNotEmpty)
               .map((w) => HcpAccountWorkplace(
                     hcpWorkplace: LocationResolver.resolveInstitutionId(w.hcpWorkplace),
                     address: w.workplaceName,
@@ -4137,8 +6090,8 @@ class ApiService extends ChangeNotifier {
                     preferred: true,
                   ))
               .toList(),
-          contacts: fullSub.contacts
-              .where((c) => ((c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)) && c.preferred)
+          contacts: effectiveSubContacts
+              .where((c) => ((c.contactNumber != null && c.contactNumber!.isNotEmpty) || (c.emailAddress != null && c.emailAddress!.isNotEmpty)))
               .map((c) => HcpAccountContact(
                     contactNumber: c.contactNumber,
                     emailAddress: c.emailAddress,
@@ -4278,121 +6231,287 @@ class ApiService extends ChangeNotifier {
   }
 
   /// Reject a pending HCP Profile Submission (Admin / Manager)
-  Future<void> rejectSubmission(String submissionName, {String remarks = '', HcpProfileSubmission? submission}) async {
+  Future<HcpProfileSubmission> rejectSubmission(String submissionName, {String remarks = '', HcpProfileSubmission? submission}) async {
     bool workflowApplied = false;
+    final trimmedRemarks = remarks.trim();
 
-    // 1. Fetch live document from ERPNext to ensure full context, profile_action, and state
-    Map<String, dynamic> liveDoc = {};
+    // 1. Direct atomic transition via frappe.client.set_value:
+    // Sets workflow_state: 'Rejected', status: 'Rejected', application_status: 'Applied',
+    // and stores the rejection comment in the dedicated field 'rejection_reason'
     try {
-      final getUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submissionName)}');
-      final getResp = await http.get(getUrl, headers: _headers);
-      if (getResp.statusCode == 200) {
-        liveDoc = jsonDecode(getResp.body)['data'] ?? {};
-      }
-    } catch (e) {
-      print('[REJECT] Fetch live document warning: $e');
-    }
-
-    // Ensure essential doc fields for Frappe workflow evaluation
-    final docPayload = Map<String, dynamic>.from(liveDoc);
-    docPayload['doctype'] = 'HCP Profile Submission';
-    docPayload['name'] = submissionName;
-    if (docPayload['profile_action'] == null || docPayload['profile_action'].toString().trim().isEmpty) {
-      if (submission != null && submission.profileAction != null && submission.profileAction!.isNotEmpty) {
-        docPayload['profile_action'] = submission.profileAction;
-      } else if (docPayload['hcp_name'] != null && docPayload['hcp_name'].toString().trim().isNotEmpty) {
-        docPayload['profile_action'] = 'Existing HCP';
-      } else {
-        docPayload['profile_action'] = 'New HCP';
-      }
-    }
-
-    // 2. Pre-arm rejection: Set application_status = 'Applied' on the server first.
-    // This allows ERPNext's before_save sync_submission() to see 'Changes already applied'
-    // and skip apply_changes(), preventing the DoesNotExistError (HCP None not found) on New HCP submissions.
-    try {
-      final preArmUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
-      final preArmResp = await http.post(
-        preArmUrl,
+      final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+      final svResp = await http.post(
+        setValueUrl,
         headers: _headers,
         body: jsonEncode({
           'doctype': 'HCP Profile Submission',
           'name': submissionName,
-          'fieldname': 'application_status',
-          'value': 'Applied',
+          'fieldname': {
+            'workflow_state': 'Rejected',
+            'status': 'Rejected',
+            'application_status': 'Applied',
+            'rejection_reason': trimmedRemarks,
+            'docstatus': 0,
+          },
         }),
       );
-      if (preArmResp.statusCode == 200) {
-        docPayload['application_status'] = 'Applied';
-        print('[REJECT] Successfully pre-armed application_status=Applied for $submissionName');
-      }
-    } catch (e) {
-      print('[REJECT] Pre-arm application_status warning: $e');
-    }
-
-    // 3. Primary: Official Frappe workflow engine transition
-    try {
-      final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
-      final wfResp = await http.post(
-        wfUrl,
-        headers: _headers,
-        body: jsonEncode({
-          'doc': docPayload,
-          'action': 'Reject',
-        }),
-      );
-      if (wfResp.statusCode == 200) {
+      if (svResp.statusCode == 200) {
         workflowApplied = true;
-        print('[REJECT] Successfully applied workflow action "Reject" for $submissionName');
+        print('[REJECT] Successfully rejected and saved rejection_reason via frappe.client.set_value for $submissionName');
       } else {
-        print('[REJECT] apply_workflow response: ${wfResp.statusCode} - ${wfResp.body}');
+        print('[REJECT] set_value response: ${svResp.statusCode} - ${svResp.body}');
       }
     } catch (e) {
-      print('[REJECT] Error applying workflow action Reject: $e');
+      print('[REJECT] set_value error: $e');
     }
 
-    // 4. Robust fallback: frappe.client.set_value directly setting workflow_state to Rejected
+    // 2. Fallback: Official Frappe workflow engine transition with fresh document snapshot
     if (!workflowApplied) {
       try {
-        final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
-        final svResp = await http.post(
-          setValueUrl,
+        Map<String, dynamic> freshDoc = {};
+        final getUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submissionName)}');
+        final getResp = await http.get(getUrl, headers: _headers);
+        if (getResp.statusCode == 200) {
+          freshDoc = jsonDecode(getResp.body)['data'] ?? {};
+        }
+
+        freshDoc['doctype'] = 'HCP Profile Submission';
+        freshDoc['name'] = submissionName;
+        freshDoc['application_status'] = 'Applied';
+        freshDoc['rejection_reason'] = trimmedRemarks;
+        if (freshDoc['profile_action'] == null || freshDoc['profile_action'].toString().trim().isEmpty) {
+          freshDoc['profile_action'] = (submission?.profileAction?.isNotEmpty == true)
+              ? submission!.profileAction
+              : (freshDoc['hcp_name'] != null && freshDoc['hcp_name'].toString().trim().isNotEmpty ? 'Existing HCP' : 'New HCP');
+        }
+
+        final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+        final wfResp = await http.post(
+          wfUrl,
           headers: _headers,
           body: jsonEncode({
-            'doctype': 'HCP Profile Submission',
-            'name': submissionName,
-            'fieldname': {
-              'workflow_state': 'Rejected',
-              'application_status': 'Applied',
-              if (remarks.isNotEmpty) 'rejection_remarks': remarks,
-            },
+            'doc': freshDoc,
+            'action': 'Reject',
           }),
         );
-        if (svResp.statusCode == 200) {
+        if (wfResp.statusCode == 200) {
           workflowApplied = true;
-          print('[REJECT] Successfully rejected via frappe.client.set_value for $submissionName');
+          print('[REJECT] Successfully applied workflow action "Reject" for $submissionName');
+          try {
+            final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+            await http.post(
+              setValueUrl,
+              headers: _headers,
+              body: jsonEncode({
+                'doctype': 'HCP Profile Submission',
+                'name': submissionName,
+                'fieldname': 'rejection_reason',
+                'value': trimmedRemarks,
+              }),
+            );
+          } catch (_) {}
         } else {
-          print('[REJECT] set_value response: ${svResp.statusCode} - ${svResp.body}');
+          print('[REJECT] apply_workflow fallback response: ${wfResp.statusCode} - ${wfResp.body}');
         }
       } catch (e) {
-        print('[REJECT] set_value fallback warning: $e');
+        print('[REJECT] apply_workflow fallback error: $e');
       }
     }
 
-    // 4. Update local cache immediately
+    // 3. Also post to Frappe timeline comment as non-blocking secondary record
+    if (trimmedRemarks.isNotEmpty) {
+      try {
+        await addSubmissionComment(
+          submissionName: submissionName,
+          content: trimmedRemarks,
+        );
+      } catch (e) {
+        print('[REJECT] addSubmissionComment notice: $e');
+      }
+    }
+
+    if (!workflowApplied) {
+      throw Exception('Failed to reject submission on ERPNext server. Please verify network or managerial permissions.');
+    }
+
+    // 4. Re-fetch the final clean state from ERPNext to verify server state
+    final updateUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(submissionName)}');
+    HcpProfileSubmission freshSub;
     try {
-      final cache = await _readFromCache('submissions_cache.json');
-      if (cache != null) {
-        final List<dynamic> dataList = jsonDecode(cache);
-        final index = dataList.indexWhere((item) => (item is Map && item['name'] == submissionName));
-        if (index >= 0) {
-          dataList[index]['workflow_state'] = 'Rejected';
-          dataList[index]['status'] = 'Rejected';
-          dataList[index]['docstatus'] = 0;
-          await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+      final freshResp = await http.get(updateUrl, headers: _headers);
+      if (freshResp.statusCode == 200) {
+        final freshBody = jsonDecode(freshResp.body);
+        final rawData = Map<String, dynamic>.from(freshBody['data']);
+        rawData['workflow_state'] = 'Rejected';
+        rawData['status'] = 'Rejected';
+        freshSub = HcpProfileSubmission.fromJson(rawData);
+      } else {
+        freshSub = (submission ?? HcpProfileSubmission(hcpName: submissionName)).copyWith(
+          workflowState: 'Rejected',
+          status: 'Rejected',
+          docstatus: 0,
+        );
+      }
+    } catch (_) {
+      freshSub = (submission ?? HcpProfileSubmission(hcpName: submissionName)).copyWith(
+        workflowState: 'Rejected',
+        status: 'Rejected',
+        docstatus: 0,
+      );
+    }
+
+    freshSub = freshSub.copyWith(
+      workflowState: 'Rejected',
+      status: 'Rejected',
+      docstatus: 0,
+      rejectionRemarks: remarks.trim().isNotEmpty ? remarks.trim() : freshSub.rejectionRemarks,
+      rejectedBy: (loggedInFullName != null && loggedInFullName!.trim().isNotEmpty)
+          ? loggedInFullName!.trim()
+          : (loggedInEmail ?? 'Manager'),
+    );
+
+    // 5. Update local cache immediately
+    await _updateSubmissionInLocalCache(freshSub);
+    return freshSub;
+  }
+
+  /// Add a comment/rejection note to an HCP Profile Submission via Frappe API
+  Future<bool> addSubmissionComment({
+    required String submissionName,
+    required String content,
+  }) async {
+    if (_isOffline) return false;
+    try {
+      final url = Uri.parse('$baseUrl/api/method/frappe.desk.form.utils.add_comment');
+      final authorName = (loggedInFullName != null && loggedInFullName!.trim().isNotEmpty)
+          ? loggedInFullName!.trim()
+          : (loggedInEmail ?? 'Manager');
+      final authorEmail = loggedInEmail ?? 'administrator@profinsights.biz';
+
+      final resp = await http.post(
+        url,
+        headers: _headers,
+        body: jsonEncode({
+          'reference_doctype': 'HCP Profile Submission',
+          'reference_name': submissionName,
+          'content': content.trim(),
+          'comment_email': authorEmail,
+          'comment_by': authorName,
+        }),
+      );
+      if (resp.statusCode == 200) {
+        print('[COMMENT] Successfully added comment to $submissionName');
+        return true;
+      } else {
+        print('[COMMENT] add_comment warning: ${resp.statusCode} - ${resp.body}');
+      }
+    } catch (e) {
+      print('[COMMENT] add_comment error: $e');
+    }
+    return false;
+  }
+
+  /// Clean HTML formatting and tags from Frappe rich text comments
+  static String cleanCommentHtml(String raw) {
+    return raw
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll(r'&#39;', "'")
+        .replaceAll('\n\n', '\n')
+        .trim();
+  }
+
+  /// Fetch all comments for an HCP Profile Submission ordered newest first.
+  /// Uses frappe.desk.form.load.getdoc as the primary method so that MedReps (Sales User role)
+  /// can read comments without encountering 403 Forbidden on the Comment doctype.
+  Future<List<Map<String, dynamic>>> fetchSubmissionComments(String submissionName) async {
+    if (_isOffline) return [];
+
+    // 1. Primary: Frappe form load getdoc (allowed for Sales User / MedRep without DocType permission errors)
+    try {
+      final getDocUrl = Uri.parse(
+        '$baseUrl/api/method/frappe.desk.form.load.getdoc?doctype=HCP%20Profile%20Submission&name=${Uri.encodeComponent(submissionName)}',
+      );
+      final resp = await http.get(getDocUrl, headers: _headers);
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        final docinfo = body['docinfo'];
+        if (docinfo is Map) {
+          final rawComments = docinfo['comments'];
+          final userInfo = (docinfo['user_info'] is Map) ? (docinfo['user_info'] as Map) : {};
+
+          if (rawComments is List && rawComments.isNotEmpty) {
+            final List<Map<String, dynamic>> parsedList = [];
+            for (var c in rawComments) {
+              if (c is Map) {
+                final map = Map<String, dynamic>.from(c);
+                final rawContent = map['content']?.toString() ?? '';
+                map['content'] = cleanCommentHtml(rawContent);
+
+                // Resolve friendly author name from docinfo user_info or comment_by
+                final owner = map['owner']?.toString() ?? '';
+                final currentCommentBy = map['comment_by']?.toString() ?? '';
+                if (currentCommentBy.isEmpty || currentCommentBy.contains('@')) {
+                  if (userInfo.containsKey(owner) && userInfo[owner] is Map) {
+                    final fullname = userInfo[owner]['fullname']?.toString() ?? '';
+                    if (fullname.trim().isNotEmpty) {
+                      map['comment_by'] = fullname.trim();
+                    }
+                  }
+                }
+                parsedList.add(map);
+              }
+            }
+
+            // Order newest first
+            parsedList.sort((a, b) {
+              final aCreation = a['creation']?.toString() ?? '';
+              final bCreation = b['creation']?.toString() ?? '';
+              return bCreation.compareTo(aCreation);
+            });
+
+            if (parsedList.isNotEmpty) {
+              return parsedList;
+            }
+          }
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      print('[COMMENT] Fetch via getdoc warning: $e');
+    }
+
+    // 2. Fallback: Direct Comment resource API (accessible to System Manager / Admin)
+    try {
+      final filtersJson = jsonEncode([
+        ['reference_doctype', '=', 'HCP Profile Submission'],
+        ['reference_name', '=', submissionName],
+      ]);
+      final fieldsJson = jsonEncode(['name', 'content', 'comment_by', 'owner', 'creation']);
+      final params = Uri(queryParameters: {
+        'filters': filtersJson,
+        'fields': fieldsJson,
+        'order_by': 'creation desc',
+      }).query;
+      final url = Uri.parse('$baseUrl/api/resource/Comment?$params');
+      final resp = await http.get(url, headers: _headers);
+      if (resp.statusCode == 200) {
+        final body = jsonDecode(resp.body);
+        final List<dynamic> data = body['data'] ?? [];
+        return data.map((c) {
+          final m = Map<String, dynamic>.from(c as Map);
+          m['content'] = cleanCommentHtml(m['content']?.toString() ?? '');
+          return m;
+        }).toList();
+      }
+    } catch (e) {
+      print('[COMMENT] Fetch via resource/Comment fallback error: $e');
+    }
+
+    return [];
   }
 
   /// Retrieve list of Specializations with multi-tier cache & local fallback
@@ -4489,6 +6608,13 @@ class ApiService extends ChangeNotifier {
           return list;
         } catch (_) {}
       }
+      try {
+        final localData = await rootBundle.loadString('assets/data/psgc_locations.json');
+        final List<dynamic> dataList = jsonDecode(localData);
+        final list = dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+        LocationResolver.registerPsgcLocations(list);
+        return list;
+      } catch (_) {}
       return [];
     }
     final url = Uri.parse(
@@ -4517,6 +6643,13 @@ class ApiService extends ChangeNotifier {
           return list;
         } catch (_) {}
       }
+      try {
+        final localData = await rootBundle.loadString('assets/data/psgc_locations.json');
+        final List<dynamic> dataList = jsonDecode(localData);
+        final list = dataList.map((json) => PsgcLocation.fromJson(json)).toList();
+        LocationResolver.registerPsgcLocations(list);
+        return list;
+      } catch (_) {}
       rethrow;
     }
   }
@@ -4884,6 +7017,68 @@ class ApiService extends ChangeNotifier {
     return match.territoryManager;
   }
 
+  /// Get all territory codes managed by the logged in user (for DSM / District Manager)
+  /// Returns empty set if Admin (unrestricted global access)
+  Set<String> getManagedTerritoryCodes() {
+    if (isAdmin) return {}; // Admin has unrestricted access to all districts
+    final email = (loggedInEmail ?? '').trim().toLowerCase();
+    final fullName = (loggedInFullName ?? '').trim().toLowerCase();
+    final nameTokens = fullName.split(RegExp(r'[\s\-]+')).where((t) => t.length >= 3).toList();
+
+    // 1. Find root group territories directly assigned to this manager
+    final Set<String> roots = {};
+    for (final t in _territoryInfos) {
+      final uid = (t.customUserId ?? '').trim().toLowerCase();
+      final tm = t.territoryManager.trim().toLowerCase();
+      final tName = t.name.trim();
+
+      bool isMatch = false;
+      if (email.isNotEmpty && uid.isNotEmpty && uid == email) {
+        isMatch = true;
+      } else if (fullName.isNotEmpty && tm.isNotEmpty && (fullName.contains(tm) || tm.contains(fullName))) {
+        isMatch = true;
+      } else if (nameTokens.isNotEmpty && tm.isNotEmpty && nameTokens.where((tok) => tm.contains(tok)).length >= 2) {
+        isMatch = true;
+      }
+
+      if (isMatch) {
+        roots.add(tName);
+      }
+    }
+
+    // Fallback for specific DSM district root territories if custom_user_id wasn't set in ERPNext
+    if (roots.isEmpty) {
+      if (email == 'rbviray@profinsights.biz') roots.add('BA1 - SOUTH GMA/BACOLOD/ILOILO');
+      if (email == 'ginlorcullo@profinsights.biz') roots.add('BA2 - WEST GMA');
+      if (email == 'cmrinon@profinsights.biz') roots.add('BA4 - SOUTH LUZON');
+      if (email == 'rlbanasihan@profinsights.biz') roots.add('AD1 - GMA/NORTH LUZON/CENTRAL LUZON');
+      if (email == 'admendoza@profinsights.biz') roots.add('AD2 - GMA/SOUTH LUZON');
+      if (email == 'syucaran@profinsights.biz') roots.add('AD0105 (COOR)');
+      if (email == 'dbdelossantos@profinsights.biz') roots.add('NGMA/NLZ/VIZ');
+    }
+
+    // 2. Add all child territories belonging to the DSM's root district
+    final Set<String> allManaged = Set.from(roots);
+    for (final root in roots) {
+      for (final t in _territoryInfos) {
+        final parent = (t.parentTerritory ?? '').trim().toLowerCase();
+        if (parent.isNotEmpty && parent == root.toLowerCase()) {
+          allManaged.add(t.name);
+        }
+      }
+      final codePrefix = root.split(RegExp(r'[\s\-]+')).first.toUpperCase();
+      if (codePrefix.length >= 2 && codePrefix != 'ALL' && codePrefix != 'REST') {
+        for (final t in _territoryInfos) {
+          final tName = t.name.toUpperCase();
+          if (tName.startsWith('$codePrefix-') || tName == codePrefix) {
+            allManaged.add(t.name);
+          }
+        }
+      }
+    }
+    return allManaged;
+  }
+
   /// Dynamically resolve the accurate Territory Code and Territory Manager for a user and program
   Future<ResolvedTerritory> resolveUserTerritory({
     String? userEmail,
@@ -5131,7 +7326,9 @@ class FrappeRepository<T> {
     required this.toJson,
   }) : _api = api;
 
-  /// Fetch list of records of this DocType
+  String _sanitizeCacheKey(String key) => key.replaceAll(RegExp(r'[^A-Za-z0-9_]'), '_');
+
+  /// Fetch list of records of this DocType with 24/7 resilience & local cache fallback
   Future<List<T>> list({
     List<String>? fields,
     List<dynamic>? filters,
@@ -5157,47 +7354,130 @@ class FrappeRepository<T> {
     final uri = Uri.parse('${_api.baseUrl}/api/resource/${Uri.encodeComponent(docType)}')
         .replace(queryParameters: queryParams.isNotEmpty ? queryParams : null);
 
-    try {
-      final response = await http.get(uri, headers: _api._headers);
-      if (response.statusCode == 200) {
+    final cacheKey = 'frappe_${_sanitizeCacheKey(docType)}_list.json';
+
+    // 1. Attempt live network fetch with timeout & transient error retry
+    http.Response? response;
+    Exception? lastException;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await http.get(uri, headers: _api._headers).timeout(const Duration(seconds: 15));
+        if (response.statusCode == 200) {
+          break;
+        } else if (response.statusCode == 401 || response.statusCode == 403) {
+          // Frappe session expired: attempt token renewal
+          await _api.ensureCsrfToken();
+        }
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        if (attempt == 0) {
+          await Future.delayed(const Duration(milliseconds: 600));
+        }
+      }
+    }
+
+    if (response != null && response.statusCode == 200) {
+      try {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = body['data'] ?? [];
-        return dataList.map((json) => fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load list for $docType: ${response.statusCode}');
+        final parsed = dataList.map((json) => fromJson(json)).toList();
+        // Persist successful fetch to local cache for 24/7 offline survivability
+        await _api._writeToCache(cacheKey, response.body);
+        return parsed;
+      } catch (e) {
+        print('FrappeRepository.list parsing notice for $docType: $e');
+      }
+    }
+
+    // 2. Resilient Fallback: If network failed or server is temporarily unreachable, serve local cache
+    try {
+      final cached = await _api._readFromCache(cacheKey);
+      if (cached != null && cached.isNotEmpty) {
+        final body = jsonDecode(cached);
+        final List<dynamic> dataList = body['data'] ?? [];
+        if (dataList.isNotEmpty) {
+          print('[FrappeRepository] Offline resilience active: serving ${dataList.length} cached $docType records.');
+          return dataList.map((json) => fromJson(json)).toList();
+        }
       }
     } catch (e) {
-      print('FrappeRepository.list error on $docType: $e');
-      rethrow;
+      print('FrappeRepository cache fallback notice for $docType: $e');
     }
+
+    if (lastException != null) {
+      print('FrappeRepository.list network error on $docType: $lastException');
+      throw lastException;
+    }
+    throw Exception('Failed to load list for $docType: ${response?.statusCode ?? 'unreachable'}');
   }
 
-  /// Fetch details of a single record by its name (ID), including its nested child tables
+  /// Fetch details of a single record by its name (ID), including its nested child tables with offline fallback
   Future<T> get(String name) async {
     final uri = Uri.parse('${_api.baseUrl}/api/resource/${Uri.encodeComponent(docType)}/${Uri.encodeComponent(name)}');
-    try {
-      final response = await http.get(uri, headers: _api._headers);
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        return fromJson(body['data']);
-      } else {
-        throw Exception('Failed to load detail for $docType ($name): ${response.statusCode}');
+    final cacheKey = 'frappe_${_sanitizeCacheKey(docType)}_${_sanitizeCacheKey(name)}.json';
+
+    http.Response? response;
+    Exception? lastException;
+
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        response = await http.get(uri, headers: _api._headers).timeout(const Duration(seconds: 15));
+        if (response.statusCode == 200) break;
+      } catch (e) {
+        lastException = e is Exception ? e : Exception(e.toString());
+        if (attempt == 0) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
       }
-    } catch (e) {
-      print('FrappeRepository.get error on $docType: $e');
-      rethrow;
     }
+
+    if (response != null && response.statusCode == 200) {
+      try {
+        final body = jsonDecode(response.body);
+        await _api._writeToCache(cacheKey, response.body);
+        return fromJson(body['data']);
+      } catch (e) {
+        print('FrappeRepository.get parsing notice for $docType ($name): $e');
+      }
+    }
+
+    // Resilient Fallback: Read single record from cache
+    try {
+      final cached = await _api._readFromCache(cacheKey);
+      if (cached != null && cached.isNotEmpty) {
+        final body = jsonDecode(cached);
+        if (body['data'] != null) {
+          print('[FrappeRepository] Offline resilience active: serving cached $docType ($name).');
+          return fromJson(body['data']);
+        }
+      }
+    } catch (_) {}
+
+    if (lastException != null) throw lastException;
+    throw Exception('Failed to load detail for $docType ($name): ${response?.statusCode ?? 'unreachable'}');
   }
 
-  /// Create a new record with nested child table arrays
+  /// Create a new record with nested child table arrays and resilient timeout
   Future<T> create(T item) async {
     final uri = Uri.parse('${_api.baseUrl}/api/resource/${Uri.encodeComponent(docType)}');
+    await _api.ensureCsrfToken();
     try {
-      final response = await http.post(
+      var response = await http.post(
         uri,
         headers: _api._headers,
         body: jsonEncode(toJson(item)),
-      );
+      ).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 400 && response.body.contains('CSRFTokenError')) {
+        _api._csrfToken = null;
+        await _api.ensureCsrfToken();
+        response = await http.post(
+          uri,
+          headers: _api._headers,
+          body: jsonEncode(toJson(item)),
+        ).timeout(const Duration(seconds: 20));
+      }
+
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         return fromJson(body['data']);
@@ -5210,15 +7490,27 @@ class FrappeRepository<T> {
     }
   }
 
-  /// Update an existing record and dynamically reconcile child tables
+  /// Update an existing record and dynamically reconcile child tables with resilient timeout
   Future<T> update(String name, T item) async {
     final uri = Uri.parse('${_api.baseUrl}/api/resource/${Uri.encodeComponent(docType)}/${Uri.encodeComponent(name)}');
+    await _api.ensureCsrfToken();
     try {
-      final response = await http.put(
+      var response = await http.put(
         uri,
         headers: _api._headers,
         body: jsonEncode(toJson(item)),
-      );
+      ).timeout(const Duration(seconds: 20));
+
+      if (response.statusCode == 400 && response.body.contains('CSRFTokenError')) {
+        _api._csrfToken = null;
+        await _api.ensureCsrfToken();
+        response = await http.put(
+          uri,
+          headers: _api._headers,
+          body: jsonEncode(toJson(item)),
+        ).timeout(const Duration(seconds: 20));
+      }
+
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         return fromJson(body['data']);
@@ -5231,4 +7523,5 @@ class FrappeRepository<T> {
     }
   }
 }
+
 

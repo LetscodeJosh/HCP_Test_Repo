@@ -1,0 +1,23 @@
+{
+  "version": "V.0.5.3",
+  "build_number": 29,
+  "release_name": "HCP Profiling & SFE Territory Reconfiguration Portal V.0.5.3 (Build 29)",
+  "release_date": "2026-10-01",
+  "file_name": "HCP_Profiling_V.0.5.3.apk",
+  "file_size_bytes": 60690729,
+  "file_size_mb": 57.88,
+  "sha256": "1014877f0f801dba64a9e3ffed1ede91cd1f377aad8e7a079a715dccc58bcb23",
+  "portal_version": "V.0.5.3",
+  "portal_setup_exe": "Territory_Reconfiguration_Setup.exe",
+  "portal_setup_zip": "Territory_Reconfiguration_Setup.zip",
+  "status": "Enterprise Stable Release",
+  "features": [
+    "Territory Tree Default Viewing with seamless one-click switch to Grid View",
+    "1:1 ERPNext Territory Tree Hierarchy with complete 181-node live masterlist structure",
+    "Folder-Only Child Creation: strictly folder icon nodes can add child territories",
+    "Interactive Tree Action Bar: Edit, Add Child, Rename, Delete inline pills matching ERPNext Desk",
+    "Complete Tree CRUD Modals: New Territory, Edit Territory, Rename, and Child-Guarded Delete",
+    "24/7 Resilience & LocalStorage Persistence with automated live ERPNext synchronization",
+    "Institution Masterlist Cleaned: Test facilities removed and descending ordering enforced"
+  ]
+}

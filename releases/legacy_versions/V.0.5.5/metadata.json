@@ -1,0 +1,23 @@
+{
+  "version": "V.0.5.5",
+  "build_number": 31,
+  "release_date": "October 5, 2026",
+  "portal_sha256": "a0b518f85cc8863f81232052bd7d7e49002f1ab32e7e9c67533b8fc6b1056422",
+  "apk_sha256": "33ba56af95898b003c7ffae4d641376d6b44c5c019b985fb52d2afe809e47541",
+  "apk_size_bytes": 60486133,
+  "apk_size_mb": 57.68,
+  "security_patches": [
+    "Hardware-Backed Keystore/Keychain Credential Storage: BiometricService uses FlutterSecureStorage (AES-GCM backed by Android KeyStore / iOS Keychain)",
+    "Offline Authentication Gating: ApiService.login() strictly gates offline authentication against verified biometric enrolled device owner",
+    "Embedded Web Server Token Authorization: TerritoryWebServer mandates cryptographically secure ephemeral session tokens",
+    "Android Network Security Configuration: res/xml/network_security_config.xml enforces HTTPS across all remote networks",
+    "Streamlit CORS Protection & Memory Scrubbing: enableCORS = true enabled; passwords scrubbed immediately from memory post-authentication"
+  ],
+  "features": [
+    "User Account Live Full Name Dropdown Display: Subtitle displays true Full Name matching ERPNext User doctype 1:1 (e.g. Leonniel Santos, Argie Adaptar Lerit, Joshua Tan)",
+    "Live ERPNext User Masterlist Integration: fetch_live_users queries /api/resource/User (limit_page_length=3000) concurrently and delivers live users to web portal with session caching",
+    "Dual Table Grid & Territory Tree ERPNext Database Reflection: syncProgramTerritoriesWithTree() ensures all simulations (Add Child, Edit, Rename, Delete) reflect synchronously across Table Grid View, Territory Tree, and live ERPNext database",
+    "Resilient ERPNext Mutation Fallback: Automatic recovery and retry for Territory Manager link constraints ensuring database mutation persistence",
+    "Universal Asset Parity: Verified 100% byte-for-byte SHA256 parity across all repository and deployment portal copies"
+  ]
+}

@@ -329,9 +329,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   }
 
   Widget _buildSpecialtiesTable(Hcp doctor) {
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    final isMedRep = apiService.isMedRep;
-
     // Strict program-scoped preferred matching
     final List<HcpSpecialty> preferredList;
     if (_programAccount != null) {
@@ -345,7 +342,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
       preferredList = [];
     }
 
-    final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.specialties;
+    final displayList = preferredList.isNotEmpty ? preferredList : doctor.specialties;
 
     if (displayList.isEmpty) {
       return const Text(
@@ -356,7 +353,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (isMedRep && preferredList.isNotEmpty && preferredList.length < doctor.specialties.length)
+        if (preferredList.isNotEmpty && preferredList.length < doctor.specialties.length)
           Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
             child: Row(
@@ -364,7 +361,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                 const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
                 const SizedBox(width: 4),
                 Text(
-                  'Showing ${preferredList.length} preferred specialization(s) for your account',
+                  'Showing preferred specialization for active program (${preferredList.length} of ${doctor.specialties.length})',
                   style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
                 ),
               ],
@@ -395,7 +392,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                               ),
                             ),
                           ),
-                          if (isPref && !isMedRep)
+                          if (isPref)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                               decoration: BoxDecoration(
@@ -423,9 +420,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   }
 
   Widget _buildWorkplacesTable(Hcp doctor) {
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    final isMedRep = apiService.isMedRep;
-
     // Strict program-scoped preferred matching
     final List<HcpWorkplace> preferredList;
     if (_programAccount != null) {
@@ -439,7 +433,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
       preferredList = [];
     }
 
-    final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.workplaces;
+    final displayList = preferredList.isNotEmpty ? preferredList : doctor.workplaces;
 
     if (displayList.isEmpty) {
       return const Text(
@@ -450,7 +444,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (isMedRep && preferredList.isNotEmpty && preferredList.length < doctor.workplaces.length)
+        if (preferredList.isNotEmpty && preferredList.length < doctor.workplaces.length)
           Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
             child: Row(
@@ -458,7 +452,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                 const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
                 const SizedBox(width: 4),
                 Text(
-                  'Showing ${preferredList.length} preferred hospital(s)/clinic(s) for your account',
+                  'Showing preferred hospital/clinic for active program (${preferredList.length} of ${doctor.workplaces.length})',
                   style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
                 ),
               ],
@@ -466,6 +460,9 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
           ),
         ...displayList.map((w) {
           final isPref = preferredList.contains(w);
+          final api = Provider.of<ApiService>(context, listen: false);
+          final isWpRejected = LocationResolver.isRejectedInstitution(w.workplace, api.cachedInstitutions);
+          final rejReason = doctor.getRejectedInstitutionReason(api.cachedInstitutions);
           final locInfo = LocationResolver.formatLocation(
             streetAddress: (w.address != null && w.address!.isNotEmpty && w.address != w.workplace) ? w.address : null,
             cityMunicipality: w.cityMunicipality,
@@ -476,16 +473,24 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: isPref ? const Color(0xFFF0FDF4) : const Color(0xFFF4F6F9),
+              color: isWpRejected
+                  ? const Color(0xFFFEF2F2)
+                  : (isPref ? const Color(0xFFF0FDF4) : const Color(0xFFF4F6F9)),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: isPref ? const Color(0xFF86EFAC) : const Color(0xFFE5E5EA)),
+              border: Border.all(
+                color: isWpRejected
+                    ? const Color(0xFFFCA5A5)
+                    : (isPref ? const Color(0xFF86EFAC) : const Color(0xFFE5E5EA)),
+              ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(
-                  Icons.local_hospital,
-                  color: isPref ? const Color(0xFF16A34A) : const Color(0xFF8E8E93),
+                  isWpRejected ? Icons.error_outline_rounded : Icons.local_hospital,
+                  color: isWpRejected
+                      ? const Color(0xFFDC2626)
+                      : (isPref ? const Color(0xFF16A34A) : const Color(0xFF8E8E93)),
                   size: 20,
                 ),
                 const SizedBox(width: 10),
@@ -496,20 +501,52 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                       Text(
                         w.workplace,
                         style: TextStyle(
-                          color: const Color(0xFF1C1C1E),
+                          color: isWpRejected ? const Color(0xFFDC2626) : const Color(0xFF1C1C1E),
                           fontSize: 14,
-                          fontWeight: isPref ? FontWeight.bold : FontWeight.w600,
+                          fontWeight: (isPref || isWpRejected) ? FontWeight.bold : FontWeight.w600,
                         ),
                       ),
                       if (locInfo.isNotEmpty)
                         Text(
                           locInfo,
-                          style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
+                          style: TextStyle(
+                            color: isWpRejected ? const Color(0xFFEF4444) : const Color(0xFF636366),
+                            fontSize: 12,
+                          ),
+                        ),
+                      if (isWpRejected && rejReason != null && rejReason.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Text(
+                            'SFE Rejection Reason: $rejReason',
+                            style: const TextStyle(
+                              color: Color(0xFFB91C1C),
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                     ],
                   ),
                 ),
-                if (isPref)
+                if (isWpRejected)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFEE2E2),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                    ),
+                    child: const Text(
+                      'REJECTED',
+                      style: TextStyle(
+                        color: Color(0xFFDC2626),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  )
+                else if (isPref)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -534,9 +571,6 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
   }
 
   Widget _buildContactsTable(Hcp doctor) {
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    final isMedRep = apiService.isMedRep;
-
     // Strict program-scoped preferred matching
     final List<HcpContact> preferredList;
     if (_programAccount != null) {
@@ -549,7 +583,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
       preferredList = [];
     }
 
-    final displayList = (isMedRep && preferredList.isNotEmpty) ? preferredList : doctor.contacts;
+    final displayList = preferredList.isNotEmpty ? preferredList : doctor.contacts;
 
     if (displayList.isEmpty) {
       return const Text(
@@ -560,7 +594,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (isMedRep && preferredList.isNotEmpty && preferredList.length < doctor.contacts.length)
+        if (preferredList.isNotEmpty && preferredList.length < doctor.contacts.length)
           Padding(
             padding: const EdgeInsets.only(bottom: 8.0),
             child: Row(
@@ -568,7 +602,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                 const Icon(Icons.star_rounded, color: Color(0xFFF59E0B), size: 14),
                 const SizedBox(width: 4),
                 Text(
-                  'Showing ${preferredList.length} preferred contact(s) for your account',
+                  'Showing preferred contact for active program (${preferredList.length} of ${doctor.contacts.length})',
                   style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontStyle: FontStyle.italic),
                 ),
               ],

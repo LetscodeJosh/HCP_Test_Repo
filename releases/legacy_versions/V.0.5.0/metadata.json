@@ -1,0 +1,24 @@
+{
+  "version": "V.0.5.0",
+  "build_number": 20,
+  "release_date": "2026-09-29",
+  "app_name": "HCP Profiling",
+  "full_version": "HCP Profiling V.0.5.0",
+  "release_type": "MINOR",
+  "features": [
+    "Dynamic Calendar Month Validity Lifecycle: Automatically calculates exact monthly start and end dates (YYYY-MM-01 to YYYY-MM-DD) supporting all month lengths and leap years",
+    "Automated Active Cycle Rollover: fetchHcpAccounts automatically rolls forward doctor affiliations from latest previous cycle when starting a new calendar month with no staged entries",
+    "Zero-Overwrite Historical Integrity: Scoped syncHcpAccount strictly to current active month; past cycles remain immutably archived in ERPNext",
+    "Dedicated Territory Reconfiguration Web Portal (assets/web/territory_reconfiguration_portal.html) with dark blue and white theme matching HCP Profiling",
+    "Embedded Local Web Server (lib/services/territory_web_server.dart on port 8765) for instant device and laptop browser access",
+    "Role-gated AppDrawer menu item visible strictly to Administrator and SFE Lead logins",
+    "TerritoryPortalLauncherScreen with one-tap browser launch (launchUrl), clipboard link copying, and instant laptop pairing QR code",
+    "Zero Dummy Accounts: Direct live binding to ERPNext Territory, Sales Person, and HCP Account DocTypes",
+    "Blank Cycle Columns: Multi-Cycle Historical Matcher columns left unassigned awaiting historical Excel uploads",
+    "Backend Staging Status: Web portal backend execution staged awaiting IT Manager workflow approval"
+  ],
+  "apk_filename": "HCP_Profiling_V.0.5.0.apk",
+  "apk_size_bytes": 59946493,
+  "apk_sha256": "E6327AC32CAF2E5CBB41FEFFF3E60E57D0DCA6EEE5ED8074F83DC04F0E3A742F",
+  "latest_release_link": "releases/HCP_Profiling_Release.apk"
+}

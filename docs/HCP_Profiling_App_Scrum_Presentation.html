@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HCP Profiling App - Scrum Review & Strategic Lifecycle Roadmap</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 14mm 14mm 16mm 14mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #64748b;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    @bottom-left {
+      content: "HCP Profiling App • Scrum Sprint Review (V.0.4.6 Build 17)";
+      font-size: 8pt;
+      color: #94a3b8;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.45;
+    font-size: 9.5pt;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+
+  .cover-card {
+    background: linear-gradient(135deg, #0b192c 0%, #1e3a8a 100%);
+    color: #ffffff;
+    padding: 24px 28px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    border-left: 6px solid #38bdf8;
+  }
+
+  .cover-tag {
+    font-size: 8.5pt;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: #38bdf8;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .cover-title {
+    font-size: 20pt;
+    font-weight: 800;
+    line-height: 1.2;
+    margin: 0 0 8px 0;
+    color: #ffffff;
+  }
+
+  .cover-subtitle {
+    font-size: 11pt;
+    color: #cbd5e1;
+    margin: 0 0 16px 0;
+    font-weight: 400;
+  }
+
+  .cover-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    padding-top: 12px;
+    font-size: 8pt;
+  }
+
+  .cover-meta-item strong {
+    display: block;
+    color: #94a3b8;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
+  }
+
+  .cover-meta-item span {
+    color: #f8fafc;
+    font-weight: 600;
+  }
+
+  .slide-box {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    background: #ffffff;
+    page-break-inside: avoid;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+
+  .slide-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #f1f5f9;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+  }
+
+  .slide-num {
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #0066ff;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .slide-tag {
+    font-size: 7.5pt;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: #475569;
+    text-transform: uppercase;
+  }
+
+  .slide-title {
+    font-size: 13pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0 0 4px 0;
+  }
+
+  .slide-desc {
+    font-size: 8.5pt;
+    color: #64748b;
+    margin-bottom: 12px;
+  }
+
+  .speaker-box {
+    background: #f8fafc;
+    border-left: 3px solid #0066ff;
+    padding: 8px 12px;
+    border-radius: 0 6px 6px 0;
+    margin-top: 10px;
+    font-size: 8pt;
+    color: #475569;
+    font-style: italic;
+  }
+
+  .speaker-label {
+    font-size: 7pt;
+    font-weight: 700;
+    color: #0066ff;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-style: normal;
+    margin-bottom: 2px;
+  }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .three-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+
+  .four-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 8px;
+  }
+
+  .mini-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .mini-card-title {
+    font-size: 9pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .mini-card ul {
+    margin: 0;
+    padding-left: 14px;
+    font-size: 8pt;
+    color: #334155;
+  }
+
+  .mini-card li {
+    margin-bottom: 3px;
+  }
+
+  .mini-card-blue { border-top: 3px solid #0066ff; }
+  .mini-card-green { border-top: 3px solid #10b981; }
+  .mini-card-amber { border-top: 3px solid #f59e0b; }
+  .mini-card-cyan { border-top: 3px solid #0284c7; }
+  .mini-card-red { border-top: 3px solid #ef4444; }
+  .mini-card-purple { border-top: 3px solid #a855f7; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 8pt;
+    margin: 8px 0;
+  }
+
+  th {
+    background: #0f172a;
+    color: #ffffff;
+    padding: 6px 8px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 7.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+    color: #334155;
+  }
+
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+    font-weight: 700;
+  }
+
+  .badge-approved { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+  .badge-pending { background: #fef3c7; color: #b45309; border: 1px solid #fcd34d; }
+  .badge-draft { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+  .badge-rejected { background: #fee2e2; color: #991b1b; border: 1px solid #f87171; }
+
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .stat-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .stat-val {
+    font-size: 16pt;
+    font-weight: 800;
+    color: #0f172a;
+  }
+
+  .stat-lbl {
+    font-size: 7.5pt;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .stat-desc {
+    font-size: 7pt;
+    color: #94a3b8;
+    margin-top: 2px;
+  }
+
+  .highlight-box {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 10px;
+    font-size: 8pt;
+    color: #1e40af;
+  }
+
+  .highlight-title {
+    font-weight: 700;
+    font-size: 8.5pt;
+    margin-bottom: 4px;
+    color: #1d4ed8;
+  }
+
+  .page-break {
+    page-break-after: always;
+  }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1: COVER & EXECUTIVE SCOPE -->
+<div class="cover-card">
+  <div class="cover-tag">SCRUM SPRINT REVIEW & STRATEGIC ROADMAP • V.0.4.6 (BUILD 17)</div>
+  <h1 class="cover-title">HCP Profiling Application</h1>
+  <div class="cover-subtitle">Complete Lifecycle Analysis Across 3 Core Pillars: Past, Present, and Future Updates</div>
+  <div class="cover-meta-grid">
+    <div class="cover-meta-item">
+      <strong>Active Release</strong>
+      <span>V.0.4.6 (Build 17)</span>
+    </div>
+    <div class="cover-meta-item">
+      <strong>Backend Standard</strong>
+      <span>ERPNext v15 Multi-Tenant</span>
+    </div>
+    <div class="cover-meta-item">
+      <strong>Target Audience</strong>
+      <span>Product Owners, Scrum, SFE</span>
+    </div>
+    <div class="cover-meta-item">
+      <strong>Date & Status</strong>
+      <span>Sept 17, 2026 • Verified</span>
+    </div>
+  </div>
+</div>
+
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 1</span>
+    <span class="slide-tag">Executive Scope</span>
+  </div>
+  <div class="slide-title">Executive Scope & Strategic Alignment</div>
+  <div class="slide-desc">Establishing project boundaries, core pillars, and commercial cross-functional objectives.</div>
+
+  <div class="three-col">
+    <div class="mini-card mini-card-blue">
+      <div class="mini-card-title">🎯 The 3 Core Keypoints</div>
+      <ul>
+        <li><strong>Past Updates:</strong> Historical retrieval of V.0.1.0 - V.0.4.2 architecture.</li>
+        <li><strong>Present Updates:</strong> Live applied features in active V.0.4.6 (Build 17).</li>
+        <li><strong>Future Updates:</strong> The 8 essential field enhancements for upcoming sprints.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-cyan">
+      <div class="mini-card-title">🏢 Enterprise Integration</div>
+      <ul>
+        <li>1:1 alignment with ERPNext v15 workflow engine.</li>
+        <li>Universal HCP vs Program-specific HCP Account masterlist.</li>
+        <li>Dual-Track onboarding eliminating bottleneck for existing doctors.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-green">
+      <div class="mini-card-title">👥 Commercial Personas</div>
+      <ul>
+        <li><strong>Field MedReps:</strong> Rapid doctor profiling & continuous resubmissions.</li>
+        <li><strong>SFE Specialists:</strong> Masterlist curation & facility approval.</li>
+        <li><strong>District Managers:</strong> Territory-scoped new doctor reviews.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Good morning team and stakeholders. Today we present the complete Scrum Review for the HCP Profiling App, structured around our 3 core keypoints: Past Updates (retrieving our versioning documentation and foundations), Present Updates (the live applied functionality across V.0.4.3 through V.0.4.6), and Future Updates (the 8 essential mobile workflow enhancements for upcoming sprints)."
+  </div>
+</div>
+
+<!-- SLIDE 2: TABLE OF CONTENTS -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 2</span>
+    <span class="slide-tag">Agenda Overview</span>
+  </div>
+  <div class="slide-title">Table of Contents: Structural Agenda</div>
+  <div class="slide-desc">Four thematic sections guiding the Scrum Sprint Review and strategic discussion.</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 25%;">Section</th>
+        <th style="width: 15%;">Slides</th>
+        <th style="width: 30%;">Core Topic</th>
+        <th style="width: 30%;">Key Discussion Takeaway</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Section 1: Executive Scope</strong></td>
+        <td>Slides 1 - 3</td>
+        <td>Executive Alignment & Strategic Framework</td>
+        <td>Introduces project objectives, 3-pillar framework, and scope boundaries across commercial teams.</td>
+      </tr>
+      <tr>
+        <td><strong>Section 2: Past Updates</strong></td>
+        <td>Slides 4 - 5</td>
+        <td>Versioning History & System Foundations</td>
+        <td>Chronological retrieval of V.0.1.0 through V.0.4.2 milestones, dual-track onboarding, and two-tier masterlist design.</td>
+      </tr>
+      <tr>
+        <td><strong>Section 3: Present Updates</strong></td>
+        <td>Slides 6 - 8</td>
+        <td>Active Release V.0.4.6 Applied Features</td>
+        <td>Zero-deletion policy for added institutions, continuous modify & resubmit, SFE role alignment, rejection note isolation, and dynamic notes.</td>
+      </tr>
+      <tr>
+        <td><strong>Section 4: Future Roadmap & Demo</strong></td>
+        <td>Slides 9 - 12</td>
+        <td>8 Mobile Enhancements, Demo, & Retrospective</td>
+        <td>Consent placement, hidden Others tab, GPS tracking, mandatory fields, duplicate detection, test credentials, and sprint learnings.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Our Table of Contents is organized into 4 distinct sections. Section 1 establishes our executive alignment and introduces the 3 Core Keypoints framework. In Section 2, we review Past Updates from V.0.1.0 to V.0.4.2. In Section 3, we demonstrate Present Updates in our active V.0.4.6 release, detailing how we eliminated deletion risks to allow continuous modify & resubmit, resolved SFE workflow permissions, isolated rejection notes, and unlocked pending facility profiling. Finally, in Section 4, we examine our Future Roadmap covering all 8 field enhancements, followed by our live demonstration script and sprint retrospective."
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- SLIDE 3: EXECUTIVE AGENDA: THE 3 CORE KEYPOINTS -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 3</span>
+    <span class="slide-tag">Executive Agenda</span>
+  </div>
+  <div class="slide-title">Executive Agenda: The 3 Core Keypoints</div>
+  <div class="slide-desc">High-level strategic briefing across the three project lifecycle horizons.</div>
+
+  <div class="three-col">
+    <div class="mini-card mini-card-blue">
+      <div class="mini-card-title">1. Past Updates (V.0.1.0 - V.0.4.2)</div>
+      <ul>
+        <li>Chronological versioning evolution retrieved from project archives.</li>
+        <li>Two-Tier Masterlist (Universal HCP vs Program HCP Account).</li>
+        <li>Dual-Track Profiling: Instant 0-approval processing for verified doctors.</li>
+        <li>PSGC geographic auto-resolution & territory scoping.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-cyan">
+      <div class="mini-card-title">2. Present Updates (V.0.4.6 Build 17)</div>
+      <ul>
+        <li><strong>Institution Non-Deletion:</strong> Complete removal of discard option; continuous modify & resubmit.</li>
+        <li><strong>SFE Workflow & Role Alignment:</strong> Fixed HTTP 417 via SFE role assignment & multi-role permissions.</li>
+        <li><strong>Rejection Note Isolation:</strong> Red banners only appear on truly rejected submissions.</li>
+        <li><strong>Dynamic Approval Notes:</strong> 'not yet approved' &rarr; 'now approved'.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-green">
+      <div class="mini-card-title">3. Future Updates (The 8 Suggestions)</div>
+      <ul>
+        <li>Consent positioned last (Doctor Info &rarr; Questionnaire &rarr; Consent).</li>
+        <li>Others tab hidden & Always-active background GPS.</li>
+        <li>Mandatory field legend & explicit asterisks (*).</li>
+        <li>Missing fields pop-up modal & Real-time duplicate detection.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "This agenda captures our complete trajectory: Keypoint 1 reviews past versions from V.0.1.0 to V.0.4.2. Keypoint 2 showcases the applied features of the active V.0.4.6 release, specifically our zero-deletion guarantee for added institutions, SFE role alignment, rejection note isolation, and dynamic approval notes. Keypoint 3 details the 8 specific field enhancements requested for future sprints."
+  </div>
+</div>
+
+<!-- SLIDE 4: PAST UPDATES - VERSIONING EVOLUTION -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 4</span>
+    <span class="slide-tag">Keypoint 1: Past Updates</span>
+  </div>
+  <div class="slide-title">Past Updates: Versioning Evolution & Documentation</div>
+  <div class="slide-desc">Historical roadmap milestones retrieved from CHANGELOG.md & release archives.</div>
+
+  <div class="four-col">
+    <div class="mini-card mini-card-blue">
+      <div class="mini-card-title">V.0.1.0: Foundation</div>
+      <ul>
+        <li>Initial Flutter cross-platform architecture.</li>
+        <li>ERPNext v15 REST API integration.</li>
+        <li>Two-Tier Masterlist (HCP vs HCP Account).</li>
+        <li>Offline SQLite database initialization.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-cyan">
+      <div class="mini-card-title">V.0.2.0 - V.0.2.6: Scoping</div>
+      <ul>
+        <li>Add New Institution workflow & SFE review.</li>
+        <li>DSM territory scoping & approval queues.</li>
+        <li>PSGC geographic auto-resolution.</li>
+        <li>Rejection feedback taxonomy.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-green">
+      <div class="mini-card-title">V.0.3.0 - V.0.3.1: Notes</div>
+      <ul>
+        <li>Dynamic approval status notes on ERPNext.</li>
+        <li>Predictive search over 7,000+ facilities.</li>
+        <li>Duplicate warning banner with 1-tap fill.</li>
+        <li>Renamed to 'Institution Submission'.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-amber">
+      <div class="mini-card-title">V.0.4.0 - V.0.4.2: Directory</div>
+      <ul>
+        <li>Dedicated InstitutionDirectoryScreen.</li>
+        <li>ERPNext Desk List View table alignment.</li>
+        <li>SFE full administrative parity with Admin.</li>
+        <li>Collapsible search filter engine & clear badge.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "This historical slide documents our engineering trajectory: V.0.1.0 established core integration; V.0.2 series introduced the institution approval engine, PSGC hierarchy, and DSM territory scoping; V.0.3 series introduced dynamic approval notes; and V.0.4 series delivered the master institution directory with SFE admin parity and collapsible filters."
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- SLIDE 5: PAST UPDATES - DUAL-TRACK ONBOARDING -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 5</span>
+    <span class="slide-tag">Keypoint 1: Past Updates</span>
+  </div>
+  <div class="slide-title">Past Updates: Dual-Track Doctor Profiling Workflow</div>
+  <div class="slide-desc">Strict alignment with ERPNext HCP Profile Submission WF: 0-bottleneck processing for verified doctors.</div>
+
+  <div class="two-col">
+    <div class="mini-card mini-card-green">
+      <div class="mini-card-title" style="color: #15803d;">Track A: Existing Doctor ('Existing HCP')</div>
+      <ul>
+        <li><strong>Selection:</strong> MedRep selects existing doctor from verified national masterlist.</li>
+        <li><strong>Action Applied:</strong> 'Submit for Processing' (<code>doc.profile_action == "Existing HCP"</code>).</li>
+        <li><strong>State Transition:</strong> Directly transitions to <strong>PROCESSED</strong>.</li>
+        <li><strong>Zero Manager Bottleneck:</strong> <strong>REQUIRES NO MANAGERIAL APPROVAL</strong>. Eliminates administrative delays for verified doctors.</li>
+        <li><strong>Automatic Direct Sync:</strong> Instantly syncs preferred features into HCP Masterlist and links local program HCP Account.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-amber">
+      <div class="mini-card-title" style="color: #b45309;">Track B: New Doctor ('+ Add New Doctor')</div>
+      <ul>
+        <li><strong>Selection:</strong> MedRep enters new doctor details (PRC ID, Name, Specialty, Clinic).</li>
+        <li><strong>Action Applied:</strong> 'Submit for Approval' (<code>doc.profile_action == "New HCP"</code>).</li>
+        <li><strong>State Transition:</strong> Enters <strong>PENDING APPROVAL</strong> state.</li>
+        <li><strong>Manager Review:</strong> Scoped to District Sales Manager (DSM) queue for validation.</li>
+        <li><strong>DSM Approval:</strong> Clicks 'Approve' &rarr; State: <strong>APPROVED</strong> &rarr; Committed to Masterlist.</li>
+        <li><strong>DSM Rejection:</strong> Selects rejection reason &rarr; MedRep edits and resubmits.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Our past workflow alignment solved major field friction: if a doctor already exists in our masterlist, MedReps don't wait for managers—it transitions to Processed instantly. But if it's a completely new doctor, it safely diverts to Pending Approval for DSM review, protecting our universal masterlist from invalid or duplicate entries."
+  </div>
+</div>
+
+<!-- SLIDE 6: PRESENT UPDATES - ACTIVE RELEASE V.0.4.6 -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 6</span>
+    <span class="slide-tag">Keypoint 2: Present Updates</span>
+  </div>
+  <div class="slide-title">Present Updates: Active Release V.0.4.6 (Build 17)</div>
+  <div class="slide-desc">Current sprint applied functionality, verified release binaries, and system health.</div>
+
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-val" style="color: #10b981;">0 Errors</div>
+      <div class="stat-lbl">Compilation Status</div>
+      <div class="stat-desc">4/4 test suites passed via flutter test</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" style="color: #0284c7;">V.0.4.6</div>
+      <div class="stat-lbl">Active Version</div>
+      <div class="stat-desc">Build 17 • 56.6 MB APK with verified SHA-256</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-val" style="color: #d97706;">3,990+</div>
+      <div class="stat-lbl">Facilities Available</div>
+      <div class="stat-desc">Full coverage across all 17 regions</div>
+    </div>
+  </div>
+
+  <div class="mini-card mini-card-blue">
+    <div class="mini-card-title">🌟 V.0.4.6 Applied Functionality & Features</div>
+    <ul>
+      <li><strong>1. Institution Non-Deletion & Continuous Resubmission (V.0.4.6):</strong> Completely removed discard options across MedRep and SFE screens. MedReps can modify and resubmit rejected facilities continuously without data loss.</li>
+      <li><strong>2. ERPNext Workflow & Role Alignment (V.0.4.5):</strong> Resolved ERPNext HTTP 417 transition failures by assigning Sales Force Effectiveness role and updating Institution WF permissions for System Manager & Sales Manager.</li>
+      <li><strong>3. Rejection Remarks Isolation (V.0.4.4):</strong> Strict conditional gating ensures red rejection banners only appear on submissions that actually failed review. Approved, processed, and pending profiles display clean.</li>
+      <li><strong>4. SFE Institution Proposal Capability (V.0.4.4):</strong> SFE Specialists can directly propose new facilities into the masterlist from their dashboard.</li>
+      <li><strong>5. Unlocked Pending Facility Profiling (V.0.4.3):</strong> MedReps can immediately select and profile doctors using newly proposed institutions without waiting for managerial approval.</li>
+      <li><strong>6. Dynamic Approval Notes Parity (V.0.4.3):</strong> Displays amber note <em>"this institution is not yet approved"</em> while pending, and dynamically transitions to green note <em>"this institution is now approved"</em> upon SFE approval.</li>
+    </ul>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Now let's examine where we are today in V.0.4.6 (Build 17). We achieved 0 compilation errors and passed all automated test suites. In this release, we strictly enforced a zero-deletion policy: MedReps can continuously modify and resubmit rejected facilities without risk of accidental data deletion. We also resolved SFE workflow permissions on ERPNext, isolated rejection notes, and fully unlocked pending institution profiling with dynamic notes."
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- SLIDE 7: PRESENT UPDATES - NON-DELETION & SFE ROLE ALIGNMENT -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 7</span>
+    <span class="slide-tag">Keypoint 2: Present Updates</span>
+  </div>
+  <div class="slide-title">Present Updates: Zero-Deletion & ERPNext Role Alignment</div>
+  <div class="slide-desc">Continuous modify/resubmit flow and backend workflow authorization parity.</div>
+
+  <div class="two-col">
+    <div class="mini-card mini-card-green">
+      <div class="mini-card-title" style="color: #15803d;">🛡️ Zero Deletion Guarantee (V.0.4.6)</div>
+      <ul>
+        <li><strong>Removed 'Discard' Button:</strong> MedReps cannot accidentally discard or delete proposed facilities from their submission list.</li>
+        <li><strong>Continuous Modify & Resubmit:</strong> Rejected facilities exclusively present 'Modify & Resubmit'. Reps can update name, address, or region and resubmit continuously.</li>
+        <li><strong>No SFE Rejection Deletion:</strong> Removed 'Reject & Delete Resubmission' branch. SFE rejections simply mark status as 'Rejected' with reason, preserving the facility record.</li>
+        <li><strong>Decoupled Service Layer:</strong> <code>rejectInstitution</code> no longer calls <code>deleteInstitution</code>.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-cyan">
+      <div class="mini-card-title" style="color: #0284c7;">⚙️ ERPNext Role & Workflow Parity (V.0.4.5)</div>
+      <ul>
+        <li><strong>Problem Resolved:</strong> Fixed ERPNext <code>HTTP 417: Not a valid Workflow Action</code> on SFE rejection.</li>
+        <li><strong>Role Alignment:</strong> Assigned explicit <code>Sales Force Effectiveness</code> role to active SFE account (<code>lesantos@pims-marketing.com</code>).</li>
+        <li><strong>Multi-Role Transitions:</strong> Updated <code>Institution WF</code> rules to allow <code>Sales Force Effectiveness</code>, <code>System Manager</code>, and <code>Sales Manager</code> on both Approve and Reject actions.</li>
+        <li><strong>Client Fallback & CSRF:</strong> Added CSRF verification and direct PUT update fallback.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <div class="highlight-title">🏷️ Rejection Remarks Display Isolation (V.0.4.4)</div>
+    Submissions in Approved, Processed, or Pending Approval states previously showed misleading red rejection remark banners because timeline comments were mapped indiscriminately. In V.0.4.4, strict conditional gating ensures <strong>only submissions that actually underwent rejection</strong> display the red rejection card.
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Slide 7 highlights our two major backend and workflow hardening updates: In V.0.4.6, we eliminated the discard and deletion options for proposed institutions, ensuring MedReps can continuously modify and resubmit without data loss. In V.0.4.5, we fixed the ERPNext workflow role mismatch that caused rejection failures, ensuring seamless approval and rejection across all manager personas."
+  </div>
+</div>
+
+<!-- SLIDE 8: PRESENT UPDATES - STATUS PARITY & DYNAMIC NOTES -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 8</span>
+    <span class="slide-tag">Keypoint 2: Present Updates</span>
+  </div>
+  <div class="slide-title">Present Updates: Status Parity & Dynamic Approval Notes</div>
+  <div class="slide-desc">Direct 1:1 visual match with dev.pmii-marketing.com and real-time approval status labeling.</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 20%;">Workflow State</th>
+        <th style="width: 20%;">Mobile Badge</th>
+        <th style="width: 60%;">Field Usability Status & Dynamic Label</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Approved</strong></td>
+        <td><span class="badge badge-approved">[ Approved ]</span></td>
+        <td>Verified healthcare facility. Selectable for all doctor profiling. Displays green note: <strong>"this institution is now approved"</strong>.</td>
+      </tr>
+      <tr>
+        <td><strong>Pending Approval</strong></td>
+        <td><span class="badge badge-pending">[ Pending Approval ]</span></td>
+        <td>Proposed facility under SFE review. <strong>Fully usable by MedReps</strong> for doctor profiling. Displays amber note: <strong>"this institution is not yet approved"</strong>.</td>
+      </tr>
+      <tr>
+        <td><strong>Draft</strong></td>
+        <td><span class="badge badge-draft">[ Draft ]</span></td>
+        <td>Baseline masterlist facility imported from national registry (3,900+ facilities). Fully selectable for doctor profiling.</td>
+      </tr>
+      <tr>
+        <td><strong>Rejected</strong></td>
+        <td><span class="badge badge-rejected">[ Rejected ]</span></td>
+        <td>Declined by SFE Specialist with mandatory remarks. Blocked from profiling; <strong>continuously editable for resubmission</strong>.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <div class="highlight-title">🔍 Search Filter Engine Parity</div>
+    Features a collapsible <code>[= Filter]</code> bar, inline <code>[Clear Filters]</code> red badge, dynamic counter (<code>Showing X of Y</code>), bi-directional sort controls, and 1-tap clipboard copying for facility IDs.
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "On Slide 8, we review our DocType status parity and dynamic approval note workflow. MedReps can immediately select and profile doctors using newly proposed institutions under the clear visual indicator 'this institution is not yet approved'. When the SFE Specialist approves it, the note dynamically flips to 'this institution is now approved'. Our collapsible search filter engine makes managing 3,990+ facilities effortless."
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- SLIDE 9: FUTURE UPDATES - ENHANCEMENTS 1-4 -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 9</span>
+    <span class="slide-tag">Keypoint 3: Future Updates</span>
+  </div>
+  <div class="slide-title">Future Updates: Mobile Enhancements (Tabs & Ergonomics)</div>
+  <div class="slide-desc">Implementing user-requested tab restructuring, hidden views, and mandatory fields (Part 1).</div>
+
+  <div class="four-col">
+    <div class="mini-card mini-card-cyan">
+      <div class="mini-card-title">1. Consent Tab Last</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Consent must be display at the last of the tab."</em></li>
+        <li><strong>Target Sequence:</strong> 1. Doctor Info &rarr; 2. Questionnaire &rarr; 3. Consent.</li>
+        <li><strong>Ergonomics:</strong> Aligns with the natural chronological flow of medical sales visits.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-amber">
+      <div class="mini-card-title">2. Hidden 'Others' Tab</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Others tab must be hidden."</em></li>
+        <li><strong>Streamlined UI:</strong> Eliminates low-utility tab from submission and wizard views.</li>
+        <li><strong>Visual Ergonomics:</strong> Saves horizontal screen width and avoids tab overflow.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-green">
+      <div class="mini-card-title">3. Continuous GPS</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Geolocation should be active all the time."</em></li>
+        <li><strong>Always-Active:</strong> Keeps GPS service active during profiling sessions.</li>
+        <li><strong>Smart Matching:</strong> Auto-prioritizes nearby hospitals with geo-timestamps.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-purple">
+      <div class="mini-card-title">4. Mandatory Legend</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Legend of mandatory field in Doctor's Information."</em></li>
+        <li><strong>Top Banner:</strong> Clear banner: <em>"* Indicates required fields for profiling submission"</em>.</li>
+        <li><strong>Zero Guesswork:</strong> Fast and clear form completion for field reps.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Here are the first 4 future enhancements: First, re-ordering the tabs so Consent is last (Doctor Info &rarr; Questionnaire &rarr; Consent). Second, hiding the Others tab to clean up the interface. Third, making Geolocation always active for continuous location awareness. Fourth, adding a clear legend of mandatory fields in Doctor's Information."
+  </div>
+</div>
+
+<!-- SLIDE 10: FUTURE UPDATES - ENHANCEMENTS 5-8 -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 10</span>
+    <span class="slide-tag">Keypoint 3: Future Updates</span>
+  </div>
+  <div class="slide-title">Future Updates: Validation, Deduplication & Audit</div>
+  <div class="slide-desc">Mandatory specialization, missing field pop-ups, duplicate detection, and audit layout (Part 2).</div>
+
+  <div class="four-col">
+    <div class="mini-card mini-card-red">
+      <div class="mini-card-title">5. Mandatory Specialty (*)</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Specialization & Workplace is mandatory (must have an * )."</em></li>
+        <li><strong>Asterisk (*):</strong> Red marker beside Specialization * and Workplace *.</li>
+        <li><strong>Strict Gating:</strong> Blocks progression if either required field is unselected.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-amber">
+      <div class="mini-card-title">6. Missing Fields Modal</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Add an pop-up notification on which the user knows what field is lacking."</em></li>
+        <li><strong>Smart Modal:</strong> Itemizes missing fields before submit.</li>
+        <li><strong>1-Tap Jump:</strong> Tapping an item jumps directly to the field.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-cyan">
+      <div class="mini-card-title">7. Duplicate Detection</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Duplicate detection."</em></li>
+        <li><strong>Multi-Factor:</strong> Checks PRC License Number, Doctor Full Name, and Clinic.</li>
+        <li><strong>Cross-DB:</strong> Validates across local SQLite and ERPNext server.</li>
+      </ul>
+    </div>
+    <div class="mini-card mini-card-green">
+      <div class="mini-card-title">8. Changes Below Consent</div>
+      <ul>
+        <li><strong>User Request:</strong> <em>"Changes will be available below of the consent."</em></li>
+        <li><strong>Integrated Audit:</strong> Moves revision logs directly below the Consent section.</li>
+        <li><strong>Single Screen:</strong> Full doctor context, signature, and change history in one place.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Here are the remaining 4 future enhancements: Fifth, making Specialization and Workplace mandatory with red asterisks (*). Sixth, adding a pop-up modal listing exactly what fields are lacking before submission. Seventh, real-time duplicate detection across PRC licenses and names. Eighth, moving the Changes audit history directly below the Consent section."
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- SLIDE 11: TEST MATRIX & LIVE DEMO SCRIPT -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 11</span>
+    <span class="slide-tag">Live Demonstration & Validation</span>
+  </div>
+  <div class="slide-title">Test Credentials Matrix & 4-Minute Live Demo Script</div>
+  <div class="slide-desc">Verified credentials configured on server and step-by-step multi-role demonstration script.</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 25%;">Persona / Role</th>
+        <th style="width: 30%;">Login Email / Username</th>
+        <th style="width: 15%;">Password</th>
+        <th style="width: 30%;">Scope & Accessible Features</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Field MedRep</strong></td>
+        <td><code>arlaneferraren8@gmail.com</code></td>
+        <td><code>UEPCS101c!</code></td>
+        <td>Bayer / Universal, My Submissions, Doctor Wizard, Propose facility with continuous resubmit.</td>
+      </tr>
+      <tr>
+        <td><strong>SFE Specialist</strong></td>
+        <td><code>lesantos@pims-marketing.com</code></td>
+        <td><code>UEPCS101c!</code></td>
+        <td>SFE Approval Hub, multi-program switcher, Propose facility, Review & Approve pending institutions nationwide.</td>
+      </tr>
+      <tr>
+        <td><strong>System Administrator</strong></td>
+        <td><code>jptan@profinsights.biz</code></td>
+        <td><code>UEPCS101c!</code></td>
+        <td>Universal access across all DocTypes, Masterlists, SFE portal toggle, and Backend Settings.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="mini-card mini-card-green" style="margin-top: 10px;">
+    <div class="mini-card-title">🎬 4-Minute Live Demonstration Walkthrough</div>
+    <ol style="margin: 0; padding-left: 18px; font-size: 8.5pt; color: #334155;">
+      <li style="margin-bottom: 3px;"><strong>Step 1 (MedRep Directory Search):</strong> Log in as MedRep (<code>arlaneferraren8@gmail.com</code>) &rarr; Open Institution Directory &rarr; Click <code>[= Filter]</code> &rarr; Type 'Bacoor' in City &rarr; Counter displays <em>'Showing 3 of 3,990'</em> &rarr; Tap <code>[Clear Filters]</code>.</li>
+      <li style="margin-bottom: 3px;"><strong>Step 2 (Propose Facility & Profiling):</strong> Open Institution Submission &rarr; Tap <code>+ Propose New Institution</code> &rarr; Submit <em>'Apex Care Clinic - Test'</em> &rarr; Open Doctor Wizard &rarr; Select clinic &rarr; Amber note appears: <em>"this institution is not yet approved"</em> &rarr; Doctor profiles smoothly!</li>
+      <li style="margin-bottom: 3px;"><strong>Step 3 (SFE Rejection & Continuous Resubmit):</strong> Log in as SFE Specialist (<code>lesantos@pims-marketing.com</code>) &rarr; Reject with reason <em>"Missing street address"</em> &rarr; MedRep receives rejection &rarr; Taps <strong>Modify & Resubmit</strong> (no discard button!) &rarr; Adds address and resubmits immediately!</li>
+      <li style="margin-bottom: 3px;"><strong>Step 4 (Existing Doctor Profiling):</strong> Start profiling &rarr; Pick <code>Existing HCP</code> &rarr; Select clinic &rarr; Submit &rarr; State transitions to <strong>PROCESSED</strong> instantly (0 manager waiting)!</li>
+      <li style="margin-bottom: 3px;"><strong>Step 5 (SFE Facility Approval):</strong> SFE Specialist reviews resubmitted clinic &rarr; Clicks <code>Approve</code> &rarr; Doctor profile automatically updates note to emerald green: <em>"this institution is now approved"</em>!</li>
+    </ol>
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "Here are the exact test credentials configured on our server. During your presentation, you can run through these 5 quick steps. In under 4 minutes, your audience will see the search filter in action, the instant processing of existing doctors, the new continuous modify & resubmit flow without deletion, and the SFE Specialist facility approval."
+  </div>
+</div>
+
+<!-- SLIDE 12: RETROSPECTIVE & SUMMARY -->
+<div class="slide-box">
+  <div class="slide-header">
+    <span class="slide-num">Slide 12</span>
+    <span class="slide-tag">Sprint Retrospective</span>
+  </div>
+  <div class="slide-title">Summary & Retrospective: Key Takeaways</div>
+  <div class="slide-desc">Consolidating past architectural foundations, current sprint deliverables, and the upcoming 8-point roadmap.</div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 25%;">Lifecycle Phase</th>
+        <th style="width: 25%;">Strategic Focus</th>
+        <th style="width: 50%;">Deliverables & Enhancements</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>PAST UPDATES<br/>(V.0.1.0 - V.0.4.2)</strong></td>
+        <td><strong>Foundations & Architecture</strong></td>
+        <td>Two-Tier Masterlist, 3-step offline wizard, 0-bottleneck existing doctor flow, PSGC hierarchy, DSM territory scoping, and unified search filter engine.</td>
+      </tr>
+      <tr>
+        <td><strong>PRESENT UPDATES<br/>(V.0.4.6)</strong></td>
+        <td><strong>Zero-Deletion & Workflow Parity</strong></td>
+        <td>Institution non-deletion guarantee, continuous modify & resubmit, SFE role alignment (HTTP 417 fix), rejection remarks isolation, SFE facility proposal, unlocked pending profiling, and dynamic approval notes.</td>
+      </tr>
+      <tr>
+        <td><strong>FUTURE UPDATES<br/>(The 8 Suggestions)</strong></td>
+        <td><strong>Mobile Ergonomics & Quality</strong></td>
+        <td>1. Consent tab last (Doctor Info &rarr; Questionnaire &rarr; Consent)<br/>2. Others tab hidden<br/>3. Geolocation active all the time<br/>4. Mandatory field legend<br/>5. Specialization & Workplace mandatory (*)<br/>6. Missing fields pop-up modal<br/>7. Duplicate detection<br/>8. Changes placed below consent</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box">
+    <div class="highlight-title">📁 Project Reference Artifacts</div>
+    • <strong>PowerPoint Deck (.pptx):</strong> <code>docs/HCP_Profiling_App_Scrum_Presentation.pptx</code><br/>
+    • <strong>Printable PDF Deck (.pdf):</strong> <code>docs/HCP_Profiling_App_Scrum_Presentation.pdf</code><br/>
+    • <strong>Markdown Guide (.md):</strong> <code>docs/HCP_PROFILING_APP_SCRUM_PRESENTATION.md</code><br/>
+    • <strong>Release Binary (.apk):</strong> <code>releases/V.0.4.6/HCP_Profiling_V.0.4.6.apk</code> (SHA-256: BC9B39EF152E70107B80FD9EBDE9618C63858BD4A96E1BECC373044A6E976F5A)
+  </div>
+
+  <div class="speaker-box">
+    <div class="speaker-label">Speaker Notes</div>
+    "In summary: In the past, we laid down clean data architecture and eliminated profiling bottlenecks across versions V.0.1.0 through V.0.4.2. In the present V.0.4.6 release, we enforced a zero-deletion policy with continuous modify and resubmit, aligned SFE workflow permissions, isolated rejection remarks, and verified clean builds with 0 compiler errors. And in the future, we will implement the 8 requested mobile enhancements. Thank you for your continued partnership."
+  </div>
+</div>
+
+</body>
+</html>

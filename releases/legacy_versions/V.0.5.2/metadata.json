@@ -1,0 +1,29 @@
+{
+  "version": "V.0.5.2",
+  "build_number": 28,
+  "release_name": "HCP Profiling & SFE Territory Reconfiguration Portal V.0.5.2 (Build 28)",
+  "release_date": "2026-10-01",
+  "file_name": "HCP_Profiling_V.0.5.2.apk",
+  "file_size_bytes": 60690729,
+  "file_size_mb": 57.88,
+  "sha256": "1014877f0f801dba64a9e3ffed1ede91cd1f377aad8e7a079a715dccc58bcb23",
+  "portal_version": "V.0.5.2",
+  "portal_setup_exe": "Territory_Reconfiguration_Setup.exe",
+  "portal_setup_zip": "Territory_Reconfiguration_Setup.zip",
+  "status": "Enterprise Stable Release",
+  "features": [
+    "Doctor Account Deduplication: Eliminates double captured doctors when month is already past",
+    "Monthly Archive Folder Format: Clean folder view by month with click-to-open and zero redundancy",
+    "Full Doctor Data Retention: Automatically retains and copies specialization, workplace, and contacts from previous months",
+    "Standalone 1-Click Laptop Installer (.exe and .zip)",
+    "Centered 10-Row Pagination Switch (10, 20, 30, 40, and All)",
+    "Fixed Checkbox and Actions Columns (Locked Widths During Column Toggles)",
+    "Automatic Python Detection with Seamless Browser SPA Fallback",
+    "Real-time Table Search Filter & Column Visibility (Columns 5/5)",
+    "Zero-Columns Clean State with Complete Checkbox & Header Removal",
+    "Aesthetic Well-Arranged Hidden State Placeholder Card with 1-Click Restore",
+    "4-in-1 Bulk Operations Workbench (Modify, Rename, Delete, Bulk Add)",
+    "Doctor Account Synchronization & Masterlist Validation",
+    "Official App Branding, Desktop Shortcut, & Start Menu Integration"
+  ]
+}

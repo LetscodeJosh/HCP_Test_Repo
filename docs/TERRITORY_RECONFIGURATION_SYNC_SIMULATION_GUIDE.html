@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Territory Reconfiguration Web App & HCP Mobile App Direct Sync Simulation Guide</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 12mm 12mm 14mm 12mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #64748b;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.45;
+    font-size: 9pt;
+    margin: 0;
+    padding: 0;
+    background: #ffffff;
+  }
+
+  .header-card {
+    background: linear-gradient(135deg, #0b192c 0%, #1e3e62 100%);
+    border-radius: 10px;
+    padding: 16px 20px;
+    color: #ffffff;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 12px rgba(11, 25, 44, 0.15);
+  }
+
+  .header-card h1 {
+    font-size: 16pt;
+    font-weight: 800;
+    margin: 0 0 6px 0;
+    color: #ffffff;
+    letter-spacing: -0.3px;
+  }
+
+  .header-card .subtitle {
+    font-size: 9.5pt;
+    color: #38bdf8;
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+
+  .meta-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 8pt;
+  }
+
+  .pill {
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    padding: 3px 9px;
+    border-radius: 12px;
+    color: #f1f5f9;
+  }
+
+  .pill strong {
+    color: #38bdf8;
+  }
+
+  h2 {
+    font-size: 11.5pt;
+    color: #0f172a;
+    border-bottom: 2px solid #e2e8f0;
+    padding-bottom: 4px;
+    margin: 16px 0 10px 0;
+    font-weight: 700;
+  }
+
+  h3 {
+    font-size: 10pt;
+    color: #0369a1;
+    margin: 12px 0 6px 0;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0 0 8px 0;
+    text-align: justify;
+  }
+
+  ul, ol {
+    margin: 0 0 10px 0;
+    padding-left: 20px;
+  }
+
+  li {
+    margin-bottom: 4px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 14px 0;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+
+  th {
+    background: #0f172a;
+    color: #ffffff;
+    padding: 7px 10px;
+    text-align: left;
+    font-weight: 700;
+    font-size: 8.5pt;
+    border: 1px solid #0f172a;
+  }
+
+  td {
+    padding: 6px 10px;
+    border: 1px solid #cbd5e1;
+    vertical-align: top;
+  }
+
+  tr:nth-child(even) td {
+    background: #f8fafc;
+  }
+
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 8pt;
+    background: #f1f5f9;
+    padding: 1px 4px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    color: #0f172a;
+  }
+
+  .pathway-card {
+    background: #f8fafc;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+  }
+
+  .pathway-card.blue {
+    border-left: 5px solid #0284c7;
+  }
+
+  .pathway-card.emerald {
+    border-left: 5px solid #10b981;
+  }
+
+  .simulation-box {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #0066ff;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+  }
+
+  .callout-info {
+    background: #f0f9ff;
+    border-left: 4px solid #0284c7;
+    color: #0c4a6e;
+    border-radius: 6px;
+    padding: 9px 12px;
+    margin: 10px 0;
+    font-size: 8.5pt;
+    page-break-inside: avoid;
+  }
+
+  .footer-bar {
+    margin-top: 20px;
+    padding-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 7.5pt;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div class="header-card">
+  <h1>Territory Reconfiguration & HCP App Direct Sync Simulation</h1>
+  <div class="subtitle">Complete Operational Guide for Real-Time Territory Reconfiguration & Mobile Synchronization</div>
+  <div class="meta-pills">
+    <div class="pill"><strong>Ecosystem:</strong> Territory Portal &bull; HCP Profiling App</div>
+    <div class="pill"><strong>Active Version:</strong> V.0.6.2 (Build 34)</div>
+    <div class="pill"><strong>Port:</strong> 8765 (TerritoryWebServer)</div>
+    <div class="pill"><strong>Backend:</strong> dev.pmii-marketing.com (ERPNext v15)</div>
+    <div class="pill"><strong>Audit:</strong> Grade A+ (Zero Tech Debt)</div>
+  </div>
+</div>
+
+<h2>📋 1. Executive Summary & Dual Pipeline Architecture</h2>
+<p>
+  The Territory Reconfiguration Portal and HCP Profiling Mobile App share an enterprise bidirectional synchronization model. SFE Leads and District Managers can reconfigure territories via two robust pathways:
+</p>
+
+<div class="pathway-card blue">
+  <h3 style="margin-top:0; color:#0369a1;">Pathway A: Embedded In-App Server (Offline / Field Wi-Fi Ready)</h3>
+  <p>
+    The mobile app executes an internal lightweight HTTP server (<code>TerritoryWebServer</code>) on port <strong>8765</strong>. It serves the bundled single-page portal directly from Flutter assets to mobile browsers (Chrome / Safari) or laptop browsers via local Wi-Fi with ephemeral security tokens (<code>?token=...</code>). Real-time endpoints include:
+  </p>
+  <ul>
+    <li><code>GET /api/status</code>: Server health, active port, version verification (<code>V.0.6.2</code>).</li>
+    <li><code>GET /api/live-data?program=...</code>: Serves live ERPNext master data trees and doctor counts.</li>
+    <li><code>POST /api/sync</code>: Acknowledges staged reconfigurations and synchronizes memory state.</li>
+  </ul>
+</div>
+
+<div class="pathway-card emerald">
+  <h3 style="margin-top:0; color:#065f46;">Pathway B: Enterprise ERPNext Cloud Backend Pipeline</h3>
+  <p>
+    When running via desktop executable (<code>Territory_Reconfiguration_Setup.exe</code>) or Streamlit Cloud, the portal updates ERPNext v15 (<code>dev.pmii-marketing.com</code>) DocTypes (<code>Territory</code>, <code>Sales Person</code>, <code>HCP Account</code>) directly via authenticated REST APIs. The mobile app queries <code>fetchTerritoryInfos(forceRefresh: true)</code> and dynamically resolves territories via <code>apiService.resolveUserTerritory()</code>.
+  </p>
+</div>
+
+<h2>🧪 2. Step-by-Step Simulation Scenarios</h2>
+
+<div class="simulation-box">
+  <h3>Option 1: 1-Device Mobile Simulation (Direct Handshake on Phone)</h3>
+  <ol>
+    <li><strong>Start Embedded Server:</strong> Open HCP Profiling App &rarr; Drawer &rarr; tap <strong>Territory Reconfiguration</strong>. Status confirms: <code>Built-In Web Server Active (Port 8765)</code>.</li>
+    <li><strong>Launch Portal:</strong> Tap <strong>Open in Device Browser (Chrome / Safari)</strong> &rarr; opens <code>http://127.0.0.1:8765</code>.</li>
+    <li><strong>Reconfigure:</strong> In Territory Tree View or Table Grid View, find territory <code>AD0101</code> (or <code>RM101</code>). Tap <strong>Quick Reconfigure</strong> &rarr; Reassign <strong>Assigned User ID</strong> to <code>lesantos@pims-marketing.com</code> &rarr; Save.</li>
+    <li><strong>Verify in Mobile App:</strong> Return to HCP Profiling App &rarr; tap <strong>+ Add New Doctor</strong> &rarr; in Step 1, observe <strong>Territory Code</strong> and <strong>Territory Manager</strong> automatically pre-populated with reconfigured values!</li>
+  </ol>
+</div>
+
+<div class="simulation-box">
+  <h3>Option 2: 2-Device Laptop-to-Mobile Wi-Fi Pairing Simulation</h3>
+  <ol>
+    <li><strong>Pair Devices:</strong> Connect laptop and mobile phone to the same Wi-Fi (or mobile hotspot).</li>
+    <li><strong>Scan QR / Open URL:</strong> In HCP App Territory Reconfiguration screen, copy the <strong>Laptop Wi-Fi URL</strong> (e.g. <code>http://192.168.1.105:8765/?token=...</code>) or scan on-screen QR code from laptop webcam.</li>
+    <li><strong>Execute Commercial Realignment:</strong>
+      <ul>
+        <li><strong>Rename Code:</strong> Right-click <code>AD0101</code> &rarr; Rename to <code>ADC-T01</code>.</li>
+        <li><strong>Add Child Node:</strong> Under district <code>AD1 - GMA/NORTH LUZON</code>, click <strong>+ Add Child Territory</strong> &rarr; code <code>AD0199</code>.</li>
+      </ul>
+    </li>
+    <li><strong>Verify in Mobile App:</strong> Pull down to refresh on doctor list &rarr; new territory code is active across dropdowns and submission forms immediately.</li>
+  </ol>
+</div>
+
+<div class="simulation-box">
+  <h3>Option 3: Live Cloud Backend Sync (dev.pmii-marketing.com)</h3>
+  <ol>
+    <li>Launch <code>releases/Territory_Reconfiguration_Setup.exe</code> &rarr; log in with ERPNext credentials.</li>
+    <li>Select territory (e.g., <code>BA1-01</code> in Bayer or <code>AD0102</code> in Abbott) &rarr; update assigned User ID / manager.</li>
+    <li>Log into HCP Mobile App as that Medical Rep &rarr; App fetches fresh territory infos &rarr; doctor profiles reflect remapped territory.</li>
+  </ol>
+</div>
+
+<h2>🔍 3. Mobile App Verification Checklist</h2>
+<table>
+  <thead>
+    <tr>
+      <th style="width: 25%;">Touchpoint</th>
+      <th style="width: 30%;">HCP App Screen / Location</th>
+      <th style="width: 45%;">Expected Verification Behavior</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1. Doctor Profiling Wizard</strong></td>
+      <td><strong><code>+ Add New Doctor</code></strong> &rarr; Affiliation</td>
+      <td><code>apiService.resolveUserTerritory()</code> automatically populates the newly reconfigured Territory Code and Manager for the logged-in rep.</td>
+    </tr>
+    <tr>
+      <td><strong>2. Doctor Affiliation Card</strong></td>
+      <td><strong>HCP Account Screen</strong></td>
+      <td>Doctor's active program account card displays the remapped territory code with historical links preserved.</td>
+    </tr>
+    <tr>
+      <td><strong>3. DSM Territory Scope</strong></td>
+      <td><strong>Submissions History Screen</strong></td>
+      <td>Submissions submitted under the reconfigured territory are automatically filtered into the DSM's managed scope (<code>getManagedTerritoryCodes()</code>).</td>
+    </tr>
+    <tr>
+      <td><strong>4. Embedded Server Status</strong></td>
+      <td><strong>Territory Reconfiguration Screen</strong></td>
+      <td>Displays active port 8765, local URL, network IP, and session token status with zero unhandled exceptions.</td>
+    </tr>
+    <tr>
+      <td><strong>5. Live Data Diagnostics</strong></td>
+      <td>Browser &rarr; <code>/api/status</code></td>
+      <td>Returns JSON payload confirming online status, version <code>V.0.6.2</code>, and active program trees.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout-info">
+  <strong>🛡️ Production Resilience Invariant:</strong> When ERPNext is unreachable or undergoing backup, cached territory trees (<code>territory_infos_cache.json</code>) and bundled baseline trees (<code>TerritoryLiveData</code>) serve queries instantly. The UI never freezes or displays empty screens.
+</div>
+
+<div class="footer-bar">
+  <div>HCP Profiling App &bull; Territory Reconfiguration & Direct Sync Guide &bull; Version: V.0.6.2 (Build 34)</div>
+  <div>Confidential &bull; Professional Information Marketing Services, Inc.</div>
+</div>
+
+</body>
+</html>

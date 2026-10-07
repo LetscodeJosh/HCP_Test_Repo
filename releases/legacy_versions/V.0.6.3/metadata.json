@@ -1,0 +1,11 @@
+{
+  "version": "V.0.6.3",
+  "buildNumber": 35,
+  "releaseDate": "2026-10-06",
+  "title": "Institution Field Intelligence: Zero-Lag Typing, Phrase Similarity Precision, and Non-Blocking MedRep Proposal Workflow",
+  "components": {
+    "web_portal": "V.0.6.3",
+    "mobile_app": "V.0.6.3+35"
+  },
+  "sha256_portal": "a38951cedd857e377f99afcdcb8cb82ee647302ff3f82531436a93ac0697c15a"
+}

@@ -1,4 +1,5 @@
 import 'lookup_models.dart';
+import '../services/data_sanitizer.dart';
 
 class HcpProfileSubmission {
   final String? name;
@@ -43,6 +44,51 @@ class HcpProfileSubmission {
   final String? changesJson;
   final int docstatus; // 0: Draft/Pending, 1: Approved/Submitted, 2: Cancelled
   final String? profileAction; // 'New HCP' or 'Existing HCP'
+  final String? rejectionRemarks;
+  final String? rejectedBy;
+
+  bool isWorkplaceRejected([List<Institution>? dynamicInsts]) {
+    if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
+      return true;
+    }
+    if (rejectionRemarks != null && rejectionRemarks!.toUpperCase().contains('REJECTED')) {
+      return true;
+    }
+    return workplaces.any((w) =>
+        w.isRejected ||
+        LocationResolver.isRejectedInstitution(w.hcpWorkplace, dynamicInsts) ||
+        LocationResolver.isRejectedInstitution(w.workplaceName, dynamicInsts));
+  }
+
+  String? getRejectedInstitutionReason([List<Institution>? dynamicInsts]) {
+    if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
+      final match = dynamicInsts?.firstWhere(
+        (i) => i.name.toLowerCase() == institution!.toLowerCase() || i.institutionName.toLowerCase() == institution!.toLowerCase(),
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (match != null && match.rejectionReason != null && match.rejectionReason!.trim().isNotEmpty) {
+        return match.rejectionReason!.trim();
+      }
+    }
+    for (var w in workplaces) {
+      if (w.rejectionReason != null && w.rejectionReason!.trim().isNotEmpty) {
+        return w.rejectionReason!.trim();
+      }
+      if (LocationResolver.isRejectedInstitution(w.hcpWorkplace, dynamicInsts)) {
+        final match = dynamicInsts?.firstWhere(
+          (i) => i.name.toLowerCase() == (w.hcpWorkplace ?? '').toLowerCase() || i.institutionName.toLowerCase() == (w.hcpWorkplace ?? '').toLowerCase(),
+          orElse: () => Institution(name: '', institutionName: ''),
+        );
+        if (match != null && match.rejectionReason != null && match.rejectionReason!.trim().isNotEmpty) {
+          return match.rejectionReason!.trim();
+        }
+      }
+    }
+    if (rejectionRemarks != null && rejectionRemarks!.toUpperCase().contains('REJECTED')) {
+      return rejectionRemarks;
+    }
+    return null;
+  }
 
   HcpProfileSubmission({
     this.name,
@@ -87,6 +133,8 @@ class HcpProfileSubmission {
     this.changesJson,
     this.docstatus = 0,
     this.profileAction,
+    this.rejectionRemarks,
+    this.rejectedBy,
   });
 
   factory HcpProfileSubmission.fromJson(Map<String, dynamic> json) {
@@ -135,7 +183,7 @@ class HcpProfileSubmission {
     }
 
     // Resolve application status (Not Applied, Applying, Applied, Failed)
-    String resolvedAppStatus = json['application_status'] ?? ((resolvedWorkflow == 'Approved' || rawDocstatus == 1) ? 'Applied' : 'Not Applied');
+    String resolvedAppStatus = json['application_status'] ?? ((resolvedWorkflow == 'Approved' || resolvedWorkflow == 'Processed' || rawDocstatus == 1) ? 'Applied' : 'Not Applied');
 
     // Resolve Profile Action (Existing HCP vs New HCP)
     final rawProfileAction = (json['profile_action'] ?? '').toString().trim();
@@ -143,6 +191,30 @@ class HcpProfileSubmission {
     final String resolvedAction = rawProfileAction.isNotEmpty
         ? rawProfileAction
         : (resolvedHcpId.isNotEmpty ? 'Existing HCP' : 'New HCP');
+
+    final bool isActuallyRejected = rawDocstatus == 2 || resolvedWorkflow == 'Rejected';
+
+    final parsedWorkplaces = (json['table_workplaces'] as List? ?? json['workplaces'] as List? ?? json['hcp_workplace'] as List?)
+            ?.map((e) => SubmissionWorkplace.fromJson(e))
+            .toList() ?? [];
+
+    SubmissionWorkplace? primaryWp;
+    if (parsedWorkplaces.isNotEmpty) {
+      primaryWp = parsedWorkplaces.firstWhere((w) => w.preferred, orElse: () => parsedWorkplaces.first);
+    }
+
+    final rawReg = (json['region_name'] ?? json['region'] ?? primaryWp?.regionName ?? primaryWp?.regionTitle)?.toString();
+    final rawProv = (json['province_name'] ?? json['province'] ?? primaryWp?.provinceName ?? primaryWp?.provinceTitle)?.toString();
+    final rawCity = (json['city_municipality'] ?? json['city'] ?? primaryWp?.cityMunicipality ?? primaryWp?.cityTitle)?.toString();
+    final rawInst = (json['institution'] ?? primaryWp?.hcpWorkplace ?? primaryWp?.workplaceName)?.toString();
+
+    final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+      institutionIdOrName: rawInst,
+      institutionName: rawInst,
+      cityIdOrName: rawCity,
+      provinceIdOrName: rawProv,
+      regionIdOrName: rawReg,
+    );
 
     return HcpProfileSubmission(
       name: json['name'],
@@ -161,17 +233,15 @@ class HcpProfileSubmission {
       specialties: (json['table_specialties'] as List? ?? json['specialties'] as List? ?? json['hcp_specialty'] as List?)
               ?.map((e) => SubmissionSpecialty.fromJson(e))
               .toList() ?? [],
-      workplaces: (json['table_workplaces'] as List? ?? json['workplaces'] as List? ?? json['hcp_workplace'] as List?)
-              ?.map((e) => SubmissionWorkplace.fromJson(e))
-              .toList() ?? [],
+      workplaces: parsedWorkplaces,
       contacts: (json['table_contact_info'] as List? ?? json['contacts'] as List? ?? json['hcp_contact_info'] as List?)
               ?.map((e) => SubmissionContact.fromJson(e))
               .toList() ?? [],
-      regionName: LocationResolver.resolveRegionName(json['region_name']?.toString()),
-      provinceName: LocationResolver.resolveProvinceName(json['province_name']?.toString()),
-      cityMunicipality: LocationResolver.resolveCityName(json['city_municipality']?.toString()),
+      regionName: resolvedLoc.regionName,
+      provinceName: resolvedLoc.provinceName,
+      cityMunicipality: resolvedLoc.cityName,
       barangayName: json['barangay_name'],
-      institution: LocationResolver.resolveInstitutionName(json['institution']?.toString()),
+      institution: resolvedLoc.workplaceName,
       accountOrProgram: json['account_or_program'],
       territory: json['territory'],
       salesPerson: json['sales_person'],
@@ -195,6 +265,8 @@ class HcpProfileSubmission {
       changesJson: json['changes_json'],
       docstatus: rawDocstatus,
       profileAction: resolvedAction,
+      rejectionRemarks: isActuallyRejected ? (json['rejection_reason'] ?? json['rejection_remarks'] ?? json['remarks']) : null,
+      rejectedBy: isActuallyRejected ? (json['rejected_by'] ?? json['comment_by'] ?? json['owner']) : null,
     );
   }
 
@@ -210,31 +282,59 @@ class HcpProfileSubmission {
         ? profileAction!.trim()
         : (hcpName.isNotEmpty ? 'Existing HCP' : 'New HCP');
 
-    return {
-      if (name != null) 'name': name,
-      'hcp_name': hcpName,
-      'hcp_full_name': computedFullName.isNotEmpty ? computedFullName : null,
-      'first_name': fn,
-      'middle_name': mn,
-      'last_name': ln,
-      if (birthDate != null && birthDate!.isNotEmpty) 'birth_date': birthDate,
-      'consent_privacy_understood': consentPrivacyUnderstood ? 1 : 0,
-      if (consentSignature != null) 'consent_signature': consentSignature,
-      if (consentPhoto != null) 'consent_photo': consentPhoto,
-      if (hcpPhoto != null) 'hcp_photo': hcpPhoto,
-      if (hcpType != null) 'hcp_type': hcpType,
-      if (hcpPractice != null) 'hcp_practice': hcpPractice,
-      'table_specialties': specialties.map((e) => e.toJson()).toList(),
-      'table_workplaces': workplaces.map((e) => e.toJson()).toList(),
-      'table_contact_info': contacts.map((e) => e.toJson()).toList(),
-      if (regionName != null) 'region_name': regionName,
-      if (provinceName != null) 'province_name': provinceName,
-      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
-      if (barangayName != null) 'barangay_name': barangayName,
-      if (institution != null) 'institution': institution,
-      'custom_workplace': {
-        'institution_name': LocationResolver.resolveInstitutionName(institution),
-      },
+      SubmissionWorkplace? primaryWp;
+      if (workplaces.isNotEmpty) {
+        primaryWp = workplaces.firstWhere((w) => w.preferred, orElse: () => workplaces.first);
+      }
+      final resolvedPrimary = LocationResolver.resolveCompleteWorkplaceLocation(
+        institutionIdOrName: primaryWp?.hcpWorkplace ?? primaryWp?.workplaceName ?? institution,
+        institutionName: primaryWp?.workplaceName ?? primaryWp?.hcpWorkplace ?? institution,
+        cityIdOrName: primaryWp?.cityMunicipality ?? primaryWp?.cityTitle ?? cityMunicipality,
+        provinceIdOrName: primaryWp?.provinceName ?? primaryWp?.provinceTitle ?? provinceName,
+        regionIdOrName: primaryWp?.regionName ?? primaryWp?.regionTitle ?? regionName,
+      );
+
+      final finalRegId = (regionName != null && regionName!.trim().isNotEmpty && regionName != '-')
+          ? LocationResolver.resolveRegionId(regionName)
+          : resolvedPrimary.regionId;
+      final finalProvId = (provinceName != null && provinceName!.trim().isNotEmpty && provinceName != '-')
+          ? LocationResolver.resolveProvinceId(provinceName)
+          : resolvedPrimary.provinceId;
+      final finalCityId = (cityMunicipality != null && cityMunicipality!.trim().isNotEmpty && cityMunicipality != '-')
+          ? LocationResolver.resolveCityId(cityMunicipality)
+          : resolvedPrimary.cityId;
+      final finalInstId = (institution != null && institution!.trim().isNotEmpty)
+          ? LocationResolver.resolveInstitutionId(institution)
+          : resolvedPrimary.workplaceId;
+
+      return DataSanitizer.sanitizePayload({
+        if (name != null) 'name': name,
+        'hcp_name': hcpName,
+        'hcp_full_name': computedFullName.isNotEmpty ? computedFullName : null,
+        'first_name': fn,
+        'middle_name': mn,
+        'last_name': ln,
+        if (birthDate != null && birthDate!.isNotEmpty) 'birth_date': birthDate,
+        'consent_privacy_understood': consentPrivacyUnderstood ? 1 : 0,
+        if (consentSignature != null) 'consent_signature': consentSignature,
+        if (consentPhoto != null) 'consent_photo': consentPhoto,
+        if (hcpPhoto != null) 'hcp_photo': hcpPhoto,
+        if (hcpType != null) 'hcp_type': hcpType,
+        if (hcpPractice != null) 'hcp_practice': hcpPractice,
+        'table_specialties': specialties.map((e) => e.toJson()).toList(),
+        'table_workplaces': workplaces.map((e) => e.toJson()).toList(),
+        'table_contact_info': contacts.map((e) => e.toJson()).toList(),
+        'region_name': finalRegId.isNotEmpty ? finalRegId : resolvedPrimary.regionId,
+        'province_name': finalProvId.isNotEmpty ? finalProvId : resolvedPrimary.provinceId,
+        'city_municipality': finalCityId.isNotEmpty ? finalCityId : resolvedPrimary.cityId,
+        if (barangayName != null) 'barangay_name': barangayName,
+        'institution': finalInstId.isNotEmpty ? finalInstId : resolvedPrimary.workplaceId,
+        'custom_workplace': {
+          'institution_name': resolvedPrimary.workplaceName,
+          'region_name': resolvedPrimary.regionName,
+          'province_name': resolvedPrimary.provinceName,
+          'city_municipality': resolvedPrimary.cityName,
+        },
       if (accountOrProgram != null) 'account_or_program': accountOrProgram,
       if (territory != null) 'territory': territory,
       if (salesPerson != null) 'sales_person': salesPerson,
@@ -254,7 +354,12 @@ class HcpProfileSubmission {
       if (changesJson != null) 'changes_json': changesJson,
       'docstatus': docstatus,
       'profile_action': resolvedAction,
-    };
+      if (rejectionRemarks != null) ...{
+        'rejection_reason': rejectionRemarks,
+        'rejection_remarks': rejectionRemarks,
+      },
+      if (rejectedBy != null) 'rejected_by': rejectedBy,
+    });
   }
 
   // Countermeasure 1: Semantic Locks (Application-level status properties)
@@ -308,6 +413,8 @@ class HcpProfileSubmission {
     String? changesJson,
     int? docstatus,
     String? profileAction,
+    String? rejectionRemarks,
+    String? rejectedBy,
   }) {
     return HcpProfileSubmission(
       name: name ?? this.name,
@@ -352,6 +459,8 @@ class HcpProfileSubmission {
       changesJson: changesJson ?? this.changesJson,
       docstatus: docstatus ?? this.docstatus,
       profileAction: profileAction ?? this.profileAction,
+      rejectionRemarks: rejectionRemarks ?? this.rejectionRemarks,
+      rejectedBy: rejectedBy ?? this.rejectedBy,
     );
   }
 }
@@ -432,6 +541,11 @@ class SubmissionWorkplace {
   final String? cityTitle;
   final String? provinceName;
   final String? provinceTitle;
+  final String? regionName;
+  final String? regionTitle;
+  final String? workflowState;
+  final String? rejectionReason;
+  final bool isCustom;
 
   SubmissionWorkplace({
     this.preferred = false,
@@ -441,69 +555,115 @@ class SubmissionWorkplace {
     this.cityTitle,
     this.provinceName,
     this.provinceTitle,
+    this.regionName,
+    this.regionTitle,
+    this.workflowState,
+    this.rejectionReason,
+    this.isCustom = false,
   });
 
   factory SubmissionWorkplace.fromJson(Map<String, dynamic> json) {
     final rawWp = (json['workplace_name'] ?? json['address'] ?? json['workplace'] ?? json['hcp_workplace'] ?? '').toString().trim();
     final rawCity = (json['city_municipality'] ?? json['city_title'] ?? json['city_name'] ?? json['city'] ?? '').toString().trim();
     final rawProv = (json['province_name'] ?? json['province_title'] ?? json['province'] ?? '').toString().trim();
+    final rawReg = (json['region_name'] ?? json['region_title'] ?? json['region'] ?? '').toString().trim();
     final hcpWp = (json['hcp_workplace'] ?? json['workplace'] ?? '').toString().trim();
 
-    final resolvedWp = LocationResolver.resolveInstitutionName(rawWp.isNotEmpty ? rawWp : hcpWp);
-    final resolvedCity = LocationResolver.resolveCityName(rawCity);
-    final resolvedProv = LocationResolver.resolveProvinceName(rawProv);
-
-    final finalWp = resolvedWp.isNotEmpty ? resolvedWp : (rawWp.isNotEmpty ? rawWp : (hcpWp.isNotEmpty ? hcpWp : null));
-    final finalCity = resolvedCity.isNotEmpty ? resolvedCity : (rawCity.isNotEmpty ? rawCity : null);
-    final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (rawProv.isNotEmpty ? rawProv : null);
+    final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+      institutionIdOrName: hcpWp.isNotEmpty ? hcpWp : rawWp,
+      institutionName: rawWp.isNotEmpty ? rawWp : hcpWp,
+      cityIdOrName: rawCity,
+      provinceIdOrName: rawProv,
+      regionIdOrName: rawReg,
+    );
 
     return SubmissionWorkplace(
       preferred: json['preferred'] == 1 || json['preferred'] == true ||
           json['is_preferred'] == 1 || json['is_preferred'] == true ||
           json['is_primary'] == 1 || json['is_primary'] == true ||
           json['primary'] == 1 || json['primary'] == true,
-      hcpWorkplace: finalWp,
-      workplaceName: finalWp,
-      cityMunicipality: finalCity,
-      cityTitle: finalCity,
-      provinceName: finalProv,
-      provinceTitle: finalProv,
+      hcpWorkplace: resolvedLoc.workplaceId,
+      workplaceName: resolvedLoc.workplaceName,
+      cityMunicipality: resolvedLoc.cityId,
+      cityTitle: resolvedLoc.cityName,
+      provinceName: resolvedLoc.provinceId,
+      provinceTitle: resolvedLoc.provinceName,
+      regionName: resolvedLoc.regionId,
+      regionTitle: resolvedLoc.regionName,
+      workflowState: json['workflow_state']?.toString(),
+      rejectionReason: (json['rejection_reason'] ?? json['rejection_remarks'])?.toString(),
+      isCustom: json['is_custom'] == true || json['is_custom'] == 1,
+    );
+  }
+
+  bool get isRejected =>
+      (workflowState ?? '').trim().toLowerCase() == 'rejected' ||
+      (rejectionReason != null && rejectionReason!.trim().isNotEmpty && rejectionReason!.toUpperCase().contains('REJECTED'));
+
+  SubmissionWorkplace copyWith({
+    bool? preferred,
+    String? hcpWorkplace,
+    String? workplaceName,
+    String? cityMunicipality,
+    String? cityTitle,
+    String? provinceName,
+    String? provinceTitle,
+    String? regionName,
+    String? regionTitle,
+    String? workflowState,
+    String? rejectionReason,
+    bool? isCustom,
+  }) {
+    return SubmissionWorkplace(
+      preferred: preferred ?? this.preferred,
+      hcpWorkplace: hcpWorkplace ?? this.hcpWorkplace,
+      workplaceName: workplaceName ?? this.workplaceName,
+      cityMunicipality: cityMunicipality ?? this.cityMunicipality,
+      cityTitle: cityTitle ?? this.cityTitle,
+      provinceName: provinceName ?? this.provinceName,
+      provinceTitle: provinceTitle ?? this.provinceTitle,
+      regionName: regionName ?? this.regionName,
+      regionTitle: regionTitle ?? this.regionTitle,
+      workflowState: workflowState ?? this.workflowState,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      isCustom: isCustom ?? this.isCustom,
     );
   }
 
   Map<String, dynamic> toJson() {
-    final wpId = LocationResolver.resolveInstitutionId(workplaceName ?? hcpWorkplace);
-    final wpName = LocationResolver.resolveInstitutionName(workplaceName ?? hcpWorkplace);
-    final cityId = LocationResolver.resolveCityId(cityTitle ?? cityMunicipality);
-    final cityName = LocationResolver.resolveCityName(cityTitle ?? cityMunicipality);
-    final provId = LocationResolver.resolveProvinceId(provinceTitle ?? provinceName);
-    final provName = LocationResolver.resolveProvinceName(provinceTitle ?? provinceName);
-
-    final finalWpId = wpId.isNotEmpty ? wpId : (hcpWorkplace ?? '');
-    final finalWpName = wpName.isNotEmpty ? wpName : (workplaceName ?? finalWpId);
-    final finalCityId = cityId.isNotEmpty ? cityId : (cityMunicipality ?? '');
-    final finalCityName = cityName.isNotEmpty ? cityName : (cityTitle ?? finalCityId);
-    final finalProvId = provId.isNotEmpty ? provId : (provinceName ?? '');
-    final finalProvName = provName.isNotEmpty ? provName : (provinceTitle ?? finalProvId);
+    final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+      institutionIdOrName: hcpWorkplace ?? workplaceName,
+      institutionName: workplaceName ?? hcpWorkplace,
+      cityIdOrName: cityMunicipality ?? cityTitle,
+      provinceIdOrName: provinceName ?? provinceTitle,
+      regionIdOrName: regionName ?? regionTitle,
+    );
 
     return {
       'preferred': preferred ? 1 : 0,
       'is_preferred': preferred ? 1 : 0,
       'is_primary': preferred ? 1 : 0,
       'primary': preferred ? 1 : 0,
-      if (finalWpId.isNotEmpty) 'hcp_workplace': finalWpId,
-      if (finalWpId.isNotEmpty) 'workplace': finalWpId,
-      if (finalWpName.isNotEmpty) 'workplace_name': finalWpName,
-      if (finalWpName.isNotEmpty) 'address': finalWpName,
-      if (finalCityId.isNotEmpty) 'city_municipality': finalCityId,
-      if (finalCityId.isNotEmpty) 'city': finalCityId,
-      if (finalCityName.isNotEmpty) 'city_title': finalCityName,
-      if (finalCityName.isNotEmpty) 'city_name': finalCityName,
-      if (finalProvId.isNotEmpty) 'province_name': finalProvId,
-      if (finalProvId.isNotEmpty) 'province': finalProvId,
-      if (finalProvName.isNotEmpty) 'province_title': finalProvName,
+      'hcp_workplace': resolvedLoc.workplaceId,
+      'workplace': resolvedLoc.workplaceId,
+      'workplace_name': resolvedLoc.workplaceName,
+      'address': resolvedLoc.workplaceName,
+      'city_municipality': resolvedLoc.cityId,
+      'city': resolvedLoc.cityId,
+      'city_title': resolvedLoc.cityName,
+      'city_name': resolvedLoc.cityName,
+      'province_name': resolvedLoc.provinceId,
+      'province': resolvedLoc.provinceId,
+      'province_title': resolvedLoc.provinceName,
+      'region_name': resolvedLoc.regionId,
+      'region_title': resolvedLoc.regionName,
+      if (workflowState != null) 'workflow_state': workflowState,
+      if (rejectionReason != null) 'rejection_reason': rejectionReason,
+      if (isCustom) 'is_custom': 1,
     };
   }
+
+
 }
 
 

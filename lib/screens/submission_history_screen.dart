@@ -44,7 +44,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     if (apiService.isMedRep) {
       _onlyMySubmissions = true;
     }
-    if (apiService.isAdmin) {
+    if (apiService.isAdmin || apiService.isSfe) {
       _programFilter = 'All';
     } else if (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All') {
       _programFilter = apiService.selectedProgram;
@@ -324,20 +324,66 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   }
 
   int _getProgramTotalCount(ApiService apiService) {
-    if (apiService.isAdmin) {
+    List<HcpProfileSubmission> list = List.from(_submissions);
+
+    // 1. Role-based Program Isolation
+    if (apiService.isAdmin || apiService.isSfe) {
       if (_programFilter != 'All') {
-        return _submissions.where((s) => _matchesProgram(s, _programFilter)).length;
+        list = list.where((item) => _matchesProgram(item, _programFilter)).toList();
       }
-      return _submissions.length;
     } else {
       final userProg = apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All'
           ? apiService.selectedProgram
           : _programFilter;
-      if (userProg.isEmpty || userProg.toLowerCase() == 'all') {
-        return _submissions.length;
+      if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
+        list = list.where((item) => _matchesProgram(item, userProg)).toList();
       }
-      return _submissions.where((s) => _matchesProgram(s, userProg)).length;
     }
+
+    // District / Territory Isolation for DSM
+    if (apiService.isManager && !apiService.isAdmin) {
+      final managedTerrs = apiService.getManagedTerritoryCodes();
+      if (managedTerrs.isNotEmpty) {
+        list = list.where((item) {
+          final terr = (item.territory ?? '').trim();
+          return terr.isNotEmpty && managedTerrs.contains(terr);
+        }).toList();
+      }
+    }
+
+    // 2. Submissions Scope Filter (MedRep is strictly locked to My Submissions; Admin/SFE can toggle)
+    final bool enforceMySubmissions = apiService.isMedRep ? true : ((apiService.isAdmin || apiService.isSfe) ? _onlyMySubmissions : false);
+    if (enforceMySubmissions) {
+      final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
+      final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
+      final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+
+      list = list.where((item) {
+        final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
+        final sSales = (item.salesPerson ?? '').toLowerCase().trim();
+
+        // 1. Direct Email / Owner / User ID match (or prefix match before @)
+        if (sEmail.isNotEmpty && email.isNotEmpty) {
+          if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
+          final emailPrefix = email.contains('@') ? email.split('@').first : email;
+          final sEmailPrefix = sEmail.contains('@') ? sEmail.split('@').first : sEmail;
+          if (emailPrefix.isNotEmpty && sEmailPrefix.isNotEmpty && (emailPrefix == sEmailPrefix || email.contains(sEmailPrefix) || sEmail.contains(emailPrefix))) return true;
+        }
+
+        // 2. Sales Person Name Match (Exact, Substring, or Multi-Token e.g. "Jorge Naag Mengorio" matches "Jorge Mengorio")
+        if (sSales.isNotEmpty && fullName.isNotEmpty) {
+          if (sSales == fullName || sSales.contains(fullName) || fullName.contains(sSales)) return true;
+          final salesTokens = sSales.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+          final matchingTokens = salesTokens.where((t) => userTokens.contains(t)).length;
+          if (matchingTokens >= 2 || (salesTokens.length == 1 && userTokens.contains(salesTokens.first))) {
+            return true;
+          }
+        }
+        return false;
+      }).toList();
+    }
+
+    return list.length;
   }
 
   String _formatSubmissionDate12Hr(String? dateStr) {
@@ -390,7 +436,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
     List<HcpProfileSubmission> list = List.from(_submissions);
 
     // 1. Role-based Program Isolation
-    if (apiService.isAdmin) {
+    if (apiService.isAdmin || apiService.isSfe) {
       if (_programFilter != 'All') {
         list = list.where((item) => _matchesProgram(item, _programFilter)).toList();
       }
@@ -403,11 +449,22 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       }
     }
 
+    // District / Territory Isolation for DSM
+    if (apiService.isManager && !apiService.isAdmin) {
+      final managedTerrs = apiService.getManagedTerritoryCodes();
+      if (managedTerrs.isNotEmpty) {
+        list = list.where((item) {
+          final terr = (item.territory ?? '').trim();
+          return terr.isNotEmpty && managedTerrs.contains(terr);
+        }).toList();
+      }
+    }
+
     // 2. Submissions Scope Filter:
     // MedRep is strictly locked to their own submissions and cannot toggle.
     // Managers view all submissions within their program/territory scope for review and approvals.
-    // ONLY Admin accounts/users can toggle _onlyMySubmissions.
-    final bool enforceMySubmissions = apiService.isMedRep ? true : (apiService.isAdmin ? _onlyMySubmissions : false);
+    // ONLY Admin/SFE accounts/users can toggle _onlyMySubmissions.
+    final bool enforceMySubmissions = apiService.isMedRep ? true : ((apiService.isAdmin || apiService.isSfe) ? _onlyMySubmissions : false);
     if (enforceMySubmissions) {
       final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
       final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
@@ -571,29 +628,47 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                   builder: (ctxBanner) {
                     final apiService = Provider.of<ApiService>(context, listen: false);
                     final rawWf = (currentSub.workflowState ?? currentSub.status ?? '').toLowerCase().trim();
-                    final bool isPending = (rawWf.contains('pend') || rawWf.isEmpty) && currentSub.docstatus == 0 && rawWf != 'draft' && !rawWf.contains('proc');
-                    final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin) && isPending;
+                    final bool isProcessed = rawWf == 'processed' || rawWf.contains('proc');
+                    final bool isApproved = (rawWf == 'approved' || currentSub.docstatus == 1) && !rawWf.contains('pend');
+                    final bool isPending = (rawWf.contains('pend') || rawWf.isEmpty) && currentSub.docstatus == 0 && rawWf != 'draft' && !isProcessed;
+                    final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin || apiService.isSfe) && isPending;
+
+                    final Color bannerBg = canApproveOrReject
+                        ? const Color(0xFF1E3A8A)
+                        : (isProcessed
+                            ? const Color(0xFF1D4ED8)
+                            : (isApproved ? const Color(0xFF047857) : const Color(0xFF0284C7)));
+                    final IconData bannerIcon = canApproveOrReject
+                        ? Icons.verified_user_rounded
+                        : (isProcessed
+                            ? Icons.task_alt_rounded
+                            : (isApproved ? Icons.check_circle_rounded : Icons.info_outline_rounded));
+                    final String bannerText = canApproveOrReject
+                        ? 'Managerial Review — Action buttons (Approve / Reject) are available below.'
+                        : (isProcessed
+                            ? 'Submission Finalized & Processed — Auto-merged into HCP Masterlist & HCP Account.'
+                            : (isApproved
+                                ? 'Submission Approved — Doctor profile active in universal HCP & program account.'
+                                : 'This form is locked in accordance with ERPNext Workflow.'));
 
                     return Container(
                       width: double.infinity,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                       decoration: BoxDecoration(
-                        color: canApproveOrReject ? const Color(0xFF1E3A8A) : const Color(0xFF0284C7),
+                        color: bannerBg,
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                       ),
                       child: Row(
                         children: [
                           Icon(
-                            canApproveOrReject ? Icons.verified_user_rounded : Icons.info_outline_rounded,
+                            bannerIcon,
                             color: Colors.white,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              canApproveOrReject
-                                  ? 'Managerial Review — Action buttons (Approve / Reject) are available below.'
-                                  : 'This form is not editable due to a Workflow.',
+                              bannerText,
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                             ),
                           ),
@@ -650,7 +725,14 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
-                    child: _buildDetailTabContent(activeDetailTab, currentSub),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (currentSub.isRejected && (currentSub.rejectionRemarks ?? '').trim().isNotEmpty)
+                          _buildRejectionRemarksCard(currentSub),
+                        _buildDetailTabContent(activeDetailTab, currentSub),
+                      ],
+                    ),
                   ),
                 ),
 
@@ -665,19 +747,18 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                     final bool isApproved = (rawWf == 'approved' || currentSub.docstatus == 1) && !isPending;
                     final bool isRejected = rawWf == 'rejected' || rawWf.contains('reject') || currentSub.docstatus == 2;
 
-                    // Allowed transition rules strictly from ERPNext HCP Profile Submission WF:
-                    // 1. Draft -> Submit for Processing -> Processed (Sales User, System Manager)
-                    final bool canSubmitForProcessing = (apiService.isMedRep || apiService.isAdmin) && isDraft;
+                    // 1. Draft -> Submit for Processing -> Processed (Sales User, System Manager, SFE)
+                    final bool canSubmitForProcessing = (apiService.isMedRep || apiService.isAdmin || apiService.isSfe) && isDraft;
 
-                    // 2. Draft / Rejected -> Submit for Approval -> Pending Approval (Sales User, Sales Manager, System Manager)
+                    // 2. Draft / Rejected -> Submit for Approval -> Pending Approval (Sales User, Sales Manager, System Manager, SFE)
                     // Note: 'Processed' has NO transitions defined in ERPNext HCP Profile Submission WF.
-                    final bool canSubmitForApproval = (apiService.isMedRep || apiService.isManager || apiService.isAdmin) && (isDraft || isRejected);
+                    final bool canSubmitForApproval = (apiService.isMedRep || apiService.isManager || apiService.isAdmin || apiService.isSfe) && (isDraft || isRejected);
 
-                    // 3. Pending Approval -> Approve / Reject (Sales Manager, System Manager)
-                    final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin) && isPending;
+                    // 3. Pending Approval -> Approve / Reject (Sales Manager, System Manager, SFE)
+                    final bool canApproveOrReject = (apiService.isManager || apiService.isAdmin || apiService.isSfe) && isPending;
 
-                    // If user is Admin, allow override testing on Approved/Processed
-                    final bool showAdminOverrides = apiService.isAdmin && isApproved;
+                    // If user is Admin or SFE, allow override testing on Approved/Processed
+                    final bool showAdminOverrides = (apiService.isAdmin || apiService.isSfe) && isApproved;
 
                     if (!canSubmitForProcessing && !canSubmitForApproval && !canApproveOrReject && !showAdminOverrides) {
                       return Container(
@@ -713,7 +794,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                     : isRejected
                                         ? 'Status: Rejected'
                                         : isProcessed
-                                            ? 'Status: Processed (Form Locked by Workflow)'
+                                            ? 'Status: Processed (Final — Masterlist & Account Synced)'
                                             : 'Status: Pending Approval (Awaiting Manager Review)',
                                 style: TextStyle(
                                   color: isApproved
@@ -818,28 +899,9 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                     icon: const Icon(Icons.close, size: 18),
                                     label: const Text('Reject', style: TextStyle(fontWeight: FontWeight.bold)),
                                     onPressed: () async {
-                                      final confirm = await showDialog<bool>(
-                                        context: context,
-                                        builder: (dCtx) => AlertDialog(
-                                          backgroundColor: const Color(0xFF1C1C1E),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                          title: const Text('Reject Submission?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                          content: const Text('Are you sure you want to reject this HCP Profile submission?', style: TextStyle(color: Colors.white70)),
-                                          actions: [
-                                            TextButton(
-                                              onPressed: () => Navigator.pop(dCtx, false),
-                                              child: const Text('Cancel', style: TextStyle(color: Color(0xFF8E8E93))),
-                                            ),
-                                            ElevatedButton(
-                                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626)),
-                                              onPressed: () => Navigator.pop(dCtx, true),
-                                              child: const Text('Reject', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                      if (confirm == true) {
-                                        _handleApplyWorkflowAction(ctx, currentSub, 'Reject');
+                                      final reason = await _showRejectionDialog(context, currentSub);
+                                      if (reason != null && reason.trim().isNotEmpty) {
+                                        _handleApplyWorkflowAction(ctx, currentSub, 'Reject', remarks: reason.trim());
                                       }
                                     },
                                   ),
@@ -888,7 +950,12 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                   child: const Text('Approve', style: TextStyle(color: Color(0xFF4ADE80), fontSize: 11)),
                                 ),
                                 TextButton(
-                                  onPressed: () => _handleApplyWorkflowAction(ctx, currentSub, 'Reject'),
+                                  onPressed: () async {
+                                    final reason = await _showRejectionDialog(context, currentSub);
+                                    if (reason != null && reason.trim().isNotEmpty) {
+                                      _handleApplyWorkflowAction(ctx, currentSub, 'Reject', remarks: reason.trim());
+                                    }
+                                  },
                                   child: const Text('Reject', style: TextStyle(color: Color(0xFFF87171), fontSize: 11)),
                                 ),
                               ],
@@ -901,6 +968,300 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 ),
               ],
             ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildRejectionRemarksCard(HcpProfileSubmission sub) {
+    final remarks = (sub.rejectionRemarks ?? '').trim();
+    final rejectedBy = sub.rejectedBy;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF2B1212),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.6), width: 1.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cancel_outlined, color: Color(0xFFEF4444), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  rejectedBy != null && rejectedBy.isNotEmpty
+                      ? 'Rejection Note from $rejectedBy'
+                      : 'DSM Rejection Note & Reason',
+                  style: const TextStyle(
+                    color: Color(0xFFFCA5A5),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFEF4444)),
+                ),
+                child: const Text(
+                  'Action Required',
+                  style: TextStyle(
+                    color: Color(0xFFEF4444),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF18181B),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF3F3F46)),
+            ),
+            child: SelectableText(
+              remarks.isNotEmpty ? remarks : 'Submission was rejected. Please review doctor details and resubmit.',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 13,
+                height: 1.4,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Row(
+            children: [
+              Icon(Icons.edit_note_rounded, color: Color(0xFFA1A1AA), size: 16),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Tap the "Edit" button below to modify the submission details and resubmit for approval.',
+                  style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<String?> _showRejectionDialog(BuildContext context, HcpProfileSubmission submission) async {
+    final docName = submission.hcpFullName ?? submission.hcpName;
+    final noteController = TextEditingController();
+    String? errorText;
+
+    final suggestions = [
+      'Incomplete doctor details',
+      'PRC license invalid / unverified',
+      'Missing or unclear consent proof',
+      'Invalid workplace / clinic assignment',
+      'Duplicate doctor submission',
+      'Survey answers incomplete',
+    ];
+
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: const Color(0xFF18181B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Color(0xFF3F3F46)),
+            ),
+            titlePadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+            contentPadding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+            actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEF4444).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.cancel_outlined, color: Color(0xFFEF4444), size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Reject Submission',
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Managerial Review & Reason',
+                        style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF27272A),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF3F3F46)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.person, size: 16, color: Color(0xFF60A5FA)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              docName.isNotEmpty ? docName : 'Doctor Submission',
+                              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (submission.name != null)
+                            Text(
+                              submission.name!,
+                              style: const TextStyle(color: Color(0xFFA1A1AA), fontSize: 11, fontFamily: 'monospace'),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    const Text(
+                      'Please specify the reason for rejection. This note will be visible to the Medical Representative so they can make corrections and resubmit.',
+                      style: TextStyle(color: Color(0xFFD4D4D8), fontSize: 13, height: 1.35),
+                    ),
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'Quick Reasons (tap to append):',
+                      style: TextStyle(color: Color(0xFFA1A1AA), fontSize: 11.5, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: suggestions.map((sug) {
+                        return InkWell(
+                          onTap: () {
+                            setDialogState(() {
+                              errorText = null;
+                              final current = noteController.text.trim();
+                              if (current.isEmpty) {
+                                noteController.text = sug;
+                              } else if (!current.contains(sug)) {
+                                noteController.text = '$current. $sug';
+                              }
+                              noteController.selection = TextSelection.fromPosition(
+                                TextPosition(offset: noteController.text.length),
+                              );
+                            });
+                          },
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF27272A),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: const Color(0xFF52525B)),
+                            ),
+                            child: Text(
+                              sug,
+                              style: const TextStyle(color: Color(0xFFE4E4E7), fontSize: 11),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+
+                    TextField(
+                      controller: noteController,
+                      maxLines: 4,
+                      minLines: 3,
+                      style: const TextStyle(color: Colors.white, fontSize: 13.5),
+                      onChanged: (val) {
+                        if (errorText != null && val.trim().isNotEmpty) {
+                          setDialogState(() => errorText = null);
+                        }
+                      },
+                      decoration: InputDecoration(
+                        hintText: 'Enter rejection notes/instructions for the MedRep (required)...',
+                        hintStyle: const TextStyle(color: Color(0xFF71717A), fontSize: 13),
+                        errorText: errorText,
+                        errorStyle: const TextStyle(color: Color(0xFFEF4444), fontSize: 11.5),
+                        filled: true,
+                        fillColor: const Color(0xFF09090B),
+                        contentPadding: const EdgeInsets.all(12),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF3F3F46)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFF3F3F46)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogCtx, null),
+                child: const Text('Cancel', style: TextStyle(color: Color(0xFFA1A1AA))),
+              ),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFDC2626),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.close_rounded, size: 18),
+                label: const Text('Confirm Rejection', style: TextStyle(fontWeight: FontWeight.bold)),
+                onPressed: () {
+                  final text = noteController.text.trim();
+                  if (text.isEmpty) {
+                    setDialogState(() {
+                      errorText = 'Please provide a reason for the rejection.';
+                    });
+                    return;
+                  }
+                  Navigator.pop(dialogCtx, text);
+                },
+              ),
+            ],
           );
         },
       ),
@@ -1214,16 +1575,48 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       child: Text('Manila Doctors Hospital • Ermita', style: TextStyle(color: Colors.white70, fontSize: 13)),
                     )
                   else
-                    ...submission.workplaces.map((w) => Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace).isNotEmpty ? LocationResolver.resolveInstitutionName(w.workplaceName ?? w.hcpWorkplace) : 'Institution', style: const TextStyle(color: Colors.white, fontSize: 13)),
-                          Text('${LocationResolver.resolveCityName(w.cityMunicipality ?? w.cityTitle)} ${LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle)}'.trim(), style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                        ],
-                      ),
-                    )),
+                    ...submission.workplaces.map((w) {
+                      final rawWp = w.workplaceName ?? w.hcpWorkplace;
+                      final wpName = LocationResolver.resolveInstitutionName(rawWp).isNotEmpty ? LocationResolver.resolveInstitutionName(rawWp) : 'Institution';
+                      final locText = '${LocationResolver.resolveCityName(w.cityMunicipality ?? w.cityTitle)} ${LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle)}'.trim();
+                      final api = Provider.of<ApiService>(context, listen: false);
+                      final isWpRejected = LocationResolver.isRejectedInstitution(rawWp, api.cachedInstitutions);
+                      final rejReason = LocationResolver.getRejectedInstitutionReason(rawWp, api.cachedInstitutions);
+                      return Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (isWpRejected)
+                                      Container(
+                                        margin: const EdgeInsets.only(right: 6),
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(color: const Color(0xFFEF4444).withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                                        child: const Text('REJECTED', style: TextStyle(color: Color(0xFFF87171), fontSize: 9, fontWeight: FontWeight.bold)),
+                                      ),
+                                    Text(wpName, style: TextStyle(color: isWpRejected ? const Color(0xFFF87171) : Colors.white, fontSize: 13, fontWeight: isWpRejected ? FontWeight.bold : FontWeight.normal)),
+                                  ],
+                                ),
+                                Text(locText, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                              ],
+                            ),
+                            if (isWpRejected && rejReason != null && rejReason.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'SFE Rejection Reason: $rejReason',
+                                  style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, fontStyle: FontStyle.italic),
+                                ),
+                              ),
+                          ],
+                        ),
+                      );
+                    }),
                 ],
               ),
             ),
@@ -1539,24 +1932,47 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                         final cityName = LocationResolver.resolveCityName(w.cityMunicipality ?? w.cityTitle);
                         final provName = LocationResolver.resolveProvinceName(w.provinceName ?? w.provinceTitle);
                         final locStr = [cityName, provName].where((x) => x.isNotEmpty).join(', ');
+                        final api = Provider.of<ApiService>(context, listen: false);
+                        final isWpRejected = LocationResolver.isRejectedInstitution(rawWp, api.cachedInstitutions);
+                        final rejReason = LocationResolver.getRejectedInstitutionReason(rawWp, api.cachedInstitutions);
                         return Padding(
                           padding: const EdgeInsets.all(12.0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  if (w.preferred)
-                                    Container(
-                                      margin: const EdgeInsets.only(right: 6),
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(color: const Color(0xFF10B981).withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-                                      child: const Text('Primary', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold)),
-                                    ),
-                                  Text(wpName.isNotEmpty ? wpName : (rawWp ?? 'Institution'), style: const TextStyle(color: Colors.white, fontSize: 13)),
+                                  Row(
+                                    children: [
+                                      if (isWpRejected)
+                                        Container(
+                                          margin: const EdgeInsets.only(right: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(color: const Color(0xFFEF4444).withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                                          child: const Text('REJECTED', style: TextStyle(color: Color(0xFFF87171), fontSize: 9, fontWeight: FontWeight.bold)),
+                                        )
+                                      else if (w.preferred)
+                                        Container(
+                                          margin: const EdgeInsets.only(right: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(color: const Color(0xFF10B981).withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
+                                          child: const Text('Primary', style: TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.bold)),
+                                        ),
+                                      Text(wpName.isNotEmpty ? wpName : (rawWp ?? 'Institution'), style: TextStyle(color: isWpRejected ? const Color(0xFFF87171) : Colors.white, fontSize: 13, fontWeight: isWpRejected ? FontWeight.bold : FontWeight.normal)),
+                                    ],
+                                  ),
+                                  Text(locStr.isNotEmpty ? locStr : 'Location', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                                 ],
                               ),
-                              Text(locStr.isNotEmpty ? locStr : 'Location', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                              if (isWpRejected && rejReason != null && rejReason.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Text(
+                                    'SFE Rejection Reason: $rejReason',
+                                    style: const TextStyle(color: Color(0xFFFCA5A5), fontSize: 11, fontStyle: FontStyle.italic),
+                                  ),
+                                ),
                             ],
                           ),
                         );
@@ -1904,7 +2320,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
       bgColor = const Color(0xFF10B981);
     } else if (wf == 'processed' || wf.contains('proc')) {
       displayStatus = 'Processed';
-      bgColor = const Color(0xFF475569);
+      bgColor = const Color(0xFF2563EB);
     } else if (wf == 'draft') {
       displayStatus = 'Draft';
       bgColor = const Color(0xFF64748B);
@@ -2037,8 +2453,8 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 },
               ),
               const SizedBox(width: 8),
-              if (apiService.isAdmin) ...[
-                // ONLY Admin accounts can toggle between My Submissions and All Scope
+              if (apiService.isAdmin || apiService.isSfe) ...[
+                // Admin and SFE accounts can toggle between My Submissions and All Scope
                 InkWell(
                   onTap: () {
                     setState(() {
@@ -2303,7 +2719,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                       ),
                     ),
                   ),
-                  if (apiService.isAdmin) ...[
+                  if (apiService.isAdmin || apiService.isSfe) ...[
                     const SizedBox(width: 8),
                     Container(
                       height: 36,
@@ -2342,7 +2758,7 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   Widget build(BuildContext context) {
     final apiService = Provider.of<ApiService>(context);
     final filteredList = _getFilteredAndSortedSubmissions(apiService);
-    final canApprove = (apiService.isManager || apiService.isAdmin);
+    final canApprove = (apiService.isManager || apiService.isAdmin || apiService.isSfe);
     final eligiblePendingList = filteredList.where((s) =>
         (s.workflowState == 'Pending Approval' || s.status == 'Pending Approval') &&
         s.name != null &&
@@ -2373,29 +2789,35 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
             margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: apiService.isAdmin
-                  ? const Color(0xFFEF4444).withOpacity(0.25)
-                  : (apiService.isManager
-                      ? const Color(0xFFF59E0B).withOpacity(0.25)
-                      : const Color(0xFF0066FF).withOpacity(0.25)),
+              color: apiService.isSfe
+                  ? const Color(0xFFA855F7).withOpacity(0.25)
+                  : (apiService.isAdmin
+                      ? const Color(0xFFEF4444).withOpacity(0.25)
+                      : (apiService.isManager
+                          ? const Color(0xFFF59E0B).withOpacity(0.25)
+                          : const Color(0xFF0066FF).withOpacity(0.25))),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: apiService.isAdmin
-                    ? const Color(0xFFEF4444)
-                    : (apiService.isManager
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFF38BDF8)),
+                color: apiService.isSfe
+                    ? const Color(0xFFA855F7)
+                    : (apiService.isAdmin
+                        ? const Color(0xFFEF4444)
+                        : (apiService.isManager
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF38BDF8))),
                 width: 0.8,
               ),
             ),
             child: Text(
               apiService.userDesignationTitle,
               style: TextStyle(
-                color: apiService.isAdmin
-                    ? const Color(0xFFFCA5A5)
-                    : (apiService.isManager
-                        ? const Color(0xFFFCD34D)
-                        : const Color(0xFF93C5FD)),
+                color: apiService.isSfe
+                    ? const Color(0xFFD8B4FE)
+                    : (apiService.isAdmin
+                        ? const Color(0xFFFCA5A5)
+                        : (apiService.isManager
+                            ? const Color(0xFFFCD34D)
+                            : const Color(0xFF93C5FD))),
                 fontSize: 10.5,
                 fontWeight: FontWeight.bold,
               ),
@@ -2498,10 +2920,16 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                               Container(width: 1, color: Colors.white24, margin: const EdgeInsets.symmetric(horizontal: 6)),
                               SizedBox(
                                 width: 55,
-                                child: Text(
-                                  '${filteredList.length} of ${_getProgramTotalCount(apiService)}',
-                                  style: const TextStyle(color: Colors.white70, fontSize: 11),
-                                  textAlign: TextAlign.right,
+                                child: Builder(
+                                  builder: (_) {
+                                    final total = _getProgramTotalCount(apiService);
+                                    final isFiltered = filteredList.length < total;
+                                    return Text(
+                                      isFiltered ? '${filteredList.length} of $total' : '$total',
+                                      style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                      textAlign: TextAlign.right,
+                                    );
+                                  },
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -2517,11 +2945,17 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('SUBMISSIONS', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                            Text(
-                              apiService.isMedRep
-                                  ? 'Showing ${filteredList.length} (My Submissions) · Total: ${_getProgramTotalCount(apiService)}'
-                                  : 'Showing ${filteredList.length} of ${_getProgramTotalCount(apiService)}',
-                              style: const TextStyle(color: Colors.white70, fontSize: 11),
+                            Builder(
+                              builder: (_) {
+                                final total = _getProgramTotalCount(apiService);
+                                final isFiltered = filteredList.length < total;
+                                return Text(
+                                  isFiltered
+                                      ? 'Showing ${filteredList.length} of $total'
+                                      : 'Total: $total Submissions',
+                                  style: const TextStyle(color: Colors.white70, fontSize: 11),
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -2610,6 +3044,32 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                       _buildStatusBadge(item),
                                                     ],
                                                   ),
+                                                  if (item.isRejected && item.rejectionRemarks != null && item.rejectionRemarks!.trim().isNotEmpty) ...[
+                                                    const SizedBox(height: 6),
+                                                    Container(
+                                                      width: double.infinity,
+                                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                      decoration: BoxDecoration(
+                                                        color: const Color(0xFFFEF2F2),
+                                                        borderRadius: BorderRadius.circular(6),
+                                                        border: Border.all(color: const Color(0xFFFECACA)),
+                                                      ),
+                                                      child: Row(
+                                                        children: [
+                                                          const Icon(Icons.cancel_outlined, size: 13, color: Color(0xFFDC2626)),
+                                                          const SizedBox(width: 4),
+                                                          Expanded(
+                                                            child: Text(
+                                                              'Reason: ${item.rejectionRemarks}',
+                                                              style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 11, fontWeight: FontWeight.w500),
+                                                              maxLines: 1,
+                                                              overflow: TextOverflow.ellipsis,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
                                                   const SizedBox(height: 8),
                                                   Wrap(
                                                     spacing: 6,
@@ -2688,10 +3148,32 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                                                 const SizedBox(width: 10),
                                                 Expanded(
                                                   flex: 5,
-                                                  child: Text(
-                                                    item.hcpFullName ?? item.hcpName,
-                                                    style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
-                                                    overflow: TextOverflow.ellipsis,
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      Text(
+                                                        item.hcpFullName ?? item.hcpName,
+                                                        style: const TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 13),
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                      if (item.isRejected && item.rejectionRemarks != null && item.rejectionRemarks!.trim().isNotEmpty) ...[
+                                                        const SizedBox(height: 2),
+                                                        Row(
+                                                          children: [
+                                                            const Icon(Icons.cancel_outlined, size: 11, color: Color(0xFFDC2626)),
+                                                            const SizedBox(width: 3),
+                                                            Expanded(
+                                                              child: Text(
+                                                                'Reason: ${item.rejectionRemarks}',
+                                                                style: const TextStyle(color: Color(0xFFDC2626), fontSize: 10.5, fontStyle: FontStyle.italic),
+                                                                overflow: TextOverflow.ellipsis,
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      ],
+                                                    ],
                                                   ),
                                                 ),
                                                 const SizedBox(width: 6),

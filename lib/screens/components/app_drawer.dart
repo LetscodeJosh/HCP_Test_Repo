@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../models/lookup_models.dart';
 import '../../services/api_service.dart';
 import '../hcp_dashboard_screen.dart';
 import '../doctor_masterlist_screen.dart';
 import '../submission_history_screen.dart';
 import '../login_screen.dart';
 import '../doctor_account_screen.dart';
+import '../institution_approvals_screen.dart';
+import '../sfe_institution_dashboard_screen.dart';
+import '../institution_directory_screen.dart';
 import '../../constants/app_version.dart';
 
 enum DrawerItem {
@@ -14,6 +16,7 @@ enum DrawerItem {
   doctorManagement,
   doctorAccount,
   submissionsFact,
+  institutionApprovals,
   institutions,
 }
 
@@ -54,16 +57,36 @@ class AppDrawer extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(10),
+                      width: 48,
+                      height: 48,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0066FF).withOpacity(0.2),
+                        color: Colors.white,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: const Color(0xFF0066FF).withOpacity(0.5), width: 1.5),
+                        border: Border.all(color: const Color(0xFF38BDF8), width: 1.5),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      child: const Icon(
-                        Icons.medical_services_rounded,
-                        color: Color(0xFF38BDF8),
-                        size: 28,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.asset(
+                          'assets/app_logo.png',
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Image.asset(
+                              'assets/icon-512.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Container(
+                                color: const Color(0xFF0066FF),
+                                child: const Icon(Icons.local_hospital_rounded, color: Colors.white, size: 28),
+                              ),
+                            );
+                          },
+                        ),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -122,29 +145,35 @@ class AppDrawer extends StatelessWidget {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                                   decoration: BoxDecoration(
-                                    color: apiService.isAdmin
-                                        ? const Color(0xFFEF4444).withOpacity(0.2)
-                                        : (apiService.isManager
-                                            ? const Color(0xFFF59E0B).withOpacity(0.2)
-                                            : const Color(0xFF0066FF).withOpacity(0.2)),
+                                    color: apiService.isSfe
+                                        ? const Color(0xFF8B5CF6).withOpacity(0.2)
+                                        : (apiService.isAdmin
+                                            ? const Color(0xFFEF4444).withOpacity(0.2)
+                                            : (apiService.isManager
+                                                ? const Color(0xFFF59E0B).withOpacity(0.2)
+                                                : const Color(0xFF0066FF).withOpacity(0.2))),
                                     borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
-                                      color: apiService.isAdmin
-                                          ? const Color(0xFFEF4444)
-                                          : (apiService.isManager
-                                              ? const Color(0xFFF59E0B)
-                                              : const Color(0xFF38BDF8)),
+                                      color: apiService.isSfe
+                                          ? const Color(0xFF8B5CF6)
+                                          : (apiService.isAdmin
+                                              ? const Color(0xFFEF4444)
+                                              : (apiService.isManager
+                                                  ? const Color(0xFFF59E0B)
+                                                  : const Color(0xFF38BDF8))),
                                       width: 0.8,
                                     ),
                                   ),
                                   child: Text(
                                     apiService.userDesignationTitle.toUpperCase(),
                                     style: TextStyle(
-                                      color: apiService.isAdmin
-                                          ? const Color(0xFFFCA5A5)
-                                          : (apiService.isManager
-                                              ? const Color(0xFFFCD34D)
-                                              : const Color(0xFF93C5FD)),
+                                      color: apiService.isSfe
+                                          ? const Color(0xFFC4B5FD)
+                                          : (apiService.isAdmin
+                                              ? const Color(0xFFFCA5A5)
+                                              : (apiService.isManager
+                                                  ? const Color(0xFFFCD34D)
+                                                  : const Color(0xFF93C5FD))),
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.bold,
                                       letterSpacing: 0.5,
@@ -152,7 +181,7 @@ class AppDrawer extends StatelessWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 6),
-                                if (apiService.isAdmin)
+                                if (apiService.isAdmin || apiService.isSfe)
                                   InkWell(
                                     onTap: () {
                                       showDialog(
@@ -303,13 +332,12 @@ class AppDrawer extends StatelessWidget {
                         }
                       },
                     ),
-                    if (apiService.isAdmin || apiService.isManager) ...[
+                    if (apiService.isAdmin || apiService.isSfe) ...[
                       const SizedBox(height: 4),
                       _buildMenuItem(
                         context,
                         icon: Icons.people_alt_rounded,
-                        title: 'Doctor Listing',
-                        subtitle: apiService.isManager ? '${apiService.selectedProgram} Doctors' : null,
+                        title: 'HCP',
                         isSelected: currentItem == DrawerItem.doctorManagement,
                         onTap: () {
                           Navigator.of(context).pop();
@@ -325,8 +353,8 @@ class AppDrawer extends StatelessWidget {
                     _buildMenuItem(
                       context,
                       icon: Icons.badge_rounded,
-                      title: 'Doctor Account',
-                      subtitle: apiService.isMedRep ? 'View Only' : null,
+                      title: 'HCP Account',
+                      subtitle: (!apiService.isAdmin && !apiService.isSfe) ? 'View Only' : null,
                       isSelected: currentItem == DrawerItem.doctorAccount,
                       onTap: () {
                         Navigator.of(context).pop();
@@ -356,18 +384,99 @@ class AppDrawer extends StatelessWidget {
                     const SizedBox(height: 4),
                     _buildMenuItem(
                       context,
+                      icon: Icons.domain_verification_rounded,
+                      title: 'Institution Submission',
+                      subtitle: (apiService.isSfe || apiService.isAdmin) ? 'SFE Approval Hub' : 'Track & Resubmit',
+                      badge: (apiService.isSfe || apiService.isAdmin)
+                          ? (apiService.pendingInstitutionApprovalsCount > 0
+                              ? '${apiService.pendingInstitutionApprovalsCount} Pending'
+                              : null)
+                          : (apiService.myRejectedInstitutionCount > 0
+                              ? '${apiService.myRejectedInstitutionCount} Action'
+                              : (apiService.myPendingInstitutionCount > 0 ? '${apiService.myPendingInstitutionCount} Pending' : null)),
+                      isSelected: currentItem == DrawerItem.institutionApprovals,
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        if (currentItem != DrawerItem.institutionApprovals) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(
+                              builder: (_) => (apiService.isSfe || apiService.isAdmin)
+                                  ? const SfeInstitutionDashboardScreen()
+                                  : const InstitutionApprovalsScreen(),
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    _buildMenuItem(
+                      context,
                       icon: Icons.business_rounded,
-                      title: 'Institutions',
-                      subtitle: 'Reference Directory',
+                      title: 'Institution Directory',
+                      subtitle: 'Master Reference',
                       isSelected: currentItem == DrawerItem.institutions,
                       onTap: () {
                         Navigator.of(context).pop();
-                        _showInstitutionsModal(context);
+                        if (currentItem != DrawerItem.institutions) {
+                          Navigator.of(context).pushReplacement(
+                            MaterialPageRoute(builder: (_) => const InstitutionDirectoryScreen()),
+                          );
+                        }
                       },
                     ),
                   ],
                 ),
               ),
+
+          if (apiService.userPosition == UserPosition.admin) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: apiService.sfeModeOverride ? const Color(0xFFA855F7).withOpacity(0.4) : const Color(0xFF334155),
+                  ),
+                ),
+                tileColor: apiService.sfeModeOverride ? const Color(0xFFA855F7).withOpacity(0.12) : const Color(0xFF1E293B).withOpacity(0.5),
+                leading: Icon(
+                  apiService.sfeModeOverride ? Icons.verified_user_rounded : Icons.admin_panel_settings_rounded,
+                  color: apiService.sfeModeOverride ? const Color(0xFFA855F7) : const Color(0xFF38BDF8),
+                ),
+                title: Text(
+                  apiService.sfeModeOverride ? 'SFE View Active' : 'Switch to SFE Portal',
+                  style: TextStyle(
+                    color: apiService.sfeModeOverride ? const Color(0xFFA855F7) : const Color(0xFFE2E8F0),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                subtitle: Text(
+                  apiService.sfeModeOverride ? 'Tap to return to Admin View' : 'Preview SFE Institution submissions',
+                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                ),
+                trailing: Switch(
+                  value: apiService.sfeModeOverride,
+                  activeColor: const Color(0xFFA855F7),
+                  onChanged: (val) {
+                    apiService.toggleSfeMode();
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pushReplacement(
+                      MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
+                    );
+                  },
+                ),
+                onTap: () {
+                  apiService.toggleSfeMode();
+                  Navigator.of(context).pop();
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
 
           // App Version & Credits (Just above Log Out)
           Padding(
@@ -504,195 +613,6 @@ class AppDrawer extends StatelessWidget {
         ),
         trailing: isSelected ? const Icon(Icons.chevron_right_rounded, color: Color(0xFF38BDF8), size: 18) : null,
         onTap: onTap,
-      ),
-    );
-  }
-
-  void _showInstitutionsModal(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => const _InstitutionsListModal(),
-    );
-  }
-}
-
-class _InstitutionsListModal extends StatefulWidget {
-  const _InstitutionsListModal({Key? key}) : super(key: key);
-
-  @override
-  State<_InstitutionsListModal> createState() => _InstitutionsListModalState();
-}
-
-class _InstitutionsListModalState extends State<_InstitutionsListModal> {
-  bool _isLoading = true;
-  List<dynamic> _institutions = [];
-  String _searchQuery = '';
-
-  @override
-  void initState() {
-    super.initState();
-    _fetch();
-  }
-
-  Future<void> _fetch() async {
-    final apiService = Provider.of<ApiService>(context, listen: false);
-    try {
-      final list = await apiService.fetchInstitutions();
-      if (mounted) {
-        setState(() {
-          _institutions = list;
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final filtered = _institutions.where((inst) {
-      final name = (inst.institutionName ?? inst.name ?? '').toString().toLowerCase();
-      final region = (inst.regionName ?? '').toString().toLowerCase();
-      final query = _searchQuery.toLowerCase().trim();
-      return query.isEmpty || name.contains(query) || region.contains(query);
-    }).toList();
-
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.82,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: const Color(0xFFCBD5E1),
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0B192C).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.business_rounded, color: Color(0xFF0B192C), size: 24),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Affiliated Institutions',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF0F172A),
-                        ),
-                      ),
-                      Text(
-                        'Total ${filtered.length} Hospitals, Clinics & Centers',
-                        style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: TextField(
-              onChanged: (val) => setState(() => _searchQuery = val),
-              decoration: InputDecoration(
-                hintText: 'Search hospital or city...',
-                prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF94A3B8)),
-                filled: true,
-                fillColor: const Color(0xFFF8FAFC),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF0B192C)))
-                : filtered.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No institutions found',
-                          style: TextStyle(color: Color(0xFF94A3B8)),
-                        ),
-                      )
-                    : ListView.separated(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (ctx, idx) {
-                          final item = filtered[idx];
-                          final name = LocationResolver.resolveInstitutionName(item.institutionName ?? item.name);
-                          final location = LocationResolver.formatLocation(
-                            streetAddress: item.streetAddress,
-                            cityMunicipality: item.cityMunicipality,
-                            provinceName: item.provinceName,
-                            regionName: item.regionName,
-                          );
-
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF8FAFC),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: const Color(0xFFE2E8F0)),
-                            ),
-                            child: ListTile(
-                              leading: CircleAvatar(
-                                backgroundColor: const Color(0xFF0066FF).withOpacity(0.1),
-                                child: const Icon(Icons.local_hospital_rounded, color: Color(0xFF0066FF), size: 20),
-                              ),
-                              title: Text(
-                                name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                  color: Color(0xFF0F172A),
-                                ),
-                              ),
-                              subtitle: Text(
-                                location.isEmpty ? 'Location details pending' : location,
-                                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B)),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-          ),
-        ],
       ),
     );
   }

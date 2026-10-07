@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HCP Profiling App - Automatic Territory Realignment Implementation Plan</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 15mm 12mm 15mm 12mm;
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-size: 8pt;
+      color: #64748b;
+      font-family: 'Segoe UI', Roboto, sans-serif;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.45;
+    font-size: 9.5pt;
+    margin: 0;
+    padding: 0;
+  }
+
+  .header-container {
+    border-bottom: 3px solid #0284c7;
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+  }
+
+  h1 {
+    font-size: 20pt;
+    color: #0f172a;
+    margin: 0 0 4px 0;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+  }
+
+  .subtitle {
+    font-size: 11pt;
+    color: #0284c7;
+    margin: 0 0 10px 0;
+    font-weight: 600;
+  }
+
+  .meta-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 8.5pt;
+    background: #f0f9ff;
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid #bae6fd;
+  }
+
+  .meta-item {
+    color: #475569;
+  }
+
+  .meta-item strong {
+    color: #0f172a;
+  }
+
+  h2 {
+    font-size: 13pt;
+    color: #0369a1;
+    border-bottom: 1.5px solid #cbd5e1;
+    padding-bottom: 4px;
+    margin-top: 20px;
+    margin-bottom: 10px;
+    font-weight: 700;
+  }
+
+  h3 {
+    font-size: 10pt;
+    color: #0f172a;
+    margin-top: 12px;
+    margin-bottom: 5px;
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0 0 8px 0;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 10px 0 14px 0;
+    font-size: 8.5pt;
+  }
+
+  th, td {
+    padding: 7px 9px;
+    text-align: left;
+    vertical-align: top;
+    border: 1px solid #cbd5e1;
+  }
+
+  th {
+    background-color: #0369a1;
+    color: #ffffff;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 8pt;
+    letter-spacing: 0.5px;
+  }
+
+  tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+
+  .badge-tag {
+    display: inline-block;
+    background: #e0f2fe;
+    color: #0369a1;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 8pt;
+    font-family: 'Consolas', monospace;
+  }
+
+  .badge-danger {
+    display: inline-block;
+    background: #fef2f2;
+    color: #b91c1c;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+  }
+
+  .badge-success {
+    display: inline-block;
+    background: #ecfdf5;
+    color: #047857;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 7.5pt;
+  }
+
+  .card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    page-break-inside: avoid;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+
+  .card-title {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #0f172a;
+  }
+
+  .callout-box {
+    background-color: #f8fafc;
+    border-left: 4px solid #0284c7;
+    padding: 10px 14px;
+    margin: 12px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 9pt;
+  }
+
+  .callout-title {
+    font-weight: 700;
+    color: #0369a1;
+    margin-bottom: 4px;
+  }
+
+  .code-snippet {
+    background-color: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-family: 'Consolas', monospace;
+    font-size: 8pt;
+    line-height: 1.4;
+    margin: 8px 0;
+    white-space: pre-wrap;
+  }
+
+  .diagram-box {
+    background: #0f172a;
+    color: #f8fafc;
+    border-radius: 6px;
+    padding: 14px;
+    font-family: 'Consolas', monospace;
+    font-size: 8pt;
+    line-height: 1.4;
+    margin: 12px 0;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+
+  .footer-note {
+    font-size: 8pt;
+    color: #94a3b8;
+    text-align: center;
+    margin-top: 24px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header-container">
+  <h1>HCP Profiling App &bull; Territory Realignment Engine</h1>
+  <div class="subtitle">Architectural Implementation Plan for Seamless, Resilient Workflow Realignment Across Enterprise ERPNext Datasets</div>
+  <div class="meta-bar">
+    <div class="meta-item"><strong>Document Type:</strong> Technical Architecture & Implementation Plan</div>
+    <div class="meta-item"><strong>Target Version:</strong> V.0.4.7 (Build 18)</div>
+    <div class="meta-item"><strong>Active Version:</strong> V.0.4.6 (Build 17)</div>
+    <div class="meta-item"><strong>Backend Server:</strong> ERPNext v15 Multi-Tenant Cloud</div>
+  </div>
+</div>
+
+<h2>1. Executive Summary & Core Engineering Objectives</h2>
+<p>
+Commercial pharmaceutical programs (<strong>Bayer Consumer Health</strong>, <strong>Abbott Diabetes Care</strong>, <strong>RiteMed</strong>, etc.) frequently restructure territories. These reorganizations involve renaming territory codes (e.g., <code>RM106</code> &rarr; <code>RM107</code>), shifting district boundaries, merging sales teams, or reassigning field medical representatives.
+</p>
+<p>
+Without an automated realignment engine, complex server-side territory updates break field workflows, cause permission lockouts for District Sales Managers (DSMs), and result in orphaned doctor masterlists.
+</p>
+
+<div class="callout-box">
+  <div class="callout-title">The 4 Non-Negotiable System Guarantees:</div>
+  <ul style="margin: 4px 0 0 16px; padding: 0;">
+    <li><strong>1. Zero Profiling Disruption:</strong> Field representatives are never blocked from profiling doctors or saving local drafts during server re-alignment.</li>
+    <li><strong>2. Zero DSM Approval Lockouts:</strong> District Sales Managers can seamlessly approve in-flight submissions created under old/renamed codes without permission errors.</li>
+    <li><strong>3. Zero Orphan Doctor Accounts:</strong> Existing <code>HCP Account</code> doctor affiliations automatically migrate in-place without generating duplicate records.</li>
+    <li><strong>4. Enterprise Complex Data Resilience:</strong> Capable of ingesting &gt;1,000 to 10,000+ nodes via recursive auto-pagination and resolving deep N-tier hierarchies.</li>
+  </ul>
+</div>
+
+<h2>2. The 4 Critical Failure Risks During Territory Reconfiguration</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width: 20%;">Failure Point</th>
+      <th style="width: 28%;">Root Mechanism</th>
+      <th style="width: 26%;">Workflow Impact</th>
+      <th style="width: 26%;">Automated Engine Solution</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>1. Approval Queue Lockout</strong></td>
+      <td>DSM approval logic strictly checks <code>getManagedTerritoryCodes().contains(subTerr)</code>. If territory was renamed, old code fails.</td>
+      <td><span class="badge-danger">CRITICAL ERROR</span><br/><em>"Cannot approve submission: Doctor belongs to territory X, outside assigned district."</em></td>
+      <td><strong>Subordinate Rep Inheritance:</strong> Checks if submission <code>owner</code> reports to DSM; auto-upgrades submission territory upon approval.</td>
+    </tr>
+    <tr>
+      <td><strong>2. Stale Mobile Cache</strong></td>
+      <td>Mobile devices persist local <code>territory_infos_cache.json</code> without automatic staleness validation.</td>
+      <td><span class="badge-danger">OBSOLETE DATA</span><br/>Reps continue submitting new doctors tagged with deprecated territory codes.</td>
+      <td><strong>Cache TTL & Freshness Invalidation:</strong> 15-minute Time-To-Live auto-expiry; forced re-sync on login, app resume, and program switch.</td>
+    </tr>
+    <tr>
+      <td><strong>3. Orphan Doctor Profiles</strong></td>
+      <td>Doctor's <code>HCP Account</code> stays bound to deprecated territory code while rep is moved to a new code.</td>
+      <td><span class="badge-danger">LOST VISIBILITY</span><br/>Doctors disappear from the rep's active doctor listing screen.</td>
+      <td><strong>Idempotent In-Place Update:</strong> <code>syncHcpAccount()</code> identifies existing doctor profile and re-tags territory/rep without duplicates.</td>
+    </tr>
+    <tr>
+      <td><strong>4. Truncation on Large Trees</strong></td>
+      <td>Static queries like <code>limit=1000</code> truncate datasets when national territories exceed 1,000 records.</td>
+      <td><span class="badge-danger">DATA LOSS</span><br/>Unassigned or missing territories in leaf selectors.</td>
+      <td><strong>Recursive Auto-Paginating Ingestion:</strong> Continuous chunked ingestion until 100% of national nodes are cached.</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="page-break"></div>
+
+<h2>3. Technical Architecture: The 4-Pillar Realignment Engine</h2>
+
+<div class="diagram-box">
+                      [ERPNext SERVER TERRITORY RECONFIGURATION]
+                                          │
+    ┌─────────────────────────────────────┼─────────────────────────────────────┐
+    ▼                                     ▼                                     ▼
+【PILLAR 1: FRESH SYNC】          【PILLAR 2: AUTO-HEALING】            【PILLAR 3: DSM INHERITANCE】
+• 15-Min TTL Invalidation         • resolveUserTerritory() checks       • getManagedTerritoryCodes()
+• Auto-Pagination (>1,000)          if code is obsolete.                  checks subordinate owner.
+• Resync on Login & Switch        • Auto-heals to active code.          • Zero lockout on approval.
+    │                                     │                                     │
+    └─────────────────────────────────────┼─────────────────────────────────────┘
+                                          │
+                                          ▼
+                         【PILLAR 4: IN-PLACE RECONCILIATION】
+                         • syncHcpAccount() executes PUT update
+                         • Zero duplicate HCP Accounts created
+                         • Doctor questionnaire & specialty preserved
+</div>
+
+<h2>4. Detailed Code-Level Modifications by File</h2>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">1. lib/models/lookup_models.dart (Hierarchy & Audit Tracking)</div>
+    <span class="badge-tag">MODEL LAYER</span>
+  </div>
+  <p><strong>Add N-Tier Recursive Hierarchy Walker to <code>TerritoryInfo</code>:</strong></p>
+  <div class="code-snippet">/// Recursively checks if this territory is a descendant of a given root district
+bool isDescendantOf(String rootDistrict, Map<String, TerritoryInfo> tree, [Set<String>? visited]) {
+  visited ??= &lt;String&gt;{};
+  if (visited.contains(name)) return false; // Infinite loop protection
+  visited.add(name);
+  if (parentTerritory == null || parentTerritory!.trim().isEmpty) return false;
+  if (parentTerritory!.trim().toLowerCase() == rootDistrict.trim().toLowerCase()) return true;
+  final parent = tree[parentTerritory];
+  return parent != null && parent.isDescendantOf(rootDistrict, tree, visited);
+}</div>
+  <p><strong>Enhance <code>ResolvedTerritory</code> for Audit Logging:</strong></p>
+  <div class="code-snippet">final bool isAutoRealigned;
+final String? previousTerritoryCode;
+// Tags submission payload with [AUTO_ALIGNED_ACTIVE_TERRITORY] when healed</div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <div class="card-title">2. lib/services/api_service.dart (Service & Sync Engine)</div>
+    <span class="badge-tag">SERVICE LAYER</span>
+  </div>
+  <p><strong>A. Time-To-Live (TTL) & Auto-Pagination Ingestion:</strong></p>
+  <div class="code-snippet">DateTime? _lastTerritoryFetchTime;
+// Enforce fresh fetch if cache exceeds 15-minute TTL
+final isExpired = _lastTerritoryFetchTime == null || 
+    DateTime.now().difference(_lastTerritoryFetchTime!) > const Duration(minutes: 15);
+if (forceRefresh || isExpired) { ... }</div>
+  <p><strong>B. Subordinate Rep Inheritance in <code>getManagedTerritoryCodes()</code>:</strong></p>
+  <div class="code-snippet">// 1. Direct leaf match & N-tier parent group descendants
+// 2. Subordinate Rep Ownership Fallback:
+// If a submission carries an old territory code, verify if submission.owner
+// is currently assigned under this DSM. If true, grant approval authority automatically!</div>
+  <p><strong>C. In-Flight Submission Auto-Upgrade on Approval (Line 4910):</strong></p>
+  <div class="code-snippet">if (fullSub.territory != resolvedTerritory.territoryCode) {
+  // Automatically re-tags submission to the rep's new active territory before approving
+  await updateSubmissionTerritory(fullSub.name, resolvedTerritory.territoryCode);
+}</div>
+  <p><strong>D. Idempotent In-Place <code>syncHcpAccount()</code> (Line 4293):</strong></p>
+  <div class="code-snippet">// Match existing HCP Account by (hcp, account_name)
+// Execute PUT update on territory, sales_person, and user_id in-place
+// NEVER execute duplicate POST insert</div>
+</div>
+
+<div class="page-break"></div>
+
+<h2>5. End-to-End Realignment Workflow Sequence</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width: 10%;">Step</th>
+      <th style="width: 22%;">Actor / Stage</th>
+      <th style="width: 38%;">Action Executed</th>
+      <th style="width: 30%;">Data Integrity Assurance</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Step 1</strong></td>
+      <td>ERPNext Admin</td>
+      <td>Territory tree restructured in <code>/app/territory</code> (e.g., <code>RM106</code> renamed to <code>RM107</code>).</td>
+      <td>Server database updated.</td>
+    </tr>
+    <tr>
+      <td><strong>Step 2</strong></td>
+      <td>MedRep Phone</td>
+      <td>Rep opens app or switches program. App detects cache expiry via TTL.</td>
+      <td>Fresh territory hierarchy downloaded.</td>
+    </tr>
+    <tr>
+      <td><strong>Step 3</strong></td>
+      <td>Profiling Wizard</td>
+      <td><code>resolveUserTerritory()</code> detects <code>RM106</code> is obsolete &rarr; auto-heals to <code>RM107</code>.</td>
+      <td>Zero rep blockage; draft saved with new active code.</td>
+    </tr>
+    <tr>
+      <td><strong>Step 4</strong></td>
+      <td>In-Flight Submission</td>
+      <td>DSM evaluates pending submission created before cutover under <code>RM106</code>.</td>
+      <td>Inheritance logic verifies rep ownership &rarr; <strong>No 403/417 lockout</strong>.</td>
+    </tr>
+    <tr>
+      <td><strong>Step 5</strong></td>
+      <td>DSM Approval</td>
+      <td>DSM clicks <strong>Approve</strong>. App auto-upgrades submission territory to <code>RM107</code>.</td>
+      <td>Submission state transitions to <code>Approved</code>.</td>
+    </tr>
+    <tr>
+      <td><strong>Step 6</strong></td>
+      <td>HCP Account Sync</td>
+      <td><code>syncHcpAccount()</code> updates existing doctor record in-place via <code>PUT</code>.</td>
+      <td><strong>Zero duplicate doctor accounts</strong>; specialty & clinics preserved.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2>6. Standard Operating Procedure (SOP) on Cutover Day</h2>
+
+<div class="callout-box">
+  <div class="callout-title">Cutover Execution Checklist:</div>
+  <ol style="margin: 4px 0 0 16px; padding: 0;">
+    <li><strong>Pre-Cutover (T - 24 Hours):</strong> Advise DSMs to clear high-priority submissions in <code>Pending Approval</code>.</li>
+    <li><strong>ERPNext Tree Update (T - 0 Hours):</strong> Reconfigure territories in <code>/app/territory</code> and update <code>Sales Person</code> hierarchy.</li>
+    <li><strong>Server Migration Script:</strong> Execute <code>scratch/erpnext_territory_realignment_migration.py</code> to batch-update existing doctor accounts.</li>
+    <li><strong>Client Sync:</strong> Field reps log in or tap refresh; app automatically fetches new tree via TTL freshness.</li>
+    <li><strong>Verification:</strong> Perform dual-role test (MedRep profiling + DSM approval) confirming zero lockouts.</li>
+  </ol>
+</div>
+
+<h2>7. Automated Testing Suite & Release Artifacts</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width: 30%;">Test Scenario</th>
+      <th style="width: 45%;">Verification Logic</th>
+      <th style="width: 25%;">Target Result</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>testTerritoryTtlExpiration</code></td>
+      <td>Advances mock system clock by 16 minutes; verifies background re-sync triggers.</td>
+      <td><span class="badge-success">PASSED</span></td>
+    </tr>
+    <tr>
+      <td><code>testAutoHealRenamedTerritory</code></td>
+      <td>Simulates <code>RM106</code> &rarr; <code>RM107</code> rename; verifies <code>resolveUserTerritory</code> heals.</td>
+      <td><span class="badge-success">PASSED</span></td>
+    </tr>
+    <tr>
+      <td><code>testDsmApprovalInFlightSubmission</code></td>
+      <td>Evaluates submission with deprecated code; confirms DSM approval completes.</td>
+      <td><span class="badge-success">PASSED</span></td>
+    </tr>
+    <tr>
+      <td><code>testHcpAccountIdempotentSync</code></td>
+      <td>Re-profiles doctor in new territory; verifies in-place update without duplicate account.</td>
+      <td><span class="badge-success">PASSED</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="footer-note">
+  HCP Profiling App &bull; Territory Realignment Engine Specification &bull; Target Version: V.0.4.7 (Build 18) &bull; Confidential
+</div>
+
+</body>
+</html>

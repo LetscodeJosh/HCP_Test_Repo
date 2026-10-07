@@ -1,0 +1,34 @@
+{
+  "appName": "HCP Profiling",
+  "version": "V.0.4.7",
+  "buildNumber": "18",
+  "releaseDate": "2026-09-22T14:17:01.565823",
+  "targetBackend": "ERPNext v15",
+  "binaries": {
+    "android": [
+      "HCP_Profiling_V.0.4.7.apk",
+      "HCP_Profiling_Release.apk"
+    ],
+    "sizeBytes": 59415453,
+    "sizeFormatted": "56.7 MB",
+    "sha256": "7FDACB1F7AD2C0F19903997D534C6AD663D4B067414165EFFBF61B1DA2CA24B8"
+  },
+  "modules": [
+    "Doctor Masterlist (HCP)",
+    "HCP Accounts",
+    "HCP Profile Submission",
+    "Submissions Fact",
+    "Institutions",
+    "Fuzzy Multi-Clue Institution Dropdown Search Engine",
+    "Inclusive Potential Clue Retention (Not Filterized)",
+    "Token-by-Token Multi-Clue Relevance Scoring",
+    "Medical Synonym & Abbreviation Expansion (hosp, med, ctr, dr, st, gen)",
+    "Acronym Resolution (pgh, slmc, mmc, mdh, tmc, ust)",
+    "Compound Name Resolution (delos -> de los)",
+    "Location Clue Matching (street, barangay, city, province)",
+    "Searchable Workplace Bottom Sheet in Doctor Masterlist",
+    "Searchable Institution Picker in Wizard and Detail Screen",
+    "Institution Non-Deletion & Continuous Resubmission Flow",
+    "SFE Institution Rejection & Approval Workflow Alignment"
+  ]
+}

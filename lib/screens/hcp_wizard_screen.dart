@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../services/api_service.dart';
 import 'hcp_dashboard_screen.dart';
+import 'components/propose_institution_dialog.dart';
 
 class HcpWizardScreen extends StatefulWidget {
   final Hcp? doctor;
@@ -43,7 +45,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   bool _isCreatingNewDoctor = false;
   String? _doctorPhotoUrl;
   Uint8List? _doctorPhotoBytes;
-  XFile? _doctorPhotoFile;
   late TextEditingController _hcpFullNameController;
   late TextEditingController _firstNameController;
   late TextEditingController _middleNameController;
@@ -54,6 +55,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   final List<SubmissionSpecialty> _selectedSpecialties = [];
   final List<SubmissionWorkplace> _selectedWorkplaces = [];
   final List<SubmissionContact> _contacts = [];
+  String? _liveRejectionRemarks;
+  String? _liveRejectedBy;
 
   // Step 3: Survey State
   final Map<String, String> _surveyAnswers = {};
@@ -63,8 +66,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   // Others Tab State
   late TextEditingController _territoryManagerController;
   String _selectedTerritory = '';
-  List<String> _territories = [];
-  DateTime _submissionDate = DateTime.now();
   String _applicationStatus = 'Not Applied';
 
   // Lookups
@@ -80,6 +81,27 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     super.initState();
     if (widget.isResubmission && widget.existingSubmission != null) {
       final sub = widget.existingSubmission!;
+      _liveRejectionRemarks = sub.rejectionRemarks;
+      _liveRejectedBy = sub.rejectedBy;
+
+      // Ensure comments are fetched dynamically if not already populated on the submission object
+      if ((_liveRejectionRemarks == null || _liveRejectionRemarks!.trim().isEmpty) &&
+          sub.name != null &&
+          sub.name!.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          final api = Provider.of<ApiService>(context, listen: false);
+          api.fetchSubmissionComments(sub.name!).then((comments) {
+            if (comments.isNotEmpty && mounted) {
+              final latest = comments.first;
+              setState(() {
+                _liveRejectionRemarks = latest['content']?.toString() ?? '';
+                _liveRejectedBy = latest['comment_by']?.toString() ?? latest['owner']?.toString();
+              });
+            }
+          }).catchError((_) {});
+        });
+      }
+
       final bool isNew = sub.profileAction == 'New HCP' || sub.hcpName.isEmpty;
       _isCreatingNewDoctor = isNew;
       _consentGiven = true;
@@ -110,7 +132,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _contacts.addAll(sub.contacts);
 
       for (var ans in sub.answers) {
-        final q = ans.surveyQuestion.isNotEmpty ? ans.surveyQuestion : (ans.questionText ?? '');
+        final q = ans.surveyQuestion.isNotEmpty ? ans.surveyQuestion : ans.questionText;
         if (q.isNotEmpty) {
           _surveyAnswers[q] = ans.answer;
         }
@@ -179,7 +201,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _isCreatingNewDoctor = true;
       _doctorPhotoUrl = null;
       _doctorPhotoBytes = null;
-      _doctorPhotoFile = null;
 
       _hcpFullNameController.text = '';
       _firstNameController.text = '';
@@ -201,7 +222,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _isCreatingNewDoctor = false;
       _doctorPhotoUrl = null;
       _doctorPhotoBytes = null;
-      _doctorPhotoFile = null;
 
       _hcpFullNameController.text = '';
       _firstNameController.text = '';
@@ -254,7 +274,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
       _doctorPhotoUrl = fullDoctor.hcpPhoto;
       _doctorPhotoBytes = null;
-      _doctorPhotoFile = null;
 
       _hcpFullNameController.text = '${fullDoctor.firstName} ${fullDoctor.middleName != null && fullDoctor.middleName != '-' ? fullDoctor.middleName! + ' ' : ''}${fullDoctor.lastName}'.trim();
       _firstNameController.text = fullDoctor.firstName;
@@ -319,19 +338,21 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
         for (int i = 0; i < fullDoctor.workplaces.length; i++) {
           final work = fullDoctor.workplaces[i];
-          final instTitle = LocationResolver.resolveInstitutionName(work.workplace, _institutions);
-          final instMatch = _institutions.firstWhere(
-            (inst) => inst.name == work.workplace || inst.institutionName == instTitle || inst.name.toLowerCase() == work.workplace.toLowerCase(),
-            orElse: () => Institution(name: work.workplace, institutionName: instTitle.isNotEmpty ? instTitle : work.workplace),
+          final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+            institutionIdOrName: work.workplace,
+            rawCity: work.cityMunicipality ?? fullDoctor.cityMunicipality,
+            rawProvince: work.provinceName ?? fullDoctor.provinceName,
+            rawRegion: fullDoctor.regionName,
+            institutions: _institutions,
           );
-          final resolvedCity = LocationResolver.resolveCityName(work.cityMunicipality ?? fullDoctor.cityMunicipality ?? instMatch.cityMunicipality);
-          final resolvedProv = LocationResolver.resolveProvinceName(work.provinceName ?? fullDoctor.provinceName ?? instMatch.provinceName);
-          final finalCity = resolvedCity.isNotEmpty ? resolvedCity : (instMatch.cityMunicipality ?? 'Manila City');
-          final finalProv = resolvedProv.isNotEmpty ? resolvedProv : (instMatch.provinceName ?? 'Metro Manila-Manila');
+          final instMatch = _institutions.firstWhere(
+            (inst) => inst.name == work.workplace || inst.institutionName == loc.workplaceName || inst.name.toLowerCase() == work.workplace.toLowerCase(),
+            orElse: () => Institution(name: work.workplace, institutionName: loc.workplaceName),
+          );
 
           bool isPref = false;
           if (acc != null) {
-            final wId = LocationResolver.resolveInstitutionId(work.workplace, _institutions);
+            final wId = loc.workplaceId;
             final isAccPref = (acc.workplaceId == wId || acc.workplaceId == work.workplace ||
                 acc.workplaces.any((aw) => (aw.preferred || aw.isPrimary) &&
                     (aw.hcpWorkplace == work.workplace || aw.hcpWorkplace == wId || aw.workplace == work.workplace)));
@@ -342,26 +363,36 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
           _selectedWorkplaces.add(SubmissionWorkplace(
             preferred: isPref,
-            hcpWorkplace: instTitle.isNotEmpty ? instTitle : work.workplace,
-            workplaceName: instTitle.isNotEmpty ? instTitle : (instMatch.institutionName.isNotEmpty ? instMatch.institutionName : work.workplace),
-            cityTitle: finalCity,
-            cityMunicipality: finalCity,
-            provinceTitle: finalProv,
-            provinceName: finalProv,
+            hcpWorkplace: loc.workplaceId,
+            workplaceName: loc.workplaceName,
+            cityTitle: loc.cityName,
+            cityMunicipality: loc.cityId,
+            provinceTitle: loc.provinceName,
+            provinceName: loc.provinceId,
+            regionTitle: loc.regionName,
+            regionName: loc.regionId,
+            workflowState: instMatch.workflowState,
+            rejectionReason: instMatch.rejectionReason,
+            isCustom: instMatch.isCustom,
           ));
         }
       } else {
         final firstInst = _institutions.isNotEmpty ? _institutions.first : null;
-        final defCity = LocationResolver.resolveCityName(firstInst?.cityMunicipality);
-        final defProv = LocationResolver.resolveProvinceName(firstInst?.provinceName);
+        final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+          institutionIdOrName: firstInst?.name ?? 'Philippine General Hospital',
+          institutionName: firstInst?.institutionName,
+          institutions: _institutions,
+        );
         _selectedWorkplaces.add(SubmissionWorkplace(
           preferred: true,
-          hcpWorkplace: firstInst?.institutionName ?? 'Philippine General Hospital',
-          workplaceName: firstInst?.institutionName ?? 'Philippine General Hospital',
-          cityTitle: defCity.isNotEmpty ? defCity : 'Manila City',
-          cityMunicipality: defCity.isNotEmpty ? defCity : 'Manila City',
-          provinceTitle: defProv.isNotEmpty ? defProv : 'Metro Manila-Manila',
-          provinceName: defProv.isNotEmpty ? defProv : 'Metro Manila-Manila',
+          hcpWorkplace: loc.workplaceId,
+          workplaceName: loc.workplaceName,
+          cityTitle: loc.cityName,
+          cityMunicipality: loc.cityId,
+          provinceTitle: loc.provinceName,
+          provinceName: loc.provinceId,
+          regionTitle: loc.regionName,
+          regionName: loc.regionId,
         ));
       }
 
@@ -452,11 +483,10 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
       // Dynamically resolve territory and manager based on user and program
       final resolvedTerritory = await apiService.resolveUserTerritory(program: userProg);
-      final progTerritories = await apiService.fetchTerritories(program: userProg).catchError((_) => <String>[]);
 
       setState(() {
         _allDoctors = doctors;
-        _institutions = insts;
+        _institutions = insts.isNotEmpty ? insts : apiService.actualInstitutions;
         _specializations = specs;
         _hcpTypes = types;
         _allSurveyTemplates = templates;
@@ -470,7 +500,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             _selectedProgram = userProg;
           }
 
-          _territories = progTerritories.isNotEmpty ? progTerritories : [resolvedTerritory.territoryCode];
           if (sub.territory != null && sub.territory!.isNotEmpty) {
             _selectedTerritory = sub.territory!;
           } else {
@@ -490,7 +519,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           }
         } else {
           _selectedProgram = userProg;
-          _territories = progTerritories.isNotEmpty ? progTerritories : [resolvedTerritory.territoryCode];
           _selectedTerritory = resolvedTerritory.territoryCode;
           _territoryManagerController.text = resolvedTerritory.territoryManager;
         }
@@ -738,12 +766,108 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     return 'data:image/svg+xml;base64,${base64Encode(bytes)}';
   }
 
+  bool _hasUnapprovedWorkplaces() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final allCached = apiService.cachedInstitutions;
+
+    return _selectedWorkplaces.any((w) {
+      if (w.isRejected || w.workflowState == 'Rejected') {
+        return true;
+      }
+      final rawWp = (w.workplaceName != null && w.workplaceName!.isNotEmpty) ? w.workplaceName! : (w.hcpWorkplace ?? '');
+      if (rawWp.isEmpty) return false;
+
+      // 1. Check all cached institutions
+      final cachedMatch = allCached.firstWhere(
+        (i) => (w.hcpWorkplace != null && i.name.toLowerCase() == w.hcpWorkplace!.toLowerCase()) ||
+               i.name.toLowerCase() == rawWp.toLowerCase() ||
+               i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (cachedMatch.name.isNotEmpty && cachedMatch.isRejected) {
+        return true;
+      }
+
+      // 2. Check if verified in _institutions
+      final approvedMatch = _institutions.firstWhere(
+        (i) => (w.hcpWorkplace != null && i.name.toLowerCase() == w.hcpWorkplace!.toLowerCase()) ||
+               i.name.toLowerCase() == rawWp.toLowerCase() ||
+               i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (approvedMatch.name.isNotEmpty && approvedMatch.isRejected) {
+        return true;
+      }
+
+      return false;
+    });
+  }
+
+  String _unapprovedWorkplaceNames() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final allCached = apiService.cachedInstitutions;
+
+    final unapproved = <String>[];
+    for (final w in _selectedWorkplaces) {
+      final rawWp = (w.workplaceName != null && w.workplaceName!.isNotEmpty) ? w.workplaceName! : (w.hcpWorkplace ?? 'Workplace');
+      String? reason = w.rejectionReason;
+
+      bool isRej = w.isRejected || w.workflowState == 'Rejected';
+
+      if (!isRej && rawWp.isNotEmpty) {
+        final cachedMatch = allCached.firstWhere(
+          (i) => (w.hcpWorkplace != null && i.name.toLowerCase() == w.hcpWorkplace!.toLowerCase()) ||
+                 i.name.toLowerCase() == rawWp.toLowerCase() ||
+                 i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+          orElse: () => Institution(name: '', institutionName: ''),
+        );
+        if (cachedMatch.name.isNotEmpty && cachedMatch.isRejected) {
+          isRej = true;
+          reason ??= cachedMatch.rejectionReason;
+        }
+      }
+
+      if (!isRej && rawWp.isNotEmpty) {
+        final approvedMatch = _institutions.firstWhere(
+          (i) => (w.hcpWorkplace != null && i.name.toLowerCase() == w.hcpWorkplace!.toLowerCase()) ||
+                 i.name.toLowerCase() == rawWp.toLowerCase() ||
+                 i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+          orElse: () => Institution(name: '', institutionName: ''),
+        );
+        if (approvedMatch.name.isNotEmpty && approvedMatch.isRejected) {
+          isRej = true;
+          reason ??= approvedMatch.rejectionReason;
+        }
+      }
+
+      if (isRej) {
+        if (reason != null && reason.trim().isNotEmpty) {
+          unapproved.add('$rawWp (Reason: $reason)');
+        } else {
+          unapproved.add(rawWp);
+        }
+      }
+    }
+    return unapproved.join(', ');
+  }
+
   Future<void> _submitForm({String workflowAction = 'Submit for Approval'}) async {
     if (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: Color(0xFFDC2626),
           content: Text('First Name and Last Name are required.'),
+        ),
+      );
+      return;
+    }
+
+    if (_hasUnapprovedWorkplaces()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: const Color(0xFFDC2626),
+          content: Text('Cannot submit: ${_unapprovedWorkplaceNames()} was rejected by SFE and cannot be used for profiling. Please remove or have SFE remap this institution.'),
+          duration: const Duration(seconds: 5),
         ),
       );
       return;
@@ -782,15 +906,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       // Ensure at least one workplace is marked preferred
       if (!_selectedWorkplaces.any((w) => w.preferred)) {
         final first = _selectedWorkplaces.removeAt(0);
-        _selectedWorkplaces.insert(0, SubmissionWorkplace(
-          preferred: true,
-          hcpWorkplace: first.hcpWorkplace,
-          workplaceName: first.workplaceName,
-          cityMunicipality: first.cityMunicipality,
-          cityTitle: first.cityTitle,
-          provinceName: first.provinceName,
-          provinceTitle: first.provinceTitle,
-        ));
+        _selectedWorkplaces.insert(0, first.copyWith(preferred: true));
       }
       // If contacts exist, ensure at least one contact is marked preferred
       if (_contacts.isNotEmpty && !_contacts.any((c) => c.preferred)) {
@@ -1217,6 +1333,43 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         } catch (_) {}
       }
 
+      // Guarantee all workplaces have complete, non-empty locations (workplace, city, province, region)
+      final List<SubmissionWorkplace> verifiedWorkplaces = _selectedWorkplaces.map((w) {
+        final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+          institutionIdOrName: w.hcpWorkplace,
+          institutionName: w.workplaceName,
+          cityIdOrName: w.cityMunicipality ?? w.cityTitle,
+          provinceIdOrName: w.provinceName ?? w.provinceTitle,
+          regionIdOrName: w.regionName ?? w.regionTitle,
+          institutions: _institutions,
+        );
+        return SubmissionWorkplace(
+          preferred: w.preferred,
+          hcpWorkplace: loc.workplaceId,
+          workplaceName: loc.workplaceName,
+          cityMunicipality: loc.cityId,
+          cityTitle: loc.cityName,
+          provinceName: loc.provinceId,
+          provinceTitle: loc.provinceName,
+          regionName: loc.regionId,
+          regionTitle: loc.regionName,
+          workflowState: w.workflowState,
+          rejectionReason: w.rejectionReason,
+          isCustom: w.isCustom,
+        );
+      }).toList();
+
+      final primaryWp = verifiedWorkplaces.where((w) => w.preferred).firstOrNull ??
+          (verifiedWorkplaces.isNotEmpty ? verifiedWorkplaces.first : null);
+      final primaryLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+        institutionIdOrName: primaryWp?.hcpWorkplace,
+        institutionName: primaryWp?.workplaceName,
+        cityIdOrName: primaryWp?.cityMunicipality,
+        provinceIdOrName: primaryWp?.provinceName,
+        regionIdOrName: primaryWp?.regionName,
+        institutions: _institutions,
+      );
+
       // If Existing Doctor: Apply update directly to HCP master doctype and sync HCP Account immediately
       if (isExistingDoctor && effectiveHcpId.isNotEmpty) {
         try {
@@ -1231,20 +1384,21 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             hcpType: _selectedHcpType ?? 'HCP-TYPE-01',
             hcpPractice: _selectedPractice,
             specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpSpecialty(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred)).toList(),
-            workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) {
-              final instId = LocationResolver.resolveInstitutionId(e.hcpWorkplace, _institutions);
-              final provId = LocationResolver.resolveProvinceId(e.provinceName);
-              final cityId = LocationResolver.resolveCityId(e.cityMunicipality);
+            workplaces: verifiedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) {
               return HcpWorkplace(
-                workplace: instId.isNotEmpty ? instId : e.hcpWorkplace!,
-                provinceName: provId.isNotEmpty ? provId : e.provinceName,
-                cityMunicipality: cityId.isNotEmpty ? cityId : e.cityMunicipality,
-                address: LocationResolver.resolveInstitutionName(e.workplaceName ?? e.hcpWorkplace, _institutions),
+                workplace: e.hcpWorkplace!,
+                provinceName: e.provinceName,
+                cityMunicipality: e.cityMunicipality,
+                address: e.workplaceName ?? e.hcpWorkplace,
                 isPrimary: e.preferred,
               );
             }).toList(),
             contacts: _contacts.where((e) => (e.contactNumber != null && e.contactNumber!.isNotEmpty) || (e.emailAddress != null && e.emailAddress!.isNotEmpty)).map((e) => HcpContact(contactNumber: e.contactNumber, emailAddress: e.emailAddress, isPrimary: e.preferred)).toList(),
             profileLastUpdated: actualSubmissionTime.toIso8601String().split('.').first,
+            regionName: primaryLoc.regionId,
+            provinceName: primaryLoc.provinceId,
+            cityMunicipality: primaryLoc.cityId,
+            institution: primaryLoc.workplaceId,
           );
           await apiService.updateDoctor(effectiveHcpId, updatedDoctor);
         } catch (e) {
@@ -1262,15 +1416,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               : apiService.getTerritoryManagerForTerritory(_selectedTerritory),
           userId: apiService.loggedInEmail,
           specialties: _selectedSpecialties.where((e) => e.hcpSpecialty != null).map((e) => HcpAccountSpecialization(hcpSpecialty: e.hcpSpecialty!, subSpecialty: e.subSpecialty, isPrimary: e.preferred, preferred: e.preferred)).toList(),
-          workplaces: _selectedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) {
-            final instId = LocationResolver.resolveInstitutionId(e.hcpWorkplace, _institutions);
-            final provId = LocationResolver.resolveProvinceId(e.provinceName);
-            final cityId = LocationResolver.resolveCityId(e.cityMunicipality);
+          workplaces: verifiedWorkplaces.where((e) => e.hcpWorkplace != null).map((e) {
             return HcpAccountWorkplace(
-              hcpWorkplace: instId.isNotEmpty ? instId : e.hcpWorkplace!,
-              cityMunicipality: cityId.isNotEmpty ? cityId : e.cityMunicipality,
-              provinceName: provId.isNotEmpty ? provId : e.provinceName,
-              address: LocationResolver.resolveInstitutionName(e.workplaceName ?? e.hcpWorkplace, _institutions),
+              hcpWorkplace: e.hcpWorkplace!,
+              cityMunicipality: e.cityMunicipality,
+              provinceName: e.provinceName,
+              address: e.workplaceName ?? e.hcpWorkplace,
               isPrimary: e.preferred,
               preferred: e.preferred,
             );
@@ -1295,8 +1446,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         consentPhoto: uploadedConsentPhotoUrl ?? widget.existingSubmission?.consentPhoto,
         hcpPhoto: uploadedDoctorPhotoUrl ?? widget.existingSubmission?.hcpPhoto,
         specialties: _selectedSpecialties,
-        workplaces: _selectedWorkplaces,
+        workplaces: verifiedWorkplaces,
         contacts: _contacts,
+        regionName: primaryLoc.regionId,
+        provinceName: primaryLoc.provinceId,
+        cityMunicipality: primaryLoc.cityId,
+        institution: primaryLoc.workplaceId,
         accountOrProgram: LocationResolver.resolveProgramBranch(_selectedProgram),
         territory: _selectedTerritory,
         salesPerson: _territoryManagerController.text.trim().isNotEmpty
@@ -1530,14 +1685,18 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
+  // Note: Proposing new facilities has been moved to InstitutionApprovalsScreen (drawer menu)
+
+
   Future<Institution?> _showInstitutionSearchDialog({
     required BuildContext context,
     String? currentSelectedName,
     String title = 'Select Workplace / Hospital',
   }) async {
-    final list = _institutions;
+    final list = _institutions.where((i) => i.isApprovedForProfiling && !i.isRejected).toList();
     final searchCtrl = TextEditingController();
     List<Institution> filtered = List.from(list);
+    Timer? searchDebounce;
 
     return showDialog<Institution>(
       context: context,
@@ -1562,22 +1721,23 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.local_hospital_outlined, color: Colors.white, size: 18),
-                            const SizedBox(width: 8),
-                            Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(12),
+                        const Icon(Icons.business_rounded, color: Colors.white, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
                           ),
-                          child: Text('${filtered.length}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white70, size: 20),
+                          onPressed: () {
+                            searchDebounce?.cancel();
+                            Navigator.pop(dialogCtx);
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                         ),
                       ],
                     ),
@@ -1586,66 +1746,113 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     padding: const EdgeInsets.all(12),
                     child: TextField(
                       controller: searchCtrl,
-                      autofocus: true,
-                      style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
                       decoration: InputDecoration(
-                        hintText: 'Search hospital name, city, province...',
-                        hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                        hintText: 'Search by workplace name, city, province...',
                         prefixIcon: const Icon(Icons.search, color: Color(0xFF0066FF), size: 20),
                         suffixIcon: searchCtrl.text.isNotEmpty
                             ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18, color: Color(0xFF94A3B8)),
+                                icon: const Icon(Icons.clear, size: 18),
                                 onPressed: () {
+                                  searchDebounce?.cancel();
                                   searchCtrl.clear();
-                                  setDlgState(() {
-                                    filtered = List.from(list);
-                                  });
+                                  setDlgState(() => filtered = List.from(list));
                                 },
                               )
                             : null,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        isDense: true,
                         filled: true,
                         fillColor: const Color(0xFFF8FAFC),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
                         enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
                         focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: Color(0xFF0066FF), width: 1.5)),
                       ),
                       onChanged: (val) {
-                        final q = val.trim().toLowerCase();
-                        setDlgState(() {
-                          if (q.isEmpty) {
-                            filtered = List.from(list);
-                          } else {
-                            filtered = list.where((i) {
-                              final locStr = LocationResolver.formatLocation(
-                                streetAddress: i.streetAddress,
-                                cityMunicipality: i.cityMunicipality,
-                                provinceName: i.provinceName,
-                                regionName: i.regionName,
-                              ).toLowerCase();
-                              return i.institutionName.toLowerCase().contains(q) ||
-                                locStr.contains(q) ||
-                                (i.cityMunicipality?.toLowerCase().contains(q) ?? false) ||
-                                (i.provinceName?.toLowerCase().contains(q) ?? false) ||
-                                (i.streetAddress?.toLowerCase().contains(q) ?? false) ||
-                                i.name.toLowerCase().contains(q);
-                            }).toList();
-                          }
+                        searchDebounce?.cancel();
+                        searchDebounce = Timer(const Duration(milliseconds: 180), () {
+                          setDlgState(() {
+                            filtered = LocationResolver.fuzzySearchInstitutions(val, list);
+                          });
                         });
                       },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0B192C),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        icon: const Icon(Icons.add_business_rounded, size: 16, color: Color(0xFF38BDF8)),
+                        label: const Text('+ Propose New Institution', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                        onPressed: () async {
+                          final doctorFullName = '${_firstNameController.text} ${_lastNameController.text}'.trim();
+                          final newInst = await ProposeInstitutionDialog.show(
+                            context,
+                            requiresDsmApproval: true,
+                            linkedDoctorName: doctorFullName.isNotEmpty ? doctorFullName : null,
+                          );
+                          if (newInst != null) {
+                            if (!_institutions.any((i) => i.name == newInst.name)) {
+                              setState(() {
+                                _institutions.insert(0, newInst);
+                              });
+                            }
+                            Navigator.pop(dialogCtx, newInst);
+                          }
+                        },
+                      ),
                     ),
                   ),
                   const Divider(height: 1),
                   Flexible(
                     child: filtered.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(24),
+                        ? Padding(
+                            padding: const EdgeInsets.all(24),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.search_off_rounded, size: 40, color: Color(0xFF94A3B8)),
-                                SizedBox(height: 8),
-                                Text('No workplaces found', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+                                const Icon(Icons.search_off_rounded, size: 40, color: Color(0xFF94A3B8)),
+                                const SizedBox(height: 8),
+                                const Text('No matching institutions found', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFF334155))),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Cannot find the workplace? Propose it right now with ownership & service capability classification:',
+                                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 12),
+                                ElevatedButton.icon(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF0B192C),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                  ),
+                                  icon: const Icon(Icons.add_business_rounded, size: 16, color: Color(0xFF38BDF8)),
+                                  label: const Text('Propose New Institution', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                  onPressed: () async {
+                                    final doctorFullName = '${_firstNameController.text} ${_lastNameController.text}'.trim();
+                                    final newInst = await ProposeInstitutionDialog.show(
+                                      context,
+                                      requiresDsmApproval: true,
+                                      linkedDoctorName: doctorFullName.isNotEmpty ? doctorFullName : null,
+                                    );
+                                    if (newInst != null) {
+                                      if (!_institutions.any((i) => i.name == newInst.name)) {
+                                        setState(() {
+                                          _institutions.insert(0, newInst);
+                                        });
+                                      }
+                                      Navigator.pop(dialogCtx, newInst);
+                                    }
+                                  },
+                                ),
                               ],
                             ),
                           )
@@ -1661,24 +1868,67 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                 provinceName: item.provinceName,
                                 regionName: item.regionName,
                               );
+                              final isApproved = item.isApproved;
+                              final statusNote = item.approvalStatusNote;
+
                               return ListTile(
                                 dense: true,
                                 tileColor: isSelected ? const Color(0xFFEFF6FF) : null,
-                                title: Text(
-                                  item.institutionName,
-                                  style: TextStyle(
-                                    color: isSelected ? const Color(0xFF0066FF) : const Color(0xFF0F172A),
-                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                    fontSize: 13,
-                                  ),
+                                title: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.institutionName,
+                                        style: TextStyle(
+                                          color: isSelected ? const Color(0xFF0066FF) : const Color(0xFF0F172A),
+                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                          fontSize: 13,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: isApproved ? const Color(0xFFECFDF5) : const Color(0xFFFFFBEB),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(color: isApproved ? const Color(0xFFA7F3D0) : const Color(0xFFFDE68A)),
+                                      ),
+                                      child: Text(
+                                        isApproved ? 'Approved' : 'Pending Approval',
+                                        style: TextStyle(
+                                          color: isApproved ? const Color(0xFF059669) : const Color(0xFFD97706),
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                subtitle: locStr.isNotEmpty
-                                    ? Text(locStr, style: const TextStyle(color: Color(0xFF64748B), fontSize: 11))
-                                    : null,
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    if (locStr.isNotEmpty)
+                                      Text(locStr, style: const TextStyle(color: Color(0xFF64748B), fontSize: 11)),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      statusNote,
+                                      style: TextStyle(
+                                        color: isApproved ? const Color(0xFF059669) : const Color(0xFFD97706),
+                                        fontSize: 10,
+                                        fontStyle: FontStyle.italic,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                                 trailing: isSelected
                                     ? const Icon(Icons.check_circle_rounded, color: Color(0xFF0066FF), size: 18)
                                     : null,
-                                onTap: () => Navigator.pop(dialogCtx, item),
+                                onTap: () {
+                                  Navigator.pop(dialogCtx, item);
+                                },
                               );
                             },
                           ),
@@ -1688,6 +1938,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     decoration: const BoxDecoration(
                       color: Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.vertical(bottom: Radius.circular(16)),
+                      border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -1898,7 +2149,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   void _showAddWorkplaceSelector() {
-    String? selectedInst = _institutions.isNotEmpty ? _institutions.first.name : null;
+    final initialApproved = _institutions.where((i) => i.isApprovedForProfiling).toList();
+    String? selectedInst = initialApproved.isNotEmpty ? initialApproved.first.name : null;
     bool isPreferred = _selectedWorkplaces.isEmpty;
 
     showDialog(
@@ -1910,7 +2162,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   (i) => i.name == selectedInst,
                   orElse: () => Institution(name: selectedInst!, institutionName: selectedInst!),
                 )
-              : (_institutions.isNotEmpty ? _institutions.first : null);
+              : null;
 
           return AlertDialog(
             backgroundColor: Colors.white,
@@ -1960,7 +2212,55 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEFF6FF),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFBFDBFE)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF1D4ED8)),
+                        const SizedBox(width: 8),
+                        const Expanded(
+                          child: Text(
+                            "Facility not listed?",
+                            style: TextStyle(color: Color(0xFF1E40AF), fontSize: 11.5, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        TextButton.icon(
+                          style: TextButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          icon: const Icon(Icons.add_business_rounded, size: 14, color: Color(0xFF0066FF)),
+                          label: const Text('Propose New', style: TextStyle(color: Color(0xFF0066FF), fontSize: 11.5, fontWeight: FontWeight.bold)),
+                          onPressed: () async {
+                            final doctorFullName = '${_firstNameController.text} ${_lastNameController.text}'.trim();
+                            final newInst = await ProposeInstitutionDialog.show(
+                              context,
+                              requiresDsmApproval: true,
+                              linkedDoctorName: doctorFullName.isNotEmpty ? doctorFullName : null,
+                            );
+                            if (newInst != null) {
+                              if (!_institutions.any((i) => i.name == newInst.name)) {
+                                setState(() {
+                                  _institutions.insert(0, newInst);
+                                });
+                              }
+                              setDlgState(() {
+                                selectedInst = newInst.name;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   CheckboxListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text('Set as Preferred Workplace', style: TextStyle(color: Color(0xFF0F172A), fontSize: 13, fontWeight: FontWeight.w600)),
@@ -1982,34 +2282,65 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
                 onPressed: () {
                   if (selectedInst != null) {
-                    final match = _institutions.firstWhere((i) => i.name == selectedInst, orElse: () => Institution(name: selectedInst!, institutionName: selectedInst!));
-                    final instTitle = match.institutionName.isNotEmpty ? match.institutionName : LocationResolver.resolveInstitutionName(selectedInst, _institutions);
-                    final resolvedCity = LocationResolver.resolveCityName(match.cityMunicipality);
-                    final resolvedProv = LocationResolver.resolveProvinceName(match.provinceName);
+                    final apiService = Provider.of<ApiService>(context, listen: false);
+                    final allCached = apiService.cachedInstitutions;
+                    final match = allCached.firstWhere(
+                      (i) => i.name.toLowerCase() == selectedInst!.toLowerCase() || i.institutionName.toLowerCase() == selectedInst!.toLowerCase(),
+                      orElse: () => _institutions.firstWhere(
+                        (i) => i.name.toLowerCase() == selectedInst!.toLowerCase() || i.institutionName.toLowerCase() == selectedInst!.toLowerCase(),
+                        orElse: () => Institution(name: selectedInst!, institutionName: selectedInst!),
+                      ),
+                    );
+                    if (match.isRejected) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.info_outline, color: Colors.white, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '"${match.institutionName}" was rejected by SFE and cannot be linked to this doctor. Please use "Institution Submission" in the menu to modify and resubmit.',
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: const Color(0xFFDC2626),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+                    final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+                      institutionIdOrName: match.name.isNotEmpty ? match.name : selectedInst,
+                      institutionName: match.institutionName,
+                      rawCity: match.rawCityMunicipality ?? match.cityMunicipality,
+                      rawProvince: match.rawProvinceName ?? match.provinceName,
+                      rawRegion: match.rawRegionName ?? match.regionName,
+                      streetAddress: match.streetAddress,
+                      institutions: _institutions,
+                    );
                     setState(() {
                       final shouldBePref = isPreferred || _selectedWorkplaces.isEmpty;
                       if (shouldBePref) {
                         for (int i = 0; i < _selectedWorkplaces.length; i++) {
                           final old = _selectedWorkplaces[i];
-                          _selectedWorkplaces[i] = SubmissionWorkplace(
-                            preferred: false,
-                            hcpWorkplace: old.hcpWorkplace,
-                            workplaceName: old.workplaceName,
-                            cityMunicipality: old.cityMunicipality,
-                            cityTitle: old.cityTitle,
-                            provinceName: old.provinceName,
-                            provinceTitle: old.provinceTitle,
-                          );
+                          _selectedWorkplaces[i] = old.copyWith(preferred: false);
                         }
                       }
                       _selectedWorkplaces.add(SubmissionWorkplace(
                         preferred: shouldBePref,
-                        hcpWorkplace: instTitle.isNotEmpty ? instTitle : selectedInst!,
-                        workplaceName: instTitle.isNotEmpty ? instTitle : selectedInst!,
-                        cityMunicipality: resolvedCity,
-                        cityTitle: resolvedCity,
-                        provinceName: resolvedProv,
-                        provinceTitle: resolvedProv,
+                        hcpWorkplace: loc.workplaceId,
+                        workplaceName: loc.workplaceName,
+                        cityMunicipality: loc.cityId,
+                        cityTitle: loc.cityName,
+                        provinceName: loc.provinceId,
+                        provinceTitle: loc.provinceName,
+                        regionName: loc.regionId,
+                        regionTitle: loc.regionName,
+                        workflowState: match.workflowState,
+                        rejectionReason: match.rejectionReason,
+                        isCustom: match.isCustom,
                       ));
                     });
                     Navigator.pop(ctx);
@@ -2314,7 +2645,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           final currentInstObj = selectedInst != null
               ? _institutions.firstWhere(
                   (i) => i.name == selectedInst,
-                  orElse: () => Institution(name: selectedInst!, institutionName: selectedInst!),
+                  orElse: () => Institution(name: selectedInst ?? '', institutionName: selectedInst ?? ''),
                 )
               : (_institutions.isNotEmpty ? _institutions.first : null);
 
@@ -2327,6 +2658,40 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  if (currentInstObj != null &&
+                      (currentInstObj.workflowState == 'Rejected' ||
+                          (currentInstObj.rejectionReason != null && currentInstObj.rejectionReason!.isNotEmpty))) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: const [
+                              Icon(Icons.error_outline_rounded, color: Color(0xFFDC2626), size: 16),
+                              SizedBox(width: 6),
+                              Text('SFE Rejection Reason:', style: TextStyle(color: Color(0xFF991B1B), fontWeight: FontWeight.bold, fontSize: 11.5)),
+                            ],
+                          ),
+                          if (currentInstObj.rejectionReason != null && currentInstObj.rejectionReason!.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Text(currentInstObj.rejectionReason!, style: const TextStyle(color: Color(0xFFB91C1C), fontSize: 11.5)),
+                          ],
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Please visit "Institution Submission" in the drawer to edit and resubmit this facility.',
+                            style: TextStyle(color: Color(0xFF991B1B), fontSize: 11, fontStyle: FontStyle.italic),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const Text('Workplace Institution *', style: TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 6),
                   InkWell(
@@ -2401,35 +2766,71 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0066FF)),
                 onPressed: () {
                   if (selectedInst != null) {
-                    final instObj = _institutions.firstWhere((i) => i.name == selectedInst, orElse: () => _institutions.first);
-                    final instTitle = addrCtrl.text.isNotEmpty ? addrCtrl.text : (instObj.institutionName.isNotEmpty ? instObj.institutionName : LocationResolver.resolveInstitutionName(selectedInst, _institutions));
-                    final resolvedCity = LocationResolver.resolveCityName(instObj.cityMunicipality);
-                    final resolvedProv = LocationResolver.resolveProvinceName(instObj.provinceName);
+                    final apiService = Provider.of<ApiService>(context, listen: false);
+                    final allCached = apiService.cachedInstitutions;
+                    final typedName = addrCtrl.text.trim();
+
+                    // Check both selectedInst and typed address against cached institutions
+                    final instObj = allCached.firstWhere(
+                      (i) => i.name.toLowerCase() == selectedInst!.toLowerCase() ||
+                             (typedName.isNotEmpty && (i.institutionName.toLowerCase() == typedName.toLowerCase() || i.name.toLowerCase() == typedName.toLowerCase())),
+                      orElse: () => _institutions.firstWhere(
+                        (i) => i.name.toLowerCase() == selectedInst!.toLowerCase() ||
+                               (typedName.isNotEmpty && (i.institutionName.toLowerCase() == typedName.toLowerCase() || i.name.toLowerCase() == typedName.toLowerCase())),
+                        orElse: () => Institution(name: selectedInst!, institutionName: typedName.isNotEmpty ? typedName : selectedInst!),
+                      ),
+                    );
+                    if (instObj.isRejected) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.info_outline, color: Colors.white, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '"${instObj.institutionName}" was rejected by SFE and cannot be linked to this doctor. Please use "Institution Submission" in the menu to modify and resubmit.',
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: const Color(0xFFDC2626),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                      return;
+                    }
+                    final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+                      institutionIdOrName: instObj.name.isNotEmpty ? instObj.name : selectedInst,
+                      institutionName: addrCtrl.text.isNotEmpty ? addrCtrl.text : instObj.institutionName,
+                      rawCity: instObj.rawCityMunicipality ?? instObj.cityMunicipality,
+                      rawProvince: instObj.rawProvinceName ?? instObj.provinceName,
+                      rawRegion: instObj.rawRegionName ?? instObj.regionName,
+                      streetAddress: instObj.streetAddress,
+                      institutions: _institutions,
+                    );
                     setState(() {
                       if (isPreferred) {
                         for (int i = 0; i < _selectedWorkplaces.length; i++) {
                           if (i != index) {
                             final old = _selectedWorkplaces[i];
-                            _selectedWorkplaces[i] = SubmissionWorkplace(
-                              preferred: false,
-                              hcpWorkplace: old.hcpWorkplace,
-                              workplaceName: old.workplaceName,
-                              cityMunicipality: old.cityMunicipality,
-                              cityTitle: old.cityTitle,
-                              provinceName: old.provinceName,
-                              provinceTitle: old.provinceTitle,
-                            );
+                            _selectedWorkplaces[i] = old.copyWith(preferred: false);
                           }
                         }
                       }
                       _selectedWorkplaces[index] = SubmissionWorkplace(
                         preferred: isPreferred,
-                        hcpWorkplace: instTitle.isNotEmpty ? instTitle : selectedInst,
-                        workplaceName: instTitle.isNotEmpty ? instTitle : selectedInst,
-                        cityMunicipality: resolvedCity,
-                        cityTitle: resolvedCity,
-                        provinceName: resolvedProv,
-                        provinceTitle: resolvedProv,
+                        hcpWorkplace: loc.workplaceId,
+                        workplaceName: loc.workplaceName,
+                        cityMunicipality: loc.cityId,
+                        cityTitle: loc.cityName,
+                        provinceName: loc.provinceId,
+                        provinceTitle: loc.provinceName,
+                        regionName: loc.regionId,
+                        regionTitle: loc.regionName,
+                        workflowState: instObj.workflowState ?? w.workflowState,
+                        rejectionReason: instObj.rejectionReason ?? w.rejectionReason,
+                        isCustom: instObj.isCustom || w.isCustom,
                       );
                     });
                   }
@@ -3490,6 +3891,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             ],
           ),
           const SizedBox(height: 12),
+          _buildRejectionReasonBanner(),
           
           Container(
             padding: const EdgeInsets.all(16),
@@ -4035,8 +4437,40 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
             Builder(
               builder: (context) {
+                final hasRejectedWorkplace = _selectedWorkplaces.any((w) {
+                  final rawWp = (w.workplaceName != null && w.workplaceName!.isNotEmpty) ? w.workplaceName! : (w.hcpWorkplace ?? '');
+                  final matched = _institutions.firstWhere(
+                    (i) => i.name.toLowerCase() == rawWp.toLowerCase() || i.institutionName.toLowerCase() == rawWp.toLowerCase(),
+                    orElse: () => Institution(name: rawWp, institutionName: rawWp),
+                  );
+                  return matched.isRejected || w.workflowState == 'Rejected';
+                });
+
                 final workplaceCard = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (hasRejectedWorkplace)
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Row(
+                          children: const [
+                            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 20),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'One or more linked institutions were REJECTED by SFE. Please remove them or submit an updated proposal before finalizing doctor profiling.',
+                                style: TextStyle(color: Color(0xFFB91C1C), fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
@@ -4072,71 +4506,163 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             final resolvedCity = LocationResolver.resolveCityName(rawCity);
                             final locStr = LocationResolver.formatLocation(cityMunicipality: resolvedCity, provinceName: resolvedProv);
 
+                            final statusNote = LocationResolver.getInstitutionApprovalStatusNote(w.hcpWorkplace ?? rawWp, _institutions);
+                            final isApprovedInst = LocationResolver.isApprovedInstitution(w.hcpWorkplace ?? rawWp, _institutions);
+
+                            final matchedInst = _institutions.firstWhere(
+                              (i) => i.name.toLowerCase() == (w.hcpWorkplace ?? rawWp).toLowerCase() || i.institutionName.toLowerCase() == (w.hcpWorkplace ?? rawWp).toLowerCase(),
+                              orElse: () => Institution(name: w.hcpWorkplace ?? rawWp, institutionName: wpName),
+                            );
+                            final isRejectedInst = matchedInst.isRejected || w.workflowState == 'Rejected' || statusNote.contains('REJECTED');
+
                             return InkWell(
                               onTap: () => _showEditWorkplaceDialog(idx),
                               child: Padding(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                child: Row(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    InkWell(
-                                      onTap: () {
-                                        setState(() {
-                                          for (int i = 0; i < _selectedWorkplaces.length; i++) {
-                                            final item = _selectedWorkplaces[i];
-                                            _selectedWorkplaces[i] = SubmissionWorkplace(
-                                              preferred: (i == idx),
-                                              hcpWorkplace: item.hcpWorkplace,
-                                              workplaceName: item.workplaceName,
-                                              cityMunicipality: item.cityMunicipality,
-                                              cityTitle: item.cityTitle,
-                                              provinceName: item.provinceName,
-                                              provinceTitle: item.provinceTitle,
-                                            );
-                                          }
-                                        });
-                                      },
-                                      child: SizedBox(
-                                        width: 24,
-                                        child: Icon(
-                                          w.preferred ? Icons.star_rounded : Icons.star_border_rounded,
-                                          color: w.preferred ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
-                                          size: 18,
+                                    Row(
+                                      children: [
+                                        InkWell(
+                                          onTap: () {
+                                            setState(() {
+                                              for (int i = 0; i < _selectedWorkplaces.length; i++) {
+                                                final item = _selectedWorkplaces[i];
+                                                _selectedWorkplaces[i] = item.copyWith(preferred: (i == idx));
+                                              }
+                                            });
+                                          },
+                                          child: SizedBox(
+                                            width: 24,
+                                            child: Icon(
+                                              w.preferred ? Icons.star_rounded : Icons.star_border_rounded,
+                                              color: w.preferred ? const Color(0xFFF59E0B) : const Color(0xFFCBD5E1),
+                                              size: 18,
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        wpName.isNotEmpty ? wpName : 'Select Workplace',
-                                        style: TextStyle(
-                                          color: wpName.isNotEmpty ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
-                                          fontWeight: w.preferred ? FontWeight.bold : FontWeight.normal,
-                                          fontSize: 12.5,
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  wpName.isNotEmpty ? wpName : 'Select Workplace',
+                                                  style: TextStyle(
+                                                    color: isRejectedInst
+                                                        ? const Color(0xFFDC2626)
+                                                        : (wpName.isNotEmpty ? const Color(0xFF0F172A) : const Color(0xFF94A3B8)),
+                                                    fontWeight: (isRejectedInst || w.preferred) ? FontWeight.bold : FontWeight.normal,
+                                                    fontSize: 12.5,
+                                                  ),
+                                                  overflow: TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                              if (isRejectedInst)
+                                                GestureDetector(
+                                                  onTap: () {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('REJECTED: ${matchedInst.rejectionReason ?? "Invalid institution details"}. Please remove or resubmit via Institution Submission.'),
+                                                        behavior: SnackBarBehavior.floating,
+                                                        backgroundColor: const Color(0xFFDC2626),
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: Container(
+                                                    margin: const EdgeInsets.only(left: 6),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFFFEF2F2),
+                                                      border: Border.all(color: const Color(0xFFFCA5A5)),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        const Icon(Icons.cancel_rounded, size: 10, color: Color(0xFFDC2626)),
+                                                        const SizedBox(width: 2),
+                                                        Text(
+                                                          matchedInst.rejectionDisplayLabel,
+                                                          style: const TextStyle(color: Color(0xFFDC2626), fontSize: 9.5, fontWeight: FontWeight.bold),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                )
+                                              else if (w.workflowState == 'Pending Approval' || w.workflowState == 'Pending SFE Approval' || w.isCustom)
+                                                Container(
+                                                  margin: const EdgeInsets.only(left: 6),
+                                                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                  decoration: BoxDecoration(
+                                                    color: const Color(0xFFFFFBEB),
+                                                    border: Border.all(color: const Color(0xFFFDE68A)),
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: const Text('Pending Approval', style: TextStyle(color: Color(0xFFD97706), fontSize: 9.5, fontWeight: FontWeight.bold)),
+                                                ),
+                                            ],
+                                          ),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
+                                        Text(
+                                          locStr.isNotEmpty ? locStr : '-',
+                                          style: TextStyle(
+                                            color: isRejectedInst ? const Color(0xFFDC2626) : const Color(0xFF64748B),
+                                            fontSize: 11,
+                                            fontWeight: isRejectedInst ? FontWeight.bold : FontWeight.normal,
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        GestureDetector(
+                                          onTap: () => _showEditWorkplaceDialog(idx),
+                                          child: const Padding(
+                                            padding: EdgeInsets.only(left: 4),
+                                            child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              _selectedWorkplaces.removeAt(idx);
+                                            });
+                                          },
+                                          child: const Padding(
+                                            padding: EdgeInsets.only(left: 6),
+                                            child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      locStr.isNotEmpty ? locStr : '-',
-                                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(width: 6),
-                                    GestureDetector(
-                                      onTap: () => _showEditWorkplaceDialog(idx),
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 4),
-                                        child: Icon(Icons.edit_outlined, size: 14, color: Color(0xFF0066FF)),
-                                      ),
-                                    ),
-                                    GestureDetector(
-                                      onTap: () {
-                                        setState(() {
-                                          _selectedWorkplaces.removeAt(idx);
-                                        });
-                                      },
-                                      child: const Padding(
-                                        padding: EdgeInsets.only(left: 6),
-                                        child: Icon(Icons.close, size: 14, color: Color(0xFF94A3B8)),
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 24, top: 4),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            isRejectedInst
+                                                ? Icons.cancel_rounded
+                                                : (isApprovedInst ? Icons.check_circle_rounded : Icons.hourglass_top_rounded),
+                                            size: 11,
+                                            color: isRejectedInst
+                                                ? const Color(0xFFDC2626)
+                                                : (isApprovedInst ? const Color(0xFF059669) : const Color(0xFFD97706)),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              isRejectedInst ? matchedInst.rejectionDisplayLabel : statusNote,
+                                              style: TextStyle(
+                                                color: isRejectedInst
+                                                    ? const Color(0xFFDC2626)
+                                                    : (isApprovedInst ? const Color(0xFF059669) : const Color(0xFFD97706)),
+                                                fontSize: 10.5,
+                                                fontStyle: FontStyle.italic,
+                                                fontWeight: isRejectedInst ? FontWeight.bold : FontWeight.w500,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
                                   ],
@@ -4148,18 +4674,71 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF0B192C),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0B192C),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.add, size: 14, color: Colors.white),
+                          label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: _showAddWorkplaceSelector,
                         ),
-                        icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        onPressed: _showAddWorkplaceSelector,
-                      ),
+                        const SizedBox(width: 8),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1E3E62),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                          ),
+                          icon: const Icon(Icons.add_business_rounded, size: 14, color: Color(0xFF38BDF8)),
+                          label: const Text('+ Propose New Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: () async {
+                            final doctorFullName = '${_firstNameController.text} ${_lastNameController.text}'.trim();
+                            final newInst = await ProposeInstitutionDialog.show(
+                              context,
+                              requiresDsmApproval: true,
+                              linkedDoctorName: doctorFullName.isNotEmpty ? doctorFullName : null,
+                            );
+                            if (newInst != null) {
+                              if (!_institutions.any((i) => i.name == newInst.name)) {
+                                setState(() {
+                                  _institutions.insert(0, newInst);
+                                });
+                              }
+                              final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+                                institutionIdOrName: newInst.name,
+                                institutionName: newInst.institutionName,
+                                rawCity: newInst.rawCityMunicipality ?? newInst.cityMunicipality,
+                                rawProvince: newInst.rawProvinceName ?? newInst.provinceName,
+                                rawRegion: newInst.rawRegionName ?? newInst.regionName,
+                                streetAddress: newInst.streetAddress,
+                                institutions: _institutions,
+                              );
+                              setState(() {
+                                final shouldBePref = _selectedWorkplaces.isEmpty;
+                                _selectedWorkplaces.add(SubmissionWorkplace(
+                                  preferred: shouldBePref,
+                                  hcpWorkplace: loc.workplaceId,
+                                  workplaceName: loc.workplaceName,
+                                  cityMunicipality: loc.cityId,
+                                  cityTitle: loc.cityName,
+                                  provinceName: loc.provinceId,
+                                  provinceTitle: loc.provinceName,
+                                  regionName: loc.regionId,
+                                  regionTitle: loc.regionName,
+                                  workflowState: newInst.workflowState,
+                                  rejectionReason: newInst.rejectionReason,
+                                  isCustom: true,
+                                ));
+                              });
+                            }
+                          },
+                        ),
+                      ],
                     ),
                   ],
                 );
@@ -4352,10 +4931,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 apiService.setProgram(val);
                 _updateActiveSurveyForProgram(val);
                 final resolved = await apiService.resolveUserTerritory(program: val);
-                final progTerrs = await apiService.fetchTerritories(program: val);
                 if (mounted) {
                   setState(() {
-                    _territories = progTerrs.isNotEmpty ? progTerrs : [resolved.territoryCode];
                     _selectedTerritory = resolved.territoryCode;
                     _territoryManagerController.text = resolved.territoryManager;
                   });
@@ -4418,6 +4995,90 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
 
+
+  Widget _buildRejectionReasonBanner() {
+    if (!widget.isResubmission) return const SizedBox.shrink();
+    final remarks = (_liveRejectionRemarks ?? widget.existingSubmission?.rejectionRemarks ?? '').trim();
+    if (remarks.isEmpty) return const SizedBox.shrink();
+    final rejectedBy = _liveRejectedBy ?? widget.existingSubmission?.rejectedBy;
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFFCA5A5), width: 1.5),
+        boxShadow: const [
+          BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.cancel_outlined, color: Color(0xFFDC2626), size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  rejectedBy != null && rejectedBy.isNotEmpty
+                      ? 'Rejection Note from $rejectedBy'
+                      : 'DSM Rejection Note & Reason',
+                  style: const TextStyle(
+                    color: Color(0xFF991B1B),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13.5,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEE2E2),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFEF4444)),
+                ),
+                child: const Text(
+                  'Needs Correction',
+                  style: TextStyle(
+                    color: Color(0xFFDC2626),
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFFFECACA)),
+            ),
+            child: SelectableText(
+              remarks,
+              style: const TextStyle(
+                color: Color(0xFF1E293B),
+                fontSize: 13,
+                height: 1.4,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Please update the doctor details according to the manager\'s note above, then proceed to the Changes tab to resubmit.',
+            style: TextStyle(color: Color(0xFF7F1D1D), fontSize: 11.5, fontStyle: FontStyle.italic),
+          ),
+        ],
+      ),
+    );
+  }
 
   // --- CHANGES STEP ---
   Widget _buildChangesStep() {
@@ -4674,6 +5335,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          _buildRejectionReasonBanner(),
 
           if (isExistingDoctor && !hasAnyChanges) ...[
             Container(
@@ -5035,12 +5697,21 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               onPressed: ((_currentStep == 0 && !_consentGiven) || !isStep2Ready)
                   ? null
                   : () {
-                      if (_currentStep == 1 && _isCreatingNewDoctor) {
-                        if (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty) {
+                      if (_currentStep == 1) {
+                        if (_isCreatingNewDoctor && (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty)) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               backgroundColor: Color(0xFFDC2626),
                               content: Text('Please enter the doctor\'s First Name and Last Name.'),
+                            ),
+                          );
+                          return;
+                        }
+                        if (_hasUnapprovedWorkplaces()) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: const Color(0xFFDC2626),
+                              content: Text('Cannot proceed: "${_unapprovedWorkplaceNames()}" was rejected by SFE. Please choose an active or pending institution.'),
                             ),
                           );
                           return;

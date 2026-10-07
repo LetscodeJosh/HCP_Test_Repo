@@ -8,6 +8,7 @@ import '../models/lookup_models.dart';
 import '../models/submission.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
+import 'detail_screen.dart';
 
 class DoctorMasterlistScreen extends StatefulWidget {
   const DoctorMasterlistScreen({Key? key}) : super(key: key);
@@ -72,7 +73,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       if (mounted) {
         setState(() {
           _allDoctors = doctors;
-          _institutions = institutions;
+          _institutions = institutions.isNotEmpty ? institutions : apiService.actualInstitutions;
           _specializations = specializations.where((s) => !s.isGroup).toList();
           _hcpTypes = types;
           _hcpAccounts = accounts;
@@ -95,7 +96,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
 
   void _applyFilters() {
     final apiService = Provider.of<ApiService>(context, listen: false);
-    final userProg = apiService.isAdmin ? _programFilter : apiService.selectedProgram;
+    final userProg = (apiService.isAdmin || apiService.isSfe) ? _programFilter : apiService.selectedProgram;
 
     final Set<String> progDocIds = {};
     final Set<String> progDocNames = {};
@@ -479,11 +480,16 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                         }
                         final displayContacts = (isMedRep && prefContacts.isNotEmpty) ? prefContacts : fullDoctor.contacts;
 
+                        final hasRejectedWp = fullDoctor.isWorkplaceRejected(_institutions);
+                        final rejReason = fullDoctor.getRejectedInstitutionReason(_institutions);
+
                         final workplacesWidget = Container(
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E293B),
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: const Color(0xFF334155)),
+                            border: Border.all(
+                              color: hasRejectedWp ? const Color(0xFFEF4444).withOpacity(0.6) : const Color(0xFF334155),
+                            ),
                           ),
                           child: Column(
                             children: [
@@ -509,6 +515,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                               if (displayWorkplaces.isNotEmpty)
                                 ...displayWorkplaces.map((w) {
                                   final isPref = prefWorkplaces.contains(w);
+                                  final isItemRejected = LocationResolver.isRejectedInstitution(w.workplace, _institutions);
                                   final wpName = LocationResolver.resolveInstitutionName(w.workplace, _institutions);
                                   final locParts = LocationResolver.formatLocation(
                                     streetAddress: (w.address != null && w.address!.isNotEmpty && w.address != w.workplace && w.address != w.cityMunicipality && w.address != w.provinceName) ? w.address : null,
@@ -528,14 +535,29 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                           child: Text(
                                             wpName.isNotEmpty ? wpName : w.workplace,
                                             style: TextStyle(
-                                              color: isPref ? const Color(0xFFFCD34D) : Colors.white,
-                                              fontWeight: isPref ? FontWeight.bold : FontWeight.normal,
+                                              color: isItemRejected
+                                                  ? const Color(0xFFEF4444)
+                                                  : (isPref ? const Color(0xFFFCD34D) : Colors.white),
+                                              fontWeight: (isItemRejected || isPref) ? FontWeight.bold : FontWeight.normal,
                                               fontSize: 11,
                                             ),
                                             overflow: TextOverflow.ellipsis,
                                           ),
                                         ),
-                                        Expanded(child: Text(locParts.isNotEmpty ? locParts : (w.address ?? ''), style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+                                        if (isItemRejected) ...[
+                                          const SizedBox(width: 4),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEF4444).withOpacity(0.2),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFFEF4444), width: 0.8),
+                                            ),
+                                            child: const Text('REJECTED', style: TextStyle(color: Color(0xFFF87171), fontSize: 8.5, fontWeight: FontWeight.bold)),
+                                          ),
+                                          const SizedBox(width: 4),
+                                        ],
+                                        Expanded(child: Text(locParts.isNotEmpty ? locParts : (w.address ?? ''), style: TextStyle(color: isItemRejected ? const Color(0xFFF87171) : Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
                                         if (isPref && !isMedRep) ...[
                                           const SizedBox(width: 4),
                                           Container(
@@ -562,6 +584,28 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                     ],
                                   ),
                                 ),
+                              if (hasRejectedWp) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEF4444).withOpacity(0.12),
+                                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(7)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.cancel_rounded, size: 12, color: Color(0xFFF87171)),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          rejReason != null ? '[REJECTED INSTITUTION: $rejReason]' : '[REJECTED INSTITUTION]',
+                                          style: const TextStyle(color: Color(0xFFF87171), fontSize: 10, fontStyle: FontStyle.italic, fontWeight: FontWeight.bold),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         );
@@ -882,11 +926,42 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                     onChanged: (val) => selectedSpecialty = val,
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: selectedWorkplace,
-                    decoration: const InputDecoration(labelText: 'Workplace'),
-                    items: _institutions.map((i) => DropdownMenuItem(value: i.name, child: Text(i.institutionName))).toList(),
-                    onChanged: (val) => selectedWorkplace = val,
+                  InkWell(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.white,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+                        builder: (bCtx) => SearchableInstitutionPicker(
+                          institutions: _institutions.where((i) => i.isApprovedForProfiling).toList(),
+                          onSelected: (inst) {
+                            setDialogState(() => selectedWorkplace = inst.name);
+                          },
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: InputDecorator(
+                      decoration: InputDecoration(
+                        labelText: 'Workplace / Hospital',
+                        suffixIcon: const Icon(Icons.search_rounded, color: Color(0xFF0066FF), size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                      ),
+                      child: Text(
+                        selectedWorkplace != null
+                            ? (_institutions.firstWhere(
+                                (i) => i.name.toLowerCase() == selectedWorkplace!.toLowerCase() || i.institutionName.toLowerCase() == selectedWorkplace!.toLowerCase(),
+                                orElse: () => Institution(name: selectedWorkplace!, institutionName: selectedWorkplace!),
+                              ).institutionName)
+                            : 'Tap to search workplace...',
+                        style: TextStyle(
+                          color: selectedWorkplace != null ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -901,9 +976,23 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0056B3)),
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
+                  final apiService = Provider.of<ApiService>(context, listen: false);
+                  final reqWork = selectedWorkplace ?? (_institutions.isNotEmpty ? _institutions.first.name : '');
+                  final workObj = _institutions.firstWhere(
+                    (i) => i.name.toLowerCase() == reqWork.toLowerCase() || i.institutionName.toLowerCase() == reqWork.toLowerCase(),
+                    orElse: () => Institution(name: reqWork, institutionName: reqWork),
+                  );
+                  if (workObj.isRejected) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Selected workplace was rejected by SFE. Please choose an active or pending institution.'),
+                        backgroundColor: Color(0xFFDC2626),
+                      ),
+                    );
+                    return;
+                  }
                   formKey.currentState!.save();
                   Navigator.pop(ctx);
-                  final apiService = Provider.of<ApiService>(context, listen: false);
 
                   try {
                     setState(() => _isLoading = true);
@@ -1185,8 +1274,8 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                   ),
                 ),
 
-                // Program Filter Dropdown (Admin only)
-                if (apiService.isAdmin) ...[
+                // Program Filter Dropdown (Admin / SFE)
+                if (apiService.isAdmin || apiService.isSfe) ...[
                   Container(
                     height: 36,
                     padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -1296,7 +1385,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       backgroundColor: const Color(0xFFF4F6F9), // Soft Light Background for Darkish Blue & White combination
       appBar: AppBar(
         centerTitle: true,
-        title: const Text('Doctor Listing', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+        title: const Text('HCP', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         backgroundColor: const Color(0xFF0B192C),
         elevation: 0,
         bottom: PreferredSize(
@@ -1313,29 +1402,35 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
             margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: apiService.isAdmin
-                  ? const Color(0xFFEF4444).withOpacity(0.25)
-                  : (apiService.isManager
-                      ? const Color(0xFFF59E0B).withOpacity(0.25)
-                      : const Color(0xFF0066FF).withOpacity(0.25)),
+              color: apiService.isSfe
+                  ? const Color(0xFFA855F7).withOpacity(0.25)
+                  : (apiService.isAdmin
+                      ? const Color(0xFFEF4444).withOpacity(0.25)
+                      : (apiService.isManager
+                          ? const Color(0xFFF59E0B).withOpacity(0.25)
+                          : const Color(0xFF0066FF).withOpacity(0.25))),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: apiService.isAdmin
-                    ? const Color(0xFFEF4444)
-                    : (apiService.isManager
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFF38BDF8)),
+                color: apiService.isSfe
+                    ? const Color(0xFFA855F7)
+                    : (apiService.isAdmin
+                        ? const Color(0xFFEF4444)
+                        : (apiService.isManager
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF38BDF8))),
                 width: 0.8,
               ),
             ),
             child: Text(
               apiService.userDesignationTitle,
               style: TextStyle(
-                color: apiService.isAdmin
-                    ? const Color(0xFFFCA5A5)
-                    : (apiService.isManager
-                        ? const Color(0xFFFCD34D)
-                        : const Color(0xFF93C5FD)),
+                color: apiService.isSfe
+                    ? const Color(0xFFD8B4FE)
+                    : (apiService.isAdmin
+                        ? const Color(0xFFFCA5A5)
+                        : (apiService.isManager
+                            ? const Color(0xFFFCD34D)
+                            : const Color(0xFF93C5FD))),
                 fontSize: 10.5,
                 fontWeight: FontWeight.bold,
               ),

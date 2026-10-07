@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HCP Profiling & Territory Reconfiguration - Scrum Presentation Summary (V.0.5.1 to V.0.5.4)</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+    line-height: 1.45;
+    font-size: 8.5pt;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+  .page {
+    height: 277mm;
+    max-height: 277mm;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+  }
+  .header-container {
+    border-bottom: 2.5px solid #0284c7;
+    padding-bottom: 5px;
+    margin-bottom: 12px;
+  }
+  h1 {
+    font-size: 15pt;
+    color: #0f172a;
+    margin: 0 0 2px 0;
+    font-weight: 800;
+  }
+  .subtitle {
+    font-size: 9pt;
+    color: #0284c7;
+    margin: 0 0 6px 0;
+    font-weight: 600;
+  }
+  .meta-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 7.2pt;
+    background: #f0f9ff;
+    padding: 4px 10px;
+    border-radius: 5px;
+    border: 1px solid #bae6fd;
+    color: #0369a1;
+  }
+  .meta-bar strong {
+    color: #0c4a6e;
+  }
+  .version-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4.5px solid #0284c7;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+  }
+  .version-card.green { border-left-color: #059669; }
+  .version-card.purple { border-left-color: #7c3aed; }
+  .version-card.amber { border-left-color: #d97706; }
+  
+  .version-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+  }
+  .version-title {
+    font-size: 10.5pt;
+    font-weight: 800;
+    color: #0f172a;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2.5px 8px;
+    border-radius: 4px;
+    font-size: 6.8pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .badge-blue { background: #e0f2fe; color: #0369a1; }
+  .badge-green { background: #dcfce7; color: #15803d; }
+  .badge-purple { background: #f3e8ff; color: #7e22ce; }
+  .badge-amber { background: #fef3c7; color: #b45309; }
+
+  .bullet-block {
+    margin: 4px 0 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  .bullet-block li {
+    margin-bottom: 6px;
+    font-size: 8.4pt;
+    line-height: 1.45;
+  }
+  .bullet-block li:last-child {
+    margin-bottom: 0;
+  }
+  .bullet-block strong {
+    color: #0f172a;
+  }
+  .footer {
+    margin-top: auto;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 5px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 6.8pt;
+    color: #94a3b8;
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="header-container">
+    <h1>HCP Profiling & Territory Reconfiguration &bull; Scrum Presentation Summary</h1>
+    <div class="subtitle">Concise &amp; Human-Friendly Release Highlights &bull; Versions V.0.5.1 to V.0.5.4</div>
+    <div class="meta-bar">
+      <div><strong>Current Version:</strong> V.0.5.4 (Build 30)</div>
+      <div><strong>Test Suite:</strong> 64/64 Passed (100%)</div>
+      <div><strong>Static Analysis:</strong> 0 Errors / 0 Warnings</div>
+      <div><strong>Technical Debt:</strong> Grade A+</div>
+    </div>
+  </div>
+
+  <!-- V.0.5.1 -->
+  <div class="version-card">
+    <div class="version-header">
+      <span class="version-title">V.0.5.1 (Build 27) &bull; Focused Field Tools &amp; Collision Prevention</span>
+      <span class="badge badge-blue">FIELD FOCUS &amp; CONCURRENCY</span>
+    </div>
+    <ul class="bullet-block">
+      <li><strong>- What was applied:</strong> Split the system into two focused tools&mdash;a mobile app strictly for field doctor profiling and a dedicated desktop app for territory planning&mdash;while adding automatic hospital name capitalization and a 60-second editing lock.</li>
+      <li><strong>- Business &amp; User Value:</strong> Keeps the mobile app fast and simple for reps visiting clinics, and stops medical reps and district managers from accidentally editing and overwriting the same clinic details at the same time.</li>
+    </ul>
+  </div>
+
+  <!-- V.0.5.2 -->
+  <div class="version-card green">
+    <div class="version-header">
+      <span class="version-title">V.0.5.2 (Build 28) &bull; Clean Monthly Records &amp; Bulk Operations</span>
+      <span class="badge badge-green">DATA QUALITY &amp; BULK TOOLS</span>
+    </div>
+    <ul class="bullet-block">
+      <li><strong>- What was applied:</strong> Added automatic doctor deduplication, organized past records into clean monthly archive folders with automatic detail copying, and introduced bulk tools to rename, reassign, or archive multiple territories at once.</li>
+      <li><strong>- Business &amp; User Value:</strong> Ensures doctors never appear twice in monthly reports, prevents blank profiles during monthly cycle rollovers, and lets territory planners update or rename hundreds of accounts in seconds instead of doing it one by one.</li>
+    </ul>
+  </div>
+
+  <!-- V.0.5.3 -->
+  <div class="version-card purple">
+    <div class="version-header">
+      <span class="version-title">V.0.5.3 (Build 29) &bull; Visual Territory Tree &amp; Safe Branching</span>
+      <span class="badge badge-purple">VISUAL STRUCTURE &amp; RULES</span>
+    </div>
+    <ul class="bullet-block">
+      <li><strong>- What was applied:</strong> Built an interactive visual territory tree that matches the company structure 1-to-1, with built-in safety rules that only allow adding sub-territories inside valid parent folders.</li>
+      <li><strong>- Business &amp; User Value:</strong> Gives commercial leaders a clear, bird's-eye view of all territories and prevents human error like creating misplaced, empty, or disconnected territory branches.</li>
+    </ul>
+  </div>
+
+  <!-- V.0.5.4 -->
+  <div class="version-card amber">
+    <div class="version-header">
+      <span class="version-title">V.0.5.4 (Build 30) &bull; Enterprise Data Security &amp; Laptop Display Comfort</span>
+      <span class="badge badge-amber">SECURITY &amp; USABILITY</span>
+    </div>
+    <ul class="bullet-block">
+      <li><strong>- What was applied:</strong> Upgraded data protection with device-level encryption, locked down offline logins so lost devices cannot be accessed, and redesigned the screen layout so table buttons and page numbers stay neatly docked on any laptop display.</li>
+      <li><strong>- Business &amp; User Value:</strong> Protects doctor and commercial data with bank-grade security even if a phone is lost or stolen, while ensuring planners have a comfortable, readable screen without needing to constantly zoom in or out.</li>
+    </ul>
+  </div>
+
+  <div class="footer">
+    <span>HCP Profiling App &bull; Executive Presentation Reference (V.0.5.1 to V.0.5.4)</span>
+    <span>Page 1 of 1</span>
+  </div>
+</div>
+
+</body>
+</html>

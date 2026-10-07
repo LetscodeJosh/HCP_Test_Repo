@@ -1,0 +1,40 @@
+{
+  "appName": "HCP Profiling",
+  "version": "V.0.4.4",
+  "buildNumber": "15",
+  "releaseDate": "2026-09-17T16:15:00+08:00",
+  "targetBackend": "ERPNext v15",
+  "binaries": {
+    "android": [
+      "HCP_Profiling_V.0.4.4.apk",
+      "HCP_Profiling_Release.apk"
+    ],
+    "sizeBytes": 59350041,
+    "sizeFormatted": "56.6 MB",
+    "sha256": "7C1FCFBD440BB7FC403B8FDB046EC3AEE7AE70CA4C639588A5FCA45DD25FD8B7"
+  },
+  "modules": [
+    "Doctor Masterlist (HCP)",
+    "HCP Accounts",
+    "HCP Profile Submission",
+    "Submissions Fact",
+    "Institutions",
+    "Institution Directory Module",
+    "HCP Profile Submission Note / Remarks Isolation Fix",
+    "SFE Specialist Institution Creation & Proposal Functionality",
+    "ERPNext DocType Status Parity (Draft, Approved, Pending, Rejected)",
+    "Pending Institution Doctor Profiling Support",
+    "Dynamic Approval Status Notes (this institution is not yet approved / this institution is now approved)",
+    "HCP Profile Submission Filter Layout Parity",
+    "Location Resolver (PSGC)",
+    "Region Auto-Resolution & Picker",
+    "SFE Specialist Dashboard & Admin Parity",
+    "MedRep Institution Submission Hub"
+  ],
+  "verification": {
+    "flutterAnalyze": "0 errors",
+    "flutterTest": "All tests passed",
+    "buildMode": "release",
+    "targetPlatform": "android-arm64"
+  }
+}

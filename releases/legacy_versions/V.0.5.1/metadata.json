@@ -1,0 +1,25 @@
+{
+  "version": "V.0.5.1",
+  "build_number": 27,
+  "release_date": "2026-09-30",
+  "app_name": "HCP Profiling",
+  "full_version": "HCP Profiling V.0.5.1 (Build 27)",
+  "release_type": "PATCH",
+  "features": [
+    "Standalone SFE Territory Reconfiguration Web Portal: Dedicated laptop edition with automated installer and portable runner",
+    "Separated App Drawer Menu: Territory Reconfiguration removed from HCP mobile app drawer to keep mobile app dedicated exclusively to doctor profiling",
+    "Interactive Reconfiguration Editor: Add, modify, delete, transfer, and rename territory records without CSV upload dependency",
+    "Platforce CRM-Style Column Filtering: Reactive column-by-column filtering row directly under table headers",
+    "Aligned Reconfiguration Grid Columns: Latest Previous Code, Active Code, Assigned MedRep (Code - Name), Doctor Count (pure integer), Status, Actions",
+    "Unique User ID vs Record ID & Transferability: Immutable Record IDs with transferrable MedRep assignments, resignation tracking, and full audit logging",
+    "Interactive Territory Tree Format View: Toggle between grid table and collapsible hierarchical tree view",
+    "Realignment & Archive Vault: Active district cluster overview and decommissioned territory archive with one-click reactivation",
+    "Summary Report & Master Audit Trail: Metric KPIs, full chronological event history, and CSV export",
+    "Title Case Auto-Capitalization & Immediate 60s Edit Concurrency Lock on Mobile App"
+  ],
+  "apk_filename": "HCP_Profiling_V.0.5.1.apk",
+  "apk_size_bytes": 60661787,
+  "apk_sha256": "CDDCA26D57D58AF79A87E9925FDCB97A1B805FE52DFB474133BC585D67F504DE",
+  "web_portal_installer": "releases/Territory_Reconfiguration_Setup.zip",
+  "latest_release_link": "releases/HCP_Profiling_Release.apk"
+}

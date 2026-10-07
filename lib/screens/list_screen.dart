@@ -131,7 +131,7 @@ class _ListScreenState extends State<ListScreen> {
       
       setState(() {
         _allEngagements = engagements;
-        _allInstitutions = institutions;
+        _allInstitutions = institutions.where((i) => i.isApprovedForProfiling).toList();
         _allEngageLogs = COREnergyEngages;
         _allPsgcLocations = psgcLocations;
         
@@ -2070,12 +2070,7 @@ class _SearchableCompanyFilterPickerState extends State<_SearchableCompanyFilter
 
   void _filter(String query) {
     setState(() {
-      _filteredList = widget.institutions.where((inst) {
-        final matchesName = inst.institutionName.toLowerCase().contains(query.toLowerCase());
-        final matchesId = inst.name.toLowerCase().contains(query.toLowerCase());
-        final matchesRegion = (inst.regionName ?? '').toLowerCase().contains(query.toLowerCase());
-        return matchesName || matchesId || matchesRegion;
-      }).toList();
+      _filteredList = LocationResolver.fuzzySearchInstitutions(query, widget.institutions);
     });
   }
 

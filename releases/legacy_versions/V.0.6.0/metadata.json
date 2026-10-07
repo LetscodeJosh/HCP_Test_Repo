@@ -1,0 +1,23 @@
+{
+  "version": "V.0.6.0",
+  "build_number": 32,
+  "release_date": "October 6, 2026",
+  "portal_sha256": "ff39b46e9a943ca051f277a1ecb80dab52fc7b935339a9aa45abe3339300e312",
+  "apk_sha256": "a1e7a72ce134c0a079723e662867668769e7a30a13bb81c701a14453ed8ae698",
+  "apk_size_bytes": 61038843,
+  "apk_size_mb": 58.21,
+  "features": [
+    "Institution Rejection Multi-DocType Reflection: SFE rejection cause note automatically reflected across HCP, HCP Account, and HCP Profile Submission",
+    "Pre-Submission Guard in HCP Wizard: Prevents profiling submissions with rejected institutions, presenting a detailed cause note",
+    "Lockscreen & Logged-Out Heads-Up Notifications: Public high-priority alerts notify MedReps even when logged out via cached last active user in SharedPreferences",
+    "SFE Remediation & Remapping Hub: SFE Specialists can remap rejected facilities to approved masterlist facilities, unblocking MedRep profiling",
+    "Label Standardization: Renamed 'Doctor Listing' to 'HCP' and 'Doctor Account' to 'HCP Account' throughout navigation, dashboard, and headers",
+    "Comprehensive Simulation Suite: 1-tap in-app simulation icon in SFE Dashboard, automated Python test script, and simulation runbook in docs/"
+  ],
+  "verification": {
+    "tests_passed": 64,
+    "compiler_warnings": 0,
+    "compiler_errors": 0,
+    "clean_architecture": "Grade A+ Zero Technical Debt"
+  }
+}

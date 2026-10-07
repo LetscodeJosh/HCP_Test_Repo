@@ -1,0 +1,36 @@
+{
+  "appName": "HCP Profiling",
+  "version": "V.0.4.2",
+  "buildNumber": "13",
+  "releaseDate": "2026-09-16T13:56:00+08:00",
+  "targetBackend": "ERPNext v15",
+  "binaries": {
+    "android": [
+      "HCP_Profiling_V.0.4.2.apk",
+      "HCP_Profiling_Release.apk"
+    ],
+    "sizeBytes": 59251589,
+    "sizeFormatted": "56.5 MB",
+    "sha256": "F353F9821C2C6A354A535D6E801A69A7D3F9AB71A916CB64D5785A0FAC8C743C"
+  },
+  "modules": [
+    "Doctor Masterlist (HCP)",
+    "HCP Accounts",
+    "HCP Profile Submission",
+    "Submissions Fact",
+    "Institutions",
+    "Institution Directory Module",
+    "ERPNext DocType Status Parity (Draft, Approved, Pending, Rejected)",
+    "HCP Profile Submission Filter Layout Parity",
+    "ERPNext List & Table Alignment",
+    "Institution Submission Workflow",
+    "Location Resolver (PSGC)",
+    "Region Auto-Resolution & Picker",
+    "SFE Specialist Dashboard & Admin Parity",
+    "MedRep Institution Submission Hub",
+    "Pending Institution Profiling Workflow",
+    "Dynamic Workplace Approval Status Notes",
+    "Smart Predictive Directory Autocomplete",
+    "Duplicate Detection & Prevention Engine"
+  ]
+}

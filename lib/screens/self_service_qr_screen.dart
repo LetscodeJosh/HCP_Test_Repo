@@ -15,7 +15,7 @@ class SelfServiceQrScreen extends StatelessWidget {
     final medrepEmail = apiService.loggedInEmail ?? 'jptan@profinsights.biz';
 
     final slug = apiService.selectedProgram.toLowerCase().replaceAll(' ', '-');
-    final selfServiceUrl = 'https://dev.pmii-marketing.com/app/successful-$slug-engagement/new'
+    final selfServiceUrl = '${apiService.baseUrl}/app/successful-$slug-engagement/new'
         '?medrep_email=${Uri.encodeComponent(medrepEmail)}'
         '&doctor_id=${Uri.encodeComponent(doctor.name ?? '')}'
         '&doctor_name=${Uri.encodeComponent("${doctor.firstName} ${doctor.lastName}")}';

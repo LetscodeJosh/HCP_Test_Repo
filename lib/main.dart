@@ -3,11 +3,15 @@ import 'package:provider/provider.dart';
 import 'services/api_service.dart';
 import 'screens/login_screen.dart';
 
+import 'models/lookup_models.dart';
 import 'app_config.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   AppConfig.mode = AppMode.hcp;
+  await LocationResolver.initializePsgc();
+  await NotificationService.init();
   runApp(
     ChangeNotifierProvider<ApiService>(
       create: (_) => ApiService(),

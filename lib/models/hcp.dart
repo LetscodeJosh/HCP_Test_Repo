@@ -1,4 +1,5 @@
 import 'lookup_models.dart';
+import '../services/data_sanitizer.dart';
 
 class Hcp {
   final String? name;
@@ -32,6 +33,37 @@ class Hcp {
       if (lastName.trim().isNotEmpty) lastName.trim(),
     ];
     return parts.isNotEmpty ? parts.join(' ') : (name ?? '');
+  }
+
+  bool isWorkplaceRejected([List<Institution>? dynamicInsts]) {
+    if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
+      return true;
+    }
+    return workplaces.any((w) => LocationResolver.isRejectedInstitution(w.workplace, dynamicInsts));
+  }
+
+  String? getRejectedInstitutionReason([List<Institution>? dynamicInsts]) {
+    if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
+      final match = dynamicInsts?.firstWhere(
+        (i) => i.name.toLowerCase() == institution!.toLowerCase() || i.institutionName.toLowerCase() == institution!.toLowerCase(),
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (match != null && match.rejectionReason != null && match.rejectionReason!.trim().isNotEmpty) {
+        return match.rejectionReason!.trim();
+      }
+    }
+    for (var w in workplaces) {
+      if (LocationResolver.isRejectedInstitution(w.workplace, dynamicInsts)) {
+        final match = dynamicInsts?.firstWhere(
+          (i) => i.name.toLowerCase() == w.workplace.toLowerCase() || i.institutionName.toLowerCase() == w.workplace.toLowerCase(),
+          orElse: () => Institution(name: '', institutionName: ''),
+        );
+        if (match != null && match.rejectionReason != null && match.rejectionReason!.trim().isNotEmpty) {
+          return match.rejectionReason!.trim();
+        }
+      }
+    }
+    return null;
   }
 
   Hcp({
@@ -92,15 +124,15 @@ class Hcp {
     }
 
     return Hcp(
-      name: json['name'],
-      hcpFullName: finalFullName,
-      firstName: effectiveFn,
-      middleName: mn,
-      lastName: effectiveLn,
-      birthDate: json['birth_date'],
+      name: json['name'] != null ? DataSanitizer.cleanTrimUpper(json['name']) : null,
+      hcpFullName: DataSanitizer.cleanTrimProper(finalFullName),
+      firstName: DataSanitizer.cleanTrimProper(effectiveFn),
+      middleName: mn != null && mn != '-' ? DataSanitizer.cleanTrimProper(mn) : null,
+      lastName: DataSanitizer.cleanTrimProper(effectiveLn),
+      birthDate: json['birth_date'] != null ? DataSanitizer.trim(json['birth_date']) : null,
       hcpPhoto: json['hcp_photo'],
-      hcpType: json['hcp_type'] ?? '',
-      hcpPractice: json['hcp_practice'] ?? 'Both',
+      hcpType: DataSanitizer.cleanTrimProper(json['hcp_type'] ?? ''),
+      hcpPractice: DataSanitizer.cleanTrimProper(json['hcp_practice'] ?? 'Both'),
       isActive: json['is_active'] == 1 || json['is_active'] == true,
       isPendingApproval: json['is_pending_approval'] == 1 || json['is_pending_approval'] == true,
       specialties: (json['hcp_specialty'] as List? ?? json['specialties'] as List?)
@@ -112,12 +144,58 @@ class Hcp {
       contacts: (json['hcp_contact_info'] as List? ?? json['contacts'] as List? ?? json['hcp_contact'] as List?)
               ?.map((e) => HcpContact.fromJson(e))
               .toList() ?? [],
-      regionName: json['region_name'] != null ? LocationResolver.resolveRegionName(json['region_name'].toString()) : null,
-      provinceName: json['province_name'] != null ? LocationResolver.resolveProvinceName(json['province_name'].toString()) : null,
-      cityMunicipality: json['city_municipality'] != null ? LocationResolver.resolveCityName(json['city_municipality'].toString()) : null,
-      barangayName: json['barangay_name'],
-      institution: json['institution'] != null ? LocationResolver.resolveInstitutionName(json['institution'].toString()) : null,
-      profileLastUpdated: json['profile_last_updated'],
+      regionName: json['region_name'] != null ? DataSanitizer.cleanTrimProper(LocationResolver.resolveRegionName(json['region_name'].toString())) : null,
+      provinceName: json['province_name'] != null ? DataSanitizer.cleanTrimProper(LocationResolver.resolveProvinceName(json['province_name'].toString())) : null,
+      cityMunicipality: json['city_municipality'] != null ? DataSanitizer.cleanTrimProper(LocationResolver.resolveCityName(json['city_municipality'].toString())) : null,
+      barangayName: json['barangay_name'] != null ? DataSanitizer.cleanTrimProper(json['barangay_name']) : null,
+      institution: json['institution'] != null ? DataSanitizer.cleanTrimProper(LocationResolver.resolveInstitutionName(json['institution'].toString())) : null,
+      profileLastUpdated: json['profile_last_updated'] != null ? DataSanitizer.trim(json['profile_last_updated']) : null,
+    );
+  }
+
+  Hcp copyWith({
+    String? name,
+    String? hcpFullName,
+    String? firstName,
+    String? middleName,
+    String? lastName,
+    String? birthDate,
+    String? hcpPhoto,
+    String? hcpType,
+    String? hcpPractice,
+    bool? isActive,
+    bool? isPendingApproval,
+    List<HcpSpecialty>? specialties,
+    List<HcpWorkplace>? workplaces,
+    List<HcpContact>? contacts,
+    String? regionName,
+    String? provinceName,
+    String? cityMunicipality,
+    String? barangayName,
+    String? institution,
+    String? profileLastUpdated,
+  }) {
+    return Hcp(
+      name: name ?? this.name,
+      hcpFullName: hcpFullName ?? this.hcpFullName,
+      firstName: firstName ?? this.firstName,
+      middleName: middleName ?? this.middleName,
+      lastName: lastName ?? this.lastName,
+      birthDate: birthDate ?? this.birthDate,
+      hcpPhoto: hcpPhoto ?? this.hcpPhoto,
+      hcpType: hcpType ?? this.hcpType,
+      hcpPractice: hcpPractice ?? this.hcpPractice,
+      isActive: isActive ?? this.isActive,
+      isPendingApproval: isPendingApproval ?? this.isPendingApproval,
+      specialties: specialties ?? this.specialties,
+      workplaces: workplaces ?? this.workplaces,
+      contacts: contacts ?? this.contacts,
+      regionName: regionName ?? this.regionName,
+      provinceName: provinceName ?? this.provinceName,
+      cityMunicipality: cityMunicipality ?? this.cityMunicipality,
+      barangayName: barangayName ?? this.barangayName,
+      institution: institution ?? this.institution,
+      profileLastUpdated: profileLastUpdated ?? this.profileLastUpdated,
     );
   }
 
@@ -132,7 +210,32 @@ class Hcp {
         ? hcpFullName!.trim()
         : (computedParts.isNotEmpty ? computedParts : '${firstName.trim()} ${lastName.trim()}'.trim());
 
-    return {
+    HcpWorkplace? primaryWp;
+    if (workplaces.isNotEmpty) {
+      primaryWp = workplaces.firstWhere((w) => w.isPrimary, orElse: () => workplaces.first);
+    }
+    final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+      institutionIdOrName: primaryWp?.workplace ?? institution,
+      institutionName: primaryWp?.address ?? primaryWp?.workplace ?? institution,
+      cityIdOrName: primaryWp?.cityMunicipality ?? cityMunicipality,
+      provinceIdOrName: primaryWp?.provinceName ?? provinceName,
+      regionIdOrName: regionName,
+    );
+
+    final finalRegId = (regionName != null && regionName!.trim().isNotEmpty && regionName != '-')
+        ? LocationResolver.resolveRegionId(regionName)
+        : resolvedLoc.regionId;
+    final finalProvId = (provinceName != null && provinceName!.trim().isNotEmpty && provinceName != '-')
+        ? LocationResolver.resolveProvinceId(provinceName)
+        : resolvedLoc.provinceId;
+    final finalCityId = (cityMunicipality != null && cityMunicipality!.trim().isNotEmpty && cityMunicipality != '-')
+        ? LocationResolver.resolveCityId(cityMunicipality)
+        : resolvedLoc.cityId;
+    final finalInstId = (institution != null && institution!.trim().isNotEmpty)
+        ? LocationResolver.resolveInstitutionId(institution)
+        : resolvedLoc.workplaceId;
+
+    return DataSanitizer.sanitizePayload({
       if (name != null) 'name': name,
       'first_name': firstName.trim(),
       if (middleName != null && middleName!.trim().isNotEmpty) 'middle_name': middleName!.trim(),
@@ -151,13 +254,13 @@ class Hcp {
       'hcp_specialty': specialties.map((e) => e.toJson()).toList(),
       'hcp_workplace': workplaces.map((e) => e.toJson()).toList(),
       'hcp_contact_info': contacts.map((e) => e.toJson()).toList(),
-      if (regionName != null) 'region_name': regionName,
-      if (provinceName != null) 'province_name': provinceName,
-      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
+      'region_name': finalRegId.isNotEmpty ? finalRegId : resolvedLoc.regionId,
+      'province_name': finalProvId.isNotEmpty ? finalProvId : resolvedLoc.provinceId,
+      'city_municipality': finalCityId.isNotEmpty ? finalCityId : resolvedLoc.cityId,
       if (barangayName != null) 'barangay_name': barangayName,
-      if (institution != null) 'institution': institution,
+      'institution': finalInstId.isNotEmpty ? finalInstId : resolvedLoc.workplaceId,
       if (profileLastUpdated != null) 'profile_last_updated': profileLastUpdated,
-    };
+    });
   }
 }
 
@@ -179,7 +282,7 @@ class HcpSpecialty {
     final subName = (rawSub != null && rawSub.toString().isNotEmpty && rawSub != '-') ? LocationResolver.resolveSpecialtyName(rawSub.toString()) : null;
     return HcpSpecialty(
       hcpSpecialty: specName.isNotEmpty ? specName : rawSpec.toString(),
-      subSpecialty: subName ?? (rawSub != null ? rawSub.toString() : null),
+      subSpecialty: subName,
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true ||
           json['primary'] == 1 || json['primary'] == true ||
           json['preferred'] == 1 || json['preferred'] == true ||
@@ -190,7 +293,7 @@ class HcpSpecialty {
   Map<String, dynamic> toJson() {
     return {
       'hcp_specialty': hcpSpecialty,
-      if (subSpecialty != null) 'sub_specialty': subSpecialty,
+      if (subSpecialty != null && subSpecialty!.isNotEmpty && subSpecialty != '-') 'sub_specialty': subSpecialty,
       'is_primary': isPrimary ? 1 : 0,
       'primary': isPrimary ? 1 : 0,
       'preferred': isPrimary ? 1 : 0,
@@ -216,14 +319,21 @@ class HcpWorkplace {
 
   factory HcpWorkplace.fromJson(Map<String, dynamic> json) {
     final rawWp = json['workplace_name'] ?? json['workplace'] ?? json['hcp_workplace'] ?? '';
-    final wpName = LocationResolver.resolveInstitutionName(rawWp.toString());
     final rawProv = json['province_name'] ?? json['province'];
     final rawCity = json['city_municipality'] ?? json['city'];
+
+    final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+      institutionIdOrName: rawWp.toString(),
+      institutionName: rawWp.toString(),
+      cityIdOrName: rawCity?.toString(),
+      provinceIdOrName: rawProv?.toString(),
+    );
+
     return HcpWorkplace(
-      workplace: wpName.isNotEmpty ? wpName : rawWp.toString(),
-      provinceName: rawProv != null ? LocationResolver.resolveProvinceName(rawProv.toString()) : null,
-      cityMunicipality: rawCity != null ? LocationResolver.resolveCityName(rawCity.toString()) : null,
-      address: json['address'] ?? json['workplace_name'],
+      workplace: resolvedLoc.workplaceId,
+      provinceName: resolvedLoc.provinceId,
+      cityMunicipality: resolvedLoc.cityId,
+      address: resolvedLoc.workplaceName,
       isPrimary: json['is_primary'] == 1 || json['is_primary'] == true ||
           json['primary'] == 1 || json['primary'] == true ||
           json['preferred'] == 1 || json['preferred'] == true ||
@@ -232,11 +342,21 @@ class HcpWorkplace {
   }
 
   Map<String, dynamic> toJson() {
+    final resolvedLoc = LocationResolver.resolveCompleteWorkplaceLocation(
+      institutionIdOrName: workplace,
+      institutionName: address ?? workplace,
+      cityIdOrName: cityMunicipality,
+      provinceIdOrName: provinceName,
+    );
+
     return {
-      'hcp_workplace': workplace,
-      if (provinceName != null) 'province_name': provinceName,
-      if (cityMunicipality != null) 'city_municipality': cityMunicipality,
-      if (address != null) 'address': address,
+      'hcp_workplace': resolvedLoc.workplaceId,
+      'workplace': resolvedLoc.workplaceId,
+      'province_name': resolvedLoc.provinceId,
+      'province': resolvedLoc.provinceId,
+      'city_municipality': resolvedLoc.cityId,
+      'city': resolvedLoc.cityId,
+      'address': resolvedLoc.workplaceName,
       'is_primary': isPrimary ? 1 : 0,
       'primary': isPrimary ? 1 : 0,
       'preferred': isPrimary ? 1 : 0,

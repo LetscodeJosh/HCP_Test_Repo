@@ -10,6 +10,8 @@ import 'components/app_drawer.dart';
 import 'doctor_masterlist_screen.dart';
 import 'doctor_account_screen.dart';
 import 'hcp_wizard_screen.dart';
+import 'sfe_institution_dashboard_screen.dart';
+import 'institution_approvals_screen.dart';
 
 class HcpDashboardScreen extends StatefulWidget {
   const HcpDashboardScreen({Key? key}) : super(key: key);
@@ -116,10 +118,14 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
   }
 
   Future<void> _loadDashboardData() async {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    if (apiService.isSfe) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     if (_doctors.isEmpty) {
       setState(() => _isLoading = true);
     }
-    final apiService = Provider.of<ApiService>(context, listen: false);
 
     try {
       final results = await Future.wait([
@@ -153,7 +159,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
       if (mounted) {
         setState(() {
           _doctors = doctors;
-          _institutions = institutions;
+          _institutions = institutions.where((i) => i.isApprovedForProfiling).toList();
           _specializations = specializations.where((s) => !s.isGroup).toList();
           _submissions = submissions;
           _hcpAccounts = hcpAccounts;
@@ -174,77 +180,117 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
 
     // 1. Strict Program-Scoped Submissions
     List<HcpProfileSubmission> progSubmissions = List.from(_submissions);
-    if (!apiService.isAdmin) {
-      final userProg = apiService.selectedProgram.trim();
-      if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
+    final userProg = apiService.selectedProgram.trim();
+    if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
+      progSubmissions = progSubmissions.where((s) {
+        return LocationResolver.isSameProgram(s.accountOrProgram, userProg);
+      }).toList();
+    }
+
+    // District / Territory Isolation for DSM
+    if (apiService.isManager && !apiService.isAdmin) {
+      final managedTerrs = apiService.getManagedTerritoryCodes();
+      if (managedTerrs.isNotEmpty) {
         progSubmissions = progSubmissions.where((s) {
-          return LocationResolver.isSameProgram(s.accountOrProgram, userProg);
+          final terr = (s.territory ?? '').trim();
+          return terr.isNotEmpty && managedTerrs.contains(terr);
         }).toList();
       }
     }
 
     // 2. Strict Program-Scoped Doctors (via HCP Account and approved program submissions)
     List<Hcp> programDoctors = List.from(_doctors);
-    if (!apiService.isAdmin) {
-      final userProg = apiService.selectedProgram.trim();
-      if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
-        final Set<String> progDocIds = {};
-        final Set<String> progDocNames = {};
+    if (userProg.isNotEmpty && userProg.toLowerCase() != 'all') {
+      final Set<String> progDocIds = {};
+      final Set<String> progDocNames = {};
 
-        for (final acc in _hcpAccounts) {
-          if (LocationResolver.isSameProgram(acc.accountOrProgram, userProg)) {
-            if (acc.hcp != null && acc.hcp!.isNotEmpty) {
-              progDocIds.add(acc.hcp!.toLowerCase().trim());
+      for (final acc in _hcpAccounts) {
+        if (LocationResolver.isSameProgram(acc.accountOrProgram, userProg)) {
+          if (apiService.isManager && !apiService.isAdmin) {
+            final managedTerrs = apiService.getManagedTerritoryCodes();
+            final accTerr = (acc.territory ?? '').trim();
+            if (managedTerrs.isNotEmpty && accTerr.isNotEmpty && !managedTerrs.contains(accTerr)) {
+              continue;
             }
-            if (acc.name != null && acc.name!.isNotEmpty) {
-              progDocIds.add(acc.name!.toLowerCase().trim());
-            }
-            if (acc.hcpName != null && acc.hcpName!.isNotEmpty) {
-              progDocNames.add(acc.hcpName!.toLowerCase().trim());
-            }
+          }
+          if (acc.hcp != null && acc.hcp!.isNotEmpty) {
+            progDocIds.add(acc.hcp!.toLowerCase().trim());
+          }
+          if (acc.name != null && acc.name!.isNotEmpty) {
+            progDocIds.add(acc.name!.toLowerCase().trim());
+          }
+          if (acc.hcpName != null && acc.hcpName!.isNotEmpty) {
+            progDocNames.add(acc.hcpName!.toLowerCase().trim());
           }
         }
-
-        for (final sub in progSubmissions) {
-          final state = (sub.workflowState ?? sub.status ?? '').toLowerCase();
-          final isCommitted = state == 'approved' || state == 'processed' || sub.docstatus == 1 || sub.applicationStatus == 'Applied';
-          if (isCommitted) {
-            if (sub.hcpName.isNotEmpty) {
-              progDocIds.add(sub.hcpName.toLowerCase().trim());
-              progDocNames.add(sub.hcpName.toLowerCase().trim());
-            }
-            final sFull = '${sub.firstName ?? ''} ${sub.lastName ?? ''}'.trim().toLowerCase();
-            if (sFull.isNotEmpty) {
-              progDocNames.add(sFull);
-            }
-          }
-        }
-
-        programDoctors = _doctors.where((doc) {
-          final dId = (doc.name ?? '').toLowerCase().trim();
-          final dFull = doc.fullName.toLowerCase().trim();
-          if (dId.isNotEmpty && progDocIds.contains(dId)) return true;
-          if (dFull.isNotEmpty && progDocNames.contains(dFull)) return true;
-          if (dFull.isNotEmpty) {
-            final docTokens = dFull.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
-            for (final pName in progDocNames) {
-              final pTokens = pName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
-              final matches = docTokens.where((t) => pTokens.contains(t)).length;
-              if (matches >= 2 || (docTokens.length == 1 && pTokens.contains(docTokens.first))) {
-                return true;
-              }
-            }
-          }
-          return false;
-        }).toList();
       }
+
+      for (final sub in progSubmissions) {
+        final state = (sub.workflowState ?? sub.status ?? '').toLowerCase();
+        final isCommitted = state == 'approved' || state == 'processed' || sub.docstatus == 1 || sub.applicationStatus == 'Applied';
+        if (isCommitted) {
+          if (sub.hcpName.isNotEmpty) {
+            progDocIds.add(sub.hcpName.toLowerCase().trim());
+            progDocNames.add(sub.hcpName.toLowerCase().trim());
+          }
+          final sFull = '${sub.firstName ?? ''} ${sub.lastName ?? ''}'.trim().toLowerCase();
+          if (sFull.isNotEmpty) {
+            progDocNames.add(sFull);
+          }
+        }
+      }
+
+      programDoctors = _doctors.where((doc) {
+        final dId = (doc.name ?? '').toLowerCase().trim();
+        final dFull = doc.fullName.toLowerCase().trim();
+        if (dId.isNotEmpty && progDocIds.contains(dId)) return true;
+        if (dFull.isNotEmpty && progDocNames.contains(dFull)) return true;
+        if (dFull.isNotEmpty) {
+          final docTokens = dFull.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+          for (final pName in progDocNames) {
+            final pTokens = pName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+            final matches = docTokens.where((t) => pTokens.contains(t)).length;
+            if (matches >= 2 || (docTokens.length == 1 && pTokens.contains(docTokens.first))) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }).toList();
     }
 
     final effectiveSubmissions = progSubmissions;
 
-    final approvedSubmissions = effectiveSubmissions.where((s) => s.docstatus == 1 || s.applicationStatus == 'Applied').length;
-    final syncRatePercent = effectiveSubmissions.isNotEmpty
-        ? ((approvedSubmissions / effectiveSubmissions.length) * 100).toStringAsFixed(0)
+    final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
+    final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
+    final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+
+    final mySubmissions = effectiveSubmissions.where((item) {
+      final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
+      final sSales = (item.salesPerson ?? '').toLowerCase().trim();
+
+      if (sEmail.isNotEmpty && email.isNotEmpty) {
+        if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
+        final emailPrefix = email.contains('@') ? email.split('@').first : email;
+        final sEmailPrefix = sEmail.contains('@') ? sEmail.split('@').first : sEmail;
+        if (emailPrefix.isNotEmpty && sEmailPrefix.isNotEmpty && (emailPrefix == sEmailPrefix || email.contains(sEmailPrefix) || sEmail.contains(emailPrefix))) return true;
+      }
+
+      if (sSales.isNotEmpty && fullName.isNotEmpty) {
+        if (sSales == fullName || sSales.contains(fullName) || fullName.contains(sSales)) return true;
+        final salesTokens = sSales.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
+        final matchingTokens = salesTokens.where((t) => userTokens.contains(t)).length;
+        if (matchingTokens >= 2 || (salesTokens.length == 1 && userTokens.contains(salesTokens.first))) {
+          return true;
+        }
+      }
+      return false;
+    }).toList();
+
+    final roleSubmissions = apiService.isMedRep ? mySubmissions : effectiveSubmissions;
+    final approvedSubmissions = roleSubmissions.where((s) => s.docstatus == 1 || s.applicationStatus == 'Applied').length;
+    final syncRatePercent = roleSubmissions.isNotEmpty
+        ? ((approvedSubmissions / roleSubmissions.length) * 100).toStringAsFixed(0)
         : '100';
 
     return Scaffold(
@@ -267,29 +313,35 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
             margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: apiService.isAdmin
-                  ? const Color(0xFFEF4444).withOpacity(0.25)
-                  : (apiService.isManager
-                      ? const Color(0xFFF59E0B).withOpacity(0.25)
-                      : const Color(0xFF0066FF).withOpacity(0.25)),
+              color: apiService.isSfe
+                  ? const Color(0xFFA855F7).withOpacity(0.25)
+                  : (apiService.isAdmin
+                      ? const Color(0xFFEF4444).withOpacity(0.25)
+                      : (apiService.isManager
+                          ? const Color(0xFFF59E0B).withOpacity(0.25)
+                          : const Color(0xFF0066FF).withOpacity(0.25))),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(
-                color: apiService.isAdmin
-                    ? const Color(0xFFEF4444)
-                    : (apiService.isManager
-                        ? const Color(0xFFF59E0B)
-                        : const Color(0xFF38BDF8)),
+                color: apiService.isSfe
+                    ? const Color(0xFFA855F7)
+                    : (apiService.isAdmin
+                        ? const Color(0xFFEF4444)
+                        : (apiService.isManager
+                            ? const Color(0xFFF59E0B)
+                            : const Color(0xFF38BDF8))),
                 width: 0.8,
               ),
             ),
             child: Text(
               apiService.userDesignationTitle,
               style: TextStyle(
-                color: apiService.isAdmin
-                    ? const Color(0xFFFCA5A5)
-                    : (apiService.isManager
-                        ? const Color(0xFFFCD34D)
-                        : const Color(0xFF93C5FD)),
+                color: apiService.isSfe
+                    ? const Color(0xFFD8B4FE)
+                    : (apiService.isAdmin
+                        ? const Color(0xFFFCA5A5)
+                        : (apiService.isManager
+                            ? const Color(0xFFFCD34D)
+                            : const Color(0xFF93C5FD))),
                 fontSize: 10.5,
                 fontWeight: FontWeight.bold,
               ),
@@ -318,7 +370,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // Top Metric Summary Cards Row
-                    _buildMetricsRow(syncRatePercent, apiService, effectiveSubmissions, programDoctors),
+                    _buildMetricsRow(syncRatePercent, apiService, effectiveSubmissions, mySubmissions, programDoctors),
 
                     const SizedBox(height: 20),
 
@@ -345,7 +397,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                                 ),
                               ),
                               const SizedBox(width: 16),
-                              Expanded(flex: 2, child: _buildRecentConsentLogsCard(apiService, effectiveSubmissions)),
+                              Expanded(flex: 2, child: _buildRecentConsentLogsCard(apiService, roleSubmissions)),
                             ],
                           );
                         } else {
@@ -355,7 +407,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                               const SizedBox(height: 16),
                               _buildDoctorsBySubSpecialtyCard(programDoctors),
                               const SizedBox(height: 16),
-                              _buildRecentConsentLogsCard(apiService, effectiveSubmissions),
+                              _buildRecentConsentLogsCard(apiService, roleSubmissions),
                             ],
                           );
                         }
@@ -377,41 +429,28 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
 
 
 
-  Widget _buildMetricsRow(String syncRatePercent, ApiService apiService, List<HcpProfileSubmission> effectiveSubmissions, List<Hcp> programDoctors) {
+  Widget _buildMetricsRow(
+    String syncRatePercent,
+    ApiService apiService,
+    List<HcpProfileSubmission> effectiveSubmissions,
+    List<HcpProfileSubmission> mySubmissions,
+    List<Hcp> programDoctors,
+  ) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final cardWidth = constraints.maxWidth > 700
             ? (constraints.maxWidth - 36) / 4
             : (constraints.maxWidth - 12) / 2;
 
-        final email = (apiService.loggedInEmail ?? '').toLowerCase().trim();
-        final fullName = (apiService.loggedInFullName ?? '').toLowerCase().trim();
-        final userTokens = fullName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
-
-        final mySubmissions = effectiveSubmissions.where((item) {
-          final sEmail = (item.medrepEmail ?? item.userId ?? item.owner ?? '').toLowerCase().trim();
-          final sSales = (item.salesPerson ?? '').toLowerCase().trim();
-          if (sEmail.isNotEmpty && email.isNotEmpty) {
-            if (sEmail == email || email.contains(sEmail) || sEmail.contains(email)) return true;
-          }
-          if (sSales.isNotEmpty && fullName.isNotEmpty) {
-            if (sSales == fullName || sSales.contains(fullName) || fullName.contains(sSales)) return true;
-            final salesTokens = sSales.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
-            final matchingTokens = salesTokens.where((t) => userTokens.contains(t)).length;
-            if (matchingTokens >= 2 || (salesTokens.length == 1 && userTokens.contains(salesTokens.first))) {
-              return true;
-            }
-          }
-          return false;
-        }).toList();
-
         final submissionTitle = apiService.isMedRep ? 'MY SUBMISSIONS' : 'ACTIVE SUBMISSIONS';
         final submissionValue = apiService.isMedRep ? '${mySubmissions.length}' : '${effectiveSubmissions.length}';
         final submissionSubtitle = apiService.isMedRep
-            ? '${mySubmissions.length} of ${effectiveSubmissions.length} Program Total'
-            : (apiService.isAdmin ? 'SFE Field Force Synced' : '${apiService.selectedProgram} Synced');
+            ? '${mySubmissions.length} ${apiService.selectedProgram} Submissions'
+            : ((apiService.isAdmin || apiService.isSfe) && (apiService.selectedProgram.isEmpty || apiService.selectedProgram.toLowerCase() == 'all')
+                ? 'SFE Field Force Synced'
+                : '${effectiveSubmissions.length} ${apiService.selectedProgram} Submissions');
 
-        final programInstCount = apiService.isAdmin
+        final programInstCount = ((apiService.isAdmin || apiService.isSfe) && (apiService.selectedProgram.isEmpty || apiService.selectedProgram.toLowerCase() == 'all'))
             ? _institutions.length
             : () {
                 final instNames = <String>{};
@@ -428,11 +467,11 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 return instNames.isNotEmpty ? instNames.length : _institutions.length;
               }();
 
-        final directorySubtitle = apiService.isAdmin
+        final directorySubtitle = ((apiService.isAdmin || apiService.isSfe) && (apiService.selectedProgram.isEmpty || apiService.selectedProgram.toLowerCase() == 'all'))
             ? 'Universal Masterlist (All)'
             : (apiService.isMedRep ? '${apiService.selectedProgram} Directory (View)' : '${apiService.selectedProgram} Directory');
 
-        final instSubtitle = apiService.isAdmin
+        final instSubtitle = ((apiService.isAdmin || apiService.isSfe) && (apiService.selectedProgram.isEmpty || apiService.selectedProgram.toLowerCase() == 'all'))
             ? 'Hospitals, Clinics, Centers'
             : '${apiService.selectedProgram} Affiliations';
 
@@ -611,10 +650,10 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                     );
                   },
                 ),
-                if (apiService.isAdmin)
+                if (apiService.isAdmin || apiService.isSfe)
                   _buildActionButton(
                     icon: Icons.groups_rounded,
-                    label: 'Doctor Listing',
+                    label: 'HCP',
                     subtitle: 'Manage & View HCPs',
                     color: const Color(0xFF0066FF),
                     onTap: () {
@@ -625,12 +664,27 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                   ),
                 _buildActionButton(
                   icon: Icons.account_box_rounded,
-                  label: 'Doctor Account',
-                  subtitle: apiService.isMedRep ? 'My Doctor Accounts' : 'Manage & View Accounts',
+                  label: 'HCP Account',
+                  subtitle: apiService.isMedRep ? 'My HCP Accounts' : 'Manage & View Accounts',
                   color: const Color(0xFF8B5CF6),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
+                    );
+                  },
+                ),
+                _buildActionButton(
+                  icon: Icons.domain_verification_rounded,
+                  label: 'Institution Submission',
+                  subtitle: (apiService.isSfe || apiService.isAdmin) ? 'SFE Approval Hub' : 'Track & Resubmit',
+                  color: const Color(0xFFF59E0B),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => (apiService.isSfe || apiService.isAdmin)
+                            ? const SfeInstitutionDashboardScreen()
+                            : const InstitutionApprovalsScreen(),
+                      ),
                     );
                   },
                 ),
