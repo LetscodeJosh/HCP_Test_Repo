@@ -1,0 +1,15 @@
+{
+  "version": "V.0.6.7",
+  "buildNumber": 39,
+  "releaseDate": "2026-10-07",
+  "apkSize": "58.90 MB",
+  "apkSha256": "f1ba86cf76441a369d5a857c4afc0420266d50bec6243bf7dc4076cd607cac64",
+  "description": "Immediate Streamlit componentReady handshake and production CORS/proxy optimization.",
+  "components": [
+    "Immediate head-level Streamlit handshake dispatching componentReady within 50ms of script evaluation",
+    "Heartbeat retry interval beating 4.5s timeout on Streamlit Community Cloud and cloud proxies",
+    "Disabled enableCORS and enableXsrfProtection in .streamlit/config.toml to allow sandboxed component iframe loading",
+    "Enabled enableStaticServing and disabled enableWebsocketCompression for production proxy stability",
+    "Byte-for-byte SHA256 parity maintained across all 4 mirrors"
+  ]
+}

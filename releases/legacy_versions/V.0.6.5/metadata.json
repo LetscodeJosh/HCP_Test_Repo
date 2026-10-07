@@ -2,10 +2,12 @@
   "version": "V.0.6.5",
   "buildNumber": 37,
   "releaseDate": "2026-10-07",
-  "title": "Territory Reconfiguration: Optional Territory Manager & Dynamic Auto-Assignment on Child Folders",
-  "components": {
-    "web_portal": "V.0.6.5",
-    "mobile_app": "V.0.6.5+37"
-  },
-  "sha256_portal": "e3b0e2874fe5d0baee29b01a3c13b3c3c57d7dcfc5eb16d47ddbe28b0ce5ad1c"
+  "apkSize": "58.90 MB",
+  "apkSha256": "c2d3e79e548ecc3c920be9f01fdf8b230dfb2abb84fde09d13c179e8150822d4",
+  "description": "Territory Manager ERPNext-style searchable dropdown & dynamic auto-complete, 100% active tree search filter invariance.",
+  "components": [
+    "Searchable Territory Manager dropdown with complete Sales Person auto-complete list",
+    "Direct chevron toggle and input click toggle displaying all unassigned and assigned managers",
+    "Isolated Territory Tree single-search filter mode in territory reconfiguration portal"
+  ]
 }

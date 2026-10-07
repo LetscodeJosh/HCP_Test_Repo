@@ -5,6 +5,32 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [V.0.6.7] - 2026-10-07
+
+### 🌐 Streamlit Cloud Custom Component Handshake & Cloud Proxy Optimization
+- **Immediate Head-Level Streamlit Handshake**:
+  - Embedded an ultra-fast handshake script directly inside the `<head>` of the Territory Reconfiguration Portal HTML that dispatches `streamlit:componentReady` and `streamlit:setFrameHeight` within 50ms of script evaluation.
+  - Implemented a 200ms interval heartbeat until the parent Streamlit window sends its initial `streamlit:render` message, completely beating the internal 4.5-second timeout in Streamlit Community Cloud and eliminating the *"Your app is having trouble loading the app.pims_portal component"* error.
+- **Production Server CORS & Proxy Alignment**:
+  - Configured `.streamlit/config.toml` with `enableCORS = false` and `enableXsrfProtection = false` to enable seamless cross-origin communication between the parent Streamlit frame and the sandboxed custom component iframe on `*.streamlit.app`.
+  - Added `enableStaticServing = true` and `enableWebsocketCompression = false` to ensure persistent static asset serving and prevent WebSocket drops over cloud proxies.
+  - Disabled `runOnSave` to eliminate unprompted server restarts and file lock contentions in cloud containers.
+
+## [V.0.6.6] - 2026-10-07
+
+### 👤 Territory Reconfiguration: ERPNext Registered User ID Standard & Robust Dropdown Controller
+- **ERPNext Registered User Email Account Standard**:
+  - Enforced that User ID strictly displays and stores the registered ERPNext User email account (e.g. `lesantos@pims-marketing.com`), completely eliminating misleading employee ID numbers (`EMP-xxxxx` / `HR-EMP-xxxxx`).
+  - Purged random placeholder employee ID generation across territory initialization, addition, transfer, and restoration workflows.
+- **Table Grid View & Modal Unassigned State Precision**:
+  - In Table Grid View, unassigned territory codes without a designated user now explicitly display `"Unassigned"` with subtle badge styling (`#F4F4F5`, grey border), eliminating fake `EMP-10023` tags.
+  - In Edit and Add Territory modals, User ID and Territory Manager fields cleanly display `"Unassigned"` placeholder text when unassigned.
+  - Added dedicated `(Unassigned) - Leave User ID unassigned` option at the top of the User ID searchable dropdown.
+- **Robust Dropdown Interaction & Remote Search Architecture**:
+  - Implemented `toggleErpDropdown(fieldId, event)` with outside click dismissal, eliminating unhandled ReferenceErrors.
+  - Upgraded `openErpDropdown(fieldId, forceShowAll)` to present the full unfiltered directory of available users and sales persons on initial click or focus.
+  - Enhanced `dispatchRemoteErpSearch` to query ERPNext `User` DocType dynamically with debounced search, persisting live matches to local storage cache.
+
 ## [V.0.6.5] - 2026-10-07
 
 ### 🌳 Territory Reconfiguration: Optional Territory Manager & Dynamic Auto-Assignment

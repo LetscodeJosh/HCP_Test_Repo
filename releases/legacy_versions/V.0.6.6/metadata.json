@@ -1,0 +1,14 @@
+{
+  "version": "V.0.6.6",
+  "buildNumber": 38,
+  "releaseDate": "2026-10-07",
+  "apkSize": "58.90 MB",
+  "apkSha256": "0cbcea9183083f54fa3dfca948f41978b790be63994226b8131420732df2d7ed",
+  "description": "ERPNext User ID registered email standard, Unassigned badges in grid view, and robust dropdown toggle controller.",
+  "components": [
+    "Strict ERPNext User ID email account standard replacing misleading employee ID numbers",
+    "Explicit 'Unassigned' badge and modal placeholder for unallocated territories",
+    "Robust toggleErpDropdown and openErpDropdown controller with full unfiltered directory viewing",
+    "Dynamic ERPNext User DocType debounced remote search and local cache persistence"
+  ]
+}
