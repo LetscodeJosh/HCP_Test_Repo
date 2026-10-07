@@ -42,7 +42,7 @@ jobs:
 
       - name: Run Python SAST Scan (Bandit)
         run: |
-          bandit -r installers/ scratch/ -ll -ii || true
+          bandit -r installers/ .github/scripts/ -ll -ii || true
 
       - name: Install Flutter Dependencies
         run: flutter pub get
@@ -90,7 +90,7 @@ jobs:
           python-version: '3.11'
 
       - name: Execute Autonomous Tech Debt Audit
-        run: python scratch/audit_tech_debt.py
+        run: python .github/scripts/audit_tech_debt.py
 
   # =========================================================================
   # JOB 4: Build Production Android Release APK

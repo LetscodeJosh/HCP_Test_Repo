@@ -118,8 +118,6 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
       _selectedCapability != null &&
       _selectedCapability!.isNotEmpty;
 
-  bool get _hasSimilarSuggestions => _detectedMatches.isNotEmpty;
-
   bool get _isWorkplaceNameValid => _workplaceCtrl.text.trim().length >= 3;
 
   /// Location fields are unlocked as soon as classification is selected and
