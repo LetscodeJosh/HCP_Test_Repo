@@ -5,6 +5,18 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [V.0.6.5] - 2026-10-07
+
+### 🌳 Territory Reconfiguration: Optional Territory Manager & Dynamic Auto-Assignment
+- **Non-Mandatory Territory Manager on Child Folders & Nodes**:
+  - Removed mandatory requirement (`*`) for Territory Manager in the Add Child modal (`#treeAddModalOverlay`) and Edit modal (`#treeEditModalOverlay`), allowing creation of unassigned group folders and territory nodes.
+  - Set default input placeholder to `"Unassigned"`.
+  - Added 1-Click `(Unassigned)` option to the top of the Territory Manager searchable dropdown.
+- **Dynamic Auto-Detection on Territory Code Input**:
+  - Integrated reactive `onTreeAddNameInput(val)` listener on the Territory Name field.
+  - Automatically searches existing territory hierarchy (`territoryTreeData`), program territory masterlist (`programTerritories`), and sales representatives (`availableSalesPersons`).
+  - Instantly populates the Territory Manager and associated User ID if an assigned manager is detected for the entered territory code, and gracefully reverts to `"Unassigned"` placeholder if no manager is assigned.
+
 ## [V.0.6.4] - 2026-10-07
 
 ### 🔄 Territory Reconfiguration: Resigned Representative Doctor Handover & Search-Filtered Workbench

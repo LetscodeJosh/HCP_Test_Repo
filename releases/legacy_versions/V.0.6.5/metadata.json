@@ -1,0 +1,11 @@
+{
+  "version": "V.0.6.5",
+  "buildNumber": 37,
+  "releaseDate": "2026-10-07",
+  "title": "Territory Reconfiguration: Optional Territory Manager & Dynamic Auto-Assignment on Child Folders",
+  "components": {
+    "web_portal": "V.0.6.5",
+    "mobile_app": "V.0.6.5+37"
+  },
+  "sha256_portal": "e3b0e2874fe5d0baee29b01a3c13b3c3c57d7dcfc5eb16d47ddbe28b0ce5ad1c"
+}
