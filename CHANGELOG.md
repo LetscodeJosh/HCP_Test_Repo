@@ -5,6 +5,21 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [V.0.6.4] - 2026-10-07
+
+### 🔄 Territory Reconfiguration: Resigned Representative Doctor Handover & Search-Filtered Workbench
+- **Resigned Representative Doctor Handover Directive**:
+  - Implemented comprehensive "Tag Resigned & Handover" workflow across both Table Grid View actions and Territory Tree View editor modal (`#treeEditModalOverlay`).
+  - Added dedicated Handover Prompt Modal (`#resignedHandoverPromptModalOverlay`) confirming previous representative identity, covered doctor headcount, and newly assigned representative.
+  - Enabled 1-Click "Quick Resign & Auto-Merge Doctors" which automatically reassigns the territory code, merges 100% of previous doctors to the new MedRep, logs audit trails, and updates ERPNext via live PUT dispatch.
+  - Provided "Custom Transfer Workbench" pathway allowing fine-grained selection and doctor-by-doctor reassignment.
+- **2-Pane Doctor Transfer Workbench Search & Filtering**:
+  - Added real-time search filter inputs to both Target Territory and Source Territory doctor lists with instant debounced filtering.
+  - Integrated directive banners showing previous representative name, territory code, and total doctors to be transferred.
+  - Added "Merge All Doctors (X)" batch transfer button and "Clear All" reassignment actions.
+- **Bi-Directional Streamlit & Local Storage Persistence**:
+  - Enhanced `saveDoctorTransfer()` and `executeQuickResignAndMerge()` to serialize updated territory and account collections to `localStorage` and emit reactive `streamlit:setComponentValue` messages.
+
 ## [V.0.6.3] - 2026-10-06
 
 ### 🏥 Institution Field & Workplace Search: Lag Elimination & Smart Non-Blocking Intelligence

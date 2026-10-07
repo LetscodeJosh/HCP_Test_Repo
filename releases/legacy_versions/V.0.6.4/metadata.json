@@ -1,0 +1,11 @@
+{
+  "version": "V.0.6.4",
+  "buildNumber": 36,
+  "releaseDate": "2026-10-07",
+  "title": "Territory Reconfiguration: Resigned Representative Doctor Handover, Directive Modal, and Search-Filtered Workbench",
+  "components": {
+    "web_portal": "V.0.6.4",
+    "mobile_app": "V.0.6.4+36"
+  },
+  "sha256_portal": "20115e0d722d9da5b906dc4d03710f4ceac892e144f99cd376a9677c9b9d796b"
+}
