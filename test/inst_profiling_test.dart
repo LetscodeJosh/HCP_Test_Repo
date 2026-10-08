@@ -673,6 +673,51 @@ void main() {
     expect(acronyms.contains('ust'), isTrue);
     expect(acronyms.contains('usth'), isTrue);
   });
+
+  test('Test Human-Readable Location Resolution on Resubmission and Locking Lifecycle', () {
+    // 1. Raw PSGC codes resolve to human-readable strings
+    expect(LocationResolver.resolveProvinceName('1380600000'), contains('Metro Manila'));
+    expect(LocationResolver.resolveProvinceName('PRV-1380600000'), contains('Metro Manila'));
+    expect(LocationResolver.resolveProvinceName('0402100000'), equals('Cavite'));
+    expect(LocationResolver.resolveRegionName('1300000000'), contains('NCR'));
+    expect(LocationResolver.resolveCityName('137404000'), contains('Quezon City'));
+
+    // 2. Institution deserialization resolves raw PSGC codes into human-readable properties
+    final rawJson = {
+      'name': 'INST-00055',
+      'institution_name': 'Sample District Hospital',
+      'province_name': '1380600000',
+      'city_municipality': '137404000',
+      'region_name': '1300000000',
+      'workflow_state': 'Rejected',
+      'rejection_reason': 'Verify address details',
+      'resubmission_count': 1,
+    };
+    final inst = Institution.fromJson(rawJson);
+    expect(inst.provinceName, contains('Metro Manila'));
+    expect(inst.cityMunicipality, contains('Quezon City'));
+    expect(inst.regionName, contains('NCR'));
+    expect(inst.isRejected, isTrue);
+    expect(inst.canResubmit, isTrue);
+    expect(inst.requiresSfeSpecialistCall, isFalse);
+
+    // 3. Two-resubmission limit: After 2 attempts, further editing is locked/prohibited (archived)
+    final maxedInst = Institution.fromJson({
+      ...rawJson,
+      'resubmission_count': 2,
+    });
+    expect(maxedInst.canResubmit, isFalse);
+    expect(maxedInst.requiresSfeSpecialistCall, isTrue);
+
+    // 4. While pending, cannot resubmit (locked)
+    final pendingInst = Institution.fromJson({
+      ...rawJson,
+      'workflow_state': 'Pending Approval',
+      'resubmission_count': 0,
+    });
+    expect(pendingInst.canResubmit, isFalse);
+    expect(pendingInst.isPendingApproval, isTrue);
+  });
 }
 
 

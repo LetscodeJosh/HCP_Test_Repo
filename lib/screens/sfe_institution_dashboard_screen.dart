@@ -314,9 +314,16 @@ class _SfeInstitutionDashboardScreenState extends State<SfeInstitutionDashboardS
 
   Future<void> _handleNormalize(Institution inst) async {
     final nameCtrl = TextEditingController(text: inst.institutionName);
-    String? selectedRegion = inst.regionName;
-    String? selectedProvince = inst.provinceName;
-    String? selectedCity = inst.cityMunicipality;
+    final resolvedReg = LocationResolver.resolveRegionName(inst.regionName ?? inst.rawRegionName);
+    final resolvedProv = LocationResolver.resolveProvinceName(inst.provinceName ?? inst.rawProvinceName);
+    final resolvedCity = LocationResolver.resolveCityName(inst.cityMunicipality ?? inst.rawCityMunicipality);
+    String? selectedRegion = resolvedReg.isNotEmpty ? resolvedReg : null;
+    String? selectedProvince = resolvedProv.isNotEmpty ? resolvedProv : null;
+    String? selectedCity = resolvedCity.isNotEmpty ? resolvedCity : null;
+    if (selectedRegion == null && selectedProvince != null) {
+      final auto = LocationResolver.resolveRegionFromProvince(selectedProvince);
+      if (auto.isNotEmpty) selectedRegion = auto;
+    }
     String? selectedOwnership = inst.ownership ?? 'Private';
     String? selectedType = inst.institutionType ?? 'Hospital';
     String? selectedCapability = inst.serviceCapability;

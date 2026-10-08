@@ -161,9 +161,16 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
     }
 
     final workplaceCtrl = TextEditingController(text: inst.institutionName);
-    String? selectedRegion = inst.regionName ?? inst.rawRegionName;
-    String? selectedProvince = inst.rawProvinceName ?? inst.provinceName;
-    String? selectedCity = inst.rawCityMunicipality ?? inst.cityMunicipality;
+    final resolvedReg = LocationResolver.resolveRegionName(inst.regionName ?? inst.rawRegionName);
+    final resolvedProv = LocationResolver.resolveProvinceName(inst.provinceName ?? inst.rawProvinceName);
+    final resolvedCity = LocationResolver.resolveCityName(inst.cityMunicipality ?? inst.rawCityMunicipality);
+    String? selectedRegion = resolvedReg.isNotEmpty ? resolvedReg : null;
+    String? selectedProvince = resolvedProv.isNotEmpty ? resolvedProv : null;
+    String? selectedCity = resolvedCity.isNotEmpty ? resolvedCity : null;
+    if (selectedRegion == null && selectedProvince != null) {
+      final auto = LocationResolver.resolveRegionFromProvince(selectedProvince);
+      if (auto.isNotEmpty) selectedRegion = auto;
+    }
     String? selectedOwnership = inst.ownership ?? 'Private';
     String? selectedType = (inst.institutionType == 'Clinic' || inst.institutionType == 'Hospital')
         ? inst.institutionType
@@ -172,15 +179,16 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
         (selectedType == 'Hospital'
             ? InstitutionClassification.hospitalCapabilities.first
             : InstitutionClassification.clinicCapabilities.first);
-
-    if ((selectedRegion == null || selectedRegion.isEmpty) && selectedProvince != null) {
-      selectedRegion = LocationResolver.resolveRegionFromProvince(selectedProvince);
-    }
     bool isSaving = false;
     String? validationErr;
 
     // Immediately trigger 60s cooldown lock when Edit icon is pressed
     apiService.startEditingCooldown(inst.name, user: currentUser);
+
+    Timer? debounceTimer;
+    List<InstitutionSearchResult> detectedMatches = [];
+    Institution? selectedExistingInstitution;
+    final allDirectory = apiService.cachedInstitutions;
 
     final updated = await showDialog<Institution>(
       context: context,
@@ -376,16 +384,193 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                               TitleCaseTextInputFormatter(),
                             ],
                             style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13.5),
+                            onChanged: (val) {
+                              debounceTimer?.cancel();
+                              debounceTimer = Timer(const Duration(milliseconds: 300), () {
+                                final query = val.trim();
+                                if (query.length >= 2) {
+                                  final matches = LocationResolver.searchDirectoryWithDuplicateDetection(
+                                    query,
+                                    allDirectory,
+                                    limit: 50,
+                                  );
+                                  setDlgState(() {
+                                    detectedMatches = matches;
+                                    if (selectedExistingInstitution != null &&
+                                        selectedExistingInstitution!.institutionName.trim().toLowerCase() != query.toLowerCase()) {
+                                      selectedExistingInstitution = null;
+                                    }
+                                  });
+                                } else {
+                                  setDlgState(() {
+                                    detectedMatches = [];
+                                    selectedExistingInstitution = null;
+                                  });
+                                }
+                              });
+                            },
                             decoration: InputDecoration(
                               hintText: 'Hospital / Clinic / Center Name',
                               hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5),
                               prefixIcon: const Icon(Icons.local_hospital_outlined, color: Color(0xFF0B192C), size: 18),
+                              suffixIcon: workplaceCtrl.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear, size: 16, color: Color(0xFF94A3B8)),
+                                      onPressed: () {
+                                        workplaceCtrl.clear();
+                                        setDlgState(() {
+                                          detectedMatches = [];
+                                          selectedExistingInstitution = null;
+                                        });
+                                      },
+                                    )
+                                  : null,
                               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                               filled: true,
                               fillColor: const Color(0xFFF8FAFC),
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFCBD5E1))),
                             ),
                           ),
+
+                          // SMART DETECTOR SUGGESTIONS BANNER & DROPDOWN LIST
+                          if (detectedMatches.isNotEmpty && selectedExistingInstitution == null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0FDF4),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFF86EFAC)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.psychology_outlined, color: Color(0xFF16A34A), size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Smart Detector: Found ${detectedMatches.length} Matching Facilit${detectedMatches.length > 1 ? 'ies' : 'y'}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 11.5),
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          'Found ${detectedMatches.length} existing facilities matching this name or acronym. Tap a facility below to adopt its standardized details or distinguish the name.',
+                                          style: const TextStyle(color: Color(0xFF15803D), fontSize: 11, height: 1.3),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              constraints: const BoxConstraints(maxHeight: 200),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFCBD5E1)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Scrollbar(
+                                thumbVisibility: true,
+                                child: ListView.separated(
+                                  shrinkWrap: true,
+                                  itemCount: detectedMatches.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                                  itemBuilder: (_, i) {
+                                    final m = detectedMatches[i];
+                                    final itemCity = LocationResolver.resolveCityName(m.institution.cityMunicipality ?? m.institution.rawCityMunicipality);
+                                    final itemProv = LocationResolver.resolveProvinceName(m.institution.provinceName ?? m.institution.rawProvinceName);
+                                    return ListTile(
+                                      dense: true,
+                                      visualDensity: VisualDensity.compact,
+                                      leading: const Icon(Icons.apartment_rounded, color: Color(0xFF0066FF), size: 18),
+                                      title: Text(
+                                        m.institution.institutionName,
+                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12.5, color: Color(0xFF0F172A)),
+                                      ),
+                                      subtitle: Text(
+                                        [
+                                          if (itemCity.isNotEmpty) itemCity,
+                                          if (itemProv.isNotEmpty) itemProv,
+                                        ].join(' • '),
+                                        style: const TextStyle(fontSize: 10.5, color: Color(0xFF64748B)),
+                                      ),
+                                      trailing: m.isExactOrHighConfidenceDuplicate
+                                          ? const Text('DUPLICATE', style: TextStyle(color: Color(0xFFDC2626), fontSize: 9.5, fontWeight: FontWeight.bold))
+                                          : const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Color(0xFF94A3B8)),
+                                      onTap: () {
+                                        setDlgState(() {
+                                          workplaceCtrl.text = m.institution.institutionName;
+                                          selectedExistingInstitution = m.institution;
+                                          selectedRegion = LocationResolver.resolveRegionName(m.institution.regionName ?? m.institution.rawRegionName);
+                                          selectedProvince = LocationResolver.resolveProvinceName(m.institution.provinceName ?? m.institution.rawProvinceName);
+                                          selectedCity = LocationResolver.resolveCityName(m.institution.cityMunicipality ?? m.institution.rawCityMunicipality);
+                                          if (m.institution.ownership != null && m.institution.ownership!.isNotEmpty) {
+                                            selectedOwnership = m.institution.ownership;
+                                          }
+                                          if (m.institution.institutionType != null && m.institution.institutionType!.isNotEmpty) {
+                                            selectedType = m.institution.institutionType;
+                                          }
+                                          if (m.institution.serviceCapability != null && m.institution.serviceCapability!.isNotEmpty) {
+                                            selectedCapability = m.institution.serviceCapability;
+                                          }
+                                          detectedMatches = [];
+                                        });
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                            ),
+                          ],
+
+                          // SELECTED EXISTING FACILITY BANNER
+                          if (selectedExistingInstitution != null) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFF93C5FD)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.check_circle_rounded, color: Color(0xFF2563EB), size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Selected DOH Facility: ${selectedExistingInstitution!.institutionName}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8), fontSize: 11.5),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Using verified location: ${[LocationResolver.resolveCityName(selectedCity), LocationResolver.resolveProvinceName(selectedProvince)].where((s) => s.isNotEmpty).join(", ")}',
+                                          style: const TextStyle(color: Color(0xFF1E40AF), fontSize: 11),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
                           const SizedBox(height: 14),
 
                           const Text('Region *', style: TextStyle(color: Color(0xFF0F172A), fontSize: 12.5, fontWeight: FontWeight.bold)),
@@ -394,7 +579,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                             onTap: () async {
                               final picked = await _showRegionPicker(context, selectedRegion);
                               if (picked != null) {
-                                setDlgState(() => selectedRegion = picked);
+                                setDlgState(() => selectedRegion = LocationResolver.resolveRegionName(picked));
                               }
                             },
                             borderRadius: BorderRadius.circular(8),
@@ -411,7 +596,9 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      (selectedRegion != null && selectedRegion!.isNotEmpty) ? selectedRegion! : 'Select Region...',
+                                      (selectedRegion != null && selectedRegion!.isNotEmpty)
+                                          ? LocationResolver.resolveRegionName(selectedRegion)
+                                          : 'Select Region...',
                                       style: TextStyle(
                                         color: (selectedRegion != null && selectedRegion!.isNotEmpty) ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
                                         fontSize: 13,
@@ -431,11 +618,12 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                             onTap: () async {
                               final picked = await _showProvincePicker(context, selectedProvince, regionFilter: selectedRegion);
                               if (picked != null) {
+                                final cleanProv = LocationResolver.resolveProvinceName(picked);
                                 setDlgState(() {
-                                  selectedProvince = picked;
+                                  selectedProvince = cleanProv;
                                   selectedCity = null;
-                                  final autoReg = LocationResolver.resolveRegionFromProvince(picked);
-                                  if (autoReg.isNotEmpty) selectedRegion = autoReg;
+                                  final autoReg = LocationResolver.resolveRegionFromProvince(cleanProv);
+                                  if (autoReg.isNotEmpty) selectedRegion = LocationResolver.resolveRegionName(autoReg);
                                 });
                               }
                             },
@@ -453,7 +641,9 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      (selectedProvince != null && selectedProvince!.isNotEmpty) ? selectedProvince! : 'Select Province...',
+                                      (selectedProvince != null && selectedProvince!.isNotEmpty)
+                                          ? LocationResolver.resolveProvinceName(selectedProvince)
+                                          : 'Select Province...',
                                       style: TextStyle(
                                         color: (selectedProvince != null && selectedProvince!.isNotEmpty) ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
                                         fontSize: 13,
@@ -473,7 +663,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                             onTap: () async {
                               final picked = await _showCityPicker(context, selectedCity, provinceFilter: selectedProvince);
                               if (picked != null) {
-                                setDlgState(() => selectedCity = picked);
+                                setDlgState(() => selectedCity = LocationResolver.resolveCityName(picked));
                               }
                             },
                             borderRadius: BorderRadius.circular(8),
@@ -490,7 +680,9 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      (selectedCity != null && selectedCity!.isNotEmpty) ? selectedCity! : 'Select City / Municipality...',
+                                      (selectedCity != null && selectedCity!.isNotEmpty)
+                                          ? LocationResolver.resolveCityName(selectedCity)
+                                          : 'Select City / Municipality...',
                                       style: TextStyle(
                                         color: (selectedCity != null && selectedCity!.isNotEmpty) ? const Color(0xFF0F172A) : const Color(0xFF94A3B8),
                                         fontSize: 13,
@@ -525,7 +717,9 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                           const SizedBox(width: 8),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0B192C),
+                              backgroundColor: (detectedMatches.isNotEmpty && selectedExistingInstitution == null)
+                                  ? const Color(0xFF94A3B8)
+                                  : const Color(0xFF0B192C),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                             ),
@@ -547,6 +741,12 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                     }
                                     if (city.isEmpty) {
                                       setDlgState(() => validationErr = 'City is required');
+                                      return;
+                                    }
+
+                                    // Block submission if active suggestions exist in Smart Detector without user selection
+                                    if (detectedMatches.isNotEmpty && selectedExistingInstitution == null) {
+                                      setDlgState(() => validationErr = 'Smart Detector: Active potential duplicates detected above. Please tap an existing facility to select it or distinguish the workplace name before submitting.');
                                       return;
                                     }
 
@@ -578,7 +778,12 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                   },
                             child: isSaving
                                 ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                : const Text('Submit for Approval', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5)),
+                                : Text(
+                                    (detectedMatches.isNotEmpty && selectedExistingInstitution == null)
+                                        ? 'Select from Suggestions Above'
+                                        : (selectedExistingInstitution != null ? 'Use Selected Institution' : 'Submit for Approval'),
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5),
+                                  ),
                           ),
                         ],
                       ),

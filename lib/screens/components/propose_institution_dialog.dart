@@ -613,7 +613,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'AI Smart Detector: Found ${_detectedMatches.length} Matching Facilit${_detectedMatches.length > 1 ? 'ies' : 'y'}',
+                                    'Smart Detector: Found ${_detectedMatches.length} Matching Facilit${_detectedMatches.length > 1 ? 'ies' : 'y'}',
                                     style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 11.5),
                                   ),
                                   const SizedBox(height: 3),

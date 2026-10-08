@@ -2,23 +2,24 @@
 
 **Build Date**: October 8, 2026  
 **Version**: `v.0.6.5`  
-**APK SHA-256**: `49eb28840cabd279a8331f6f2dd26a5706b3229e14beead4dea505fa07c08cd3`  
+**APK SHA-256**: `a74ea8a3d4067056637b565a448408f6d2f3c306e93eb5ec9c1f6b15e4f4d2f0`  
 **File Size**: `58.94 MB`
 
 ---
 
-### 🧠 Intelligent AI Institution Detector & Acronym Recognition
-- **Smart Dynamic Acronym Extraction**:
-  - Implemented `computeInstitutionAcronyms` extracting literal initials, non-connector initials, core facility initials, and parenthetical acronyms.
-  - Automatically recognizes Philippine healthcare acronyms such as `Ust` (University of Santo Tomas Hospital), `SLMC` (St. Luke's Medical Center), `PGH` (Philippine General Hospital), `MMC` (Makati Medical Center / Metropolitan Medical Center), etc.
-- **99%+ Match Accuracy (Elimination of False Positives)**:
-  - Substring matching for queries $\le 4$ characters enforces strict word boundary and prefix checks, eliminating interior substring false positives (e.g., query `Ust` previously matched `Unitech Plastic Industry Corp.`, `Trener Industries`, and `Toprite Plastic Industries` due to the letters `ust` inside `industry`).
-- **Display All Matching Candidate Facilities**:
-  - Raised query limit to 50+ and expanded directory dropdown with smooth `Scrollbar` support (`maxHeight: 240`) to display all candidate facilities.
-- **Location Details Fillability Policy (No Lock Icon)**:
-  - Step 3 Location Details remain disabled and unfillable while suggestions are active or when workplace name is not yet fulfilled.
-  - Strictly no lock icon implemented; clean muted styling is applied.
-- **Submission Guard Against Duplicate Proposals**:
-  - Disabled "Submit for Approval" button while suggestions are active in the dropdown (`_detectedMatches.isNotEmpty && _selectedExistingInstitution == null`). The MedRep must tap to select the existing facility or specify a distinct facility name.
+### 🧠 Smart Detector & Resubmission Governance
+- **Smart Detector Active on Resubmit**:
+  - Live debounced (300ms) duplicate and acronym detection is fully activated during MedRep/DSM resubmission dialogs. Renamed cleanly from "AI Smart Detector" to **"Smart Detector"**.
+  - SFE Specialists remain unconstrained as they reference the canonical DOH-accredited hospital/clinic masterlist.
+- **Human-Readable Location Fields**:
+  - Eliminated raw PSGC codes (e.g. `1380600000`, `PRV-1380600000`) in the resubmission dialog. Region, Province, and City fields strictly resolve to human-readable names via `LocationResolver`.
+- **Immediate Submission Lock**:
+  - Institution proposals lock immediately into read-only mode upon submission. Editable only when rejected by SFE.
+- **Two-Strike Resubmission Ceiling & Strict Zero Deletion**:
+  - MedReps/DSMs have up to 2 attempts (`Attempt 1/2` and `Attempt 2/2`) to correct rejected proposals. If still unverified after 2 attempts, editing is permanently disabled and the facility is archived (strictly zero deletion) with guidance to contact SFE directly.
+- **SFE Canonical Remapping Workflow**:
+  - SFE Specialists rebind doctor profiles directly to approved DOH facilities without recycling MedRep typos. The flawed submission is archived/rejected, and doctor profiling is unblocked immediately.
+- **Multi-Tier Push Notification Architecture**:
+  - High-priority public lockscreen and homescreen heads-up alerts with a 5-tier fail-safe matrix ensuring 100% notification reach even if device notifications are turned off.
 - **Menu Drawer Version Clean Display**:
   - HCP App version is retained at `v.0.6.5` and the `+No.` suffix is removed from the drawer menu navigation.

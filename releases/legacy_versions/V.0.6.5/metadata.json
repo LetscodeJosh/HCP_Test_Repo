@@ -3,14 +3,15 @@
   "build_number": 42,
   "release_date": "October 8, 2026",
   "apk_filename": "HCP_Profiling_v.0.6.5.apk",
-  "apk_size_bytes": 61804222,
-  "sha256": "49eb28840cabd279a8331f6f2dd26a5706b3229e14beead4dea505fa07c08cd3",
+  "apk_size_bytes": 61804230,
+  "sha256": "a74ea8a3d4067056637b565a448408f6d2f3c306e93eb5ec9c1f6b15e4f4d2f0",
   "features": [
-    "Intelligent AI Detector & Acronym Recognition (Ust -> University of Santo Tomas Hospital, SLMC, PGH, MMC)",
-    "Elimination of interior-substring false positives (queries <= 4 chars do not match inside words like 'industry')",
-    "Uncapped directory dropdown displaying all matching candidate facilities with scrollbar support",
-    "Location details locking without lock icons while suggestions are active or workplace unfulfilled",
-    "Block 'Submit for Approval' while active suggestions exist in dropdown to prevent duplicate proposals",
+    "Smart Detector Active on Resubmit (debounced live acronym & duplicate detection on MedRep modification; SFE free from restriction)",
+    "Human-Readable Location Display on Resubmission (automatic PSGC code-to-name resolution for Region, Province, and City)",
+    "Immediate Read-Only Submission Lock (proposals locked while pending review; editable only when rejected)",
+    "Two-Strike Resubmission Ceiling & Permanent Archive (max 2 resubmission attempts before permanent archive with zero deletion)",
+    "SFE Direct Remapping Authority (rebinds doctor profiles directly to canonical DOH-accredited facilities without recycling typos)",
+    "Multi-Tier Notification Architecture (Homescreen & Lockscreen public priority heads-up push with 5-channel fail-safe matrix)",
     "App menu drawer retains version cleanly at v.0.6.5 without build number (+No.) suffix"
   ]
 }
