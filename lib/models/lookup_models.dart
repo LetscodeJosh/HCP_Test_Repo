@@ -167,6 +167,11 @@ class Institution {
     return state == 'rejected';
   }
 
+  bool get isRemapped {
+    final state = (workflowState ?? '').trim().toLowerCase();
+    return state == 'remapped';
+  }
+
   bool get isPendingApproval {
     if (isRejected) return false;
     final state = (workflowState ?? '').trim().toLowerCase();
@@ -2126,6 +2131,7 @@ class LocationResolver {
         orElse: () => Institution(name: '', institutionName: ''),
       );
       if (found.name.isNotEmpty) {
+        if (found.isRemapped) return false;
         return found.isRejected;
       }
     }
@@ -2141,7 +2147,7 @@ class LocationResolver {
         (i) => i.name.toLowerCase() == trimmed || i.institutionName.toLowerCase() == trimmed,
         orElse: () => Institution(name: '', institutionName: ''),
       );
-      if (found.name.isNotEmpty && found.isRejected) {
+      if (found.name.isNotEmpty && found.isRejected && !found.isRemapped) {
         return found.rejectionReason?.trim();
       }
     }
@@ -2205,12 +2211,233 @@ class LocationResolver {
         : 'this institution is not yet approved';
   }
 
+  /// Known Philippine healthcare institution acronyms and common abbreviations
+  static const Map<String, List<String>> _philippineMedicalAcronyms = {
+    'ust': ['university of santo tomas', 'ust hospital', 'usth'],
+    'usth': ['university of santo tomas hospital', 'ust'],
+    'slmc': ['st luke', 'st lukes', 'saint luke', 'saint lukes'],
+    'pgh': ['philippine general hospital', 'up pgh'],
+    'mmc': ['makati medical center', 'metropolitan medical center'],
+    'csmc': ['cardinal santos medical center', 'cardinal santos'],
+    'tmc': ['the medical city', 'medical city'],
+    'ahmc': ['asian hospital and medical center', 'asian hospital'],
+    'nkti': ['national kidney and transplant institute', 'national kidney'],
+    'lcp': ['lung center of the philippines', 'lung center'],
+    'phc': ['philippine heart center'],
+    'eamc': ['east avenue medical center', 'east avenue'],
+    'vmmc': ['veterans memorial medical center', 'veterans memorial'],
+    'mdh': ['manila doctors hospital', 'manila doctors'],
+    'cgh': ['chinese general hospital', 'chinese general'],
+    'cghmc': ['chinese general hospital and medical center'],
+    'feu': ['far eastern university', 'feu nrmf'],
+    'feunrmf': ['far eastern university nicanor reyes', 'feu nrmf'],
+    'uerm': ['university of the east ramon magsaysay', 'uerm memorial'],
+    'uermmmc': ['university of the east ramon magsaysay memorial medical center'],
+    'doh': ['department of health'],
+    'rhu': ['rural health unit'],
+    'bhs': ['barangay health station'],
+    'ncmh': ['national center for mental health'],
+    'poc': ['philippine orthopedic center'],
+    'qmmc': ['quirino memorial medical center'],
+    'armmc': ['amang rodriguez memorial medical center'],
+    'rmc': ['rizal medical center'],
+    'dlsu': ['de la salle university medical center'],
+    'dlsumc': ['de la salle university medical center'],
+    'uphs': ['university of perpetual help'],
+    'uphmc': ['university of perpetual help dalta medical center'],
+    'cmc': ['capitol medical center'],
+    'cdh': ['cebu doctors hospital', 'cebu doctors university hospital'],
+    'cduh': ['cebu doctors university hospital'],
+    'spmc': ['southern philippines medical center'],
+    'bgh': ['baguio general hospital and medical center'],
+    'bghmc': ['baguio general hospital and medical center'],
+    'mcm': ['medical center manila'],
+  };
+
+  /// Computes all dynamic acronym variations for an institution name:
+  /// 1. Literal initials of all tokens (e.g. "uosth" for "University of Santo Tomas Hospital")
+  /// 2. Initials excluding connectors ("of", "and", "the", etc.) -> "usth"
+  /// 3. Core initials excluding connectors AND facility terms ("hospital", "medical", etc.) -> "ust"
+  /// 4. Acronyms enclosed in parentheses -> "ust"
+  /// 5. Standalone uppercase/abbreviation tokens
+  static Set<String> computeInstitutionAcronyms(String rawInstName) {
+    final Set<String> acronyms = {};
+
+    // 1. Parentheses acronyms e.g. "University of Santo Tomas (UST) Hospital"
+    final parenMatches = RegExp(r'\(([^)]+)\)').allMatches(rawInstName);
+    for (var m in parenMatches) {
+      final inside = m.group(1)?.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '').trim() ?? '';
+      if (inside.length >= 2 && inside.length <= 8) {
+        acronyms.add(inside);
+      }
+    }
+
+    final norm = rawInstName
+        .replaceAll("'", "")
+        .replaceAll("’", "")
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s]'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (norm.isEmpty) return acronyms;
+
+    final tokens = norm.split(' ').where((t) => t.isNotEmpty).toList();
+    if (tokens.isEmpty) return acronyms;
+
+    for (var t in tokens) {
+      if (t.length >= 2 && t.length <= 5 && RegExp(r'^[a-z]+$').hasMatch(t)) {
+        acronyms.add(t);
+      }
+    }
+
+    final literal = tokens.map((t) => t[0]).join('');
+    if (literal.length >= 2) acronyms.add(literal);
+
+    const connectors = {
+      'of', 'and', 'the', 'de', 'del', 'la', 'ng', 'sa', 'in', 'at', 'for', 'to', 'by', 'on', 'with', 'a', 'an'
+    };
+
+    final nonConnectorTokens = tokens.where((t) => !connectors.contains(t)).toList();
+    if (nonConnectorTokens.isNotEmpty) {
+      final nonConnInitials = nonConnectorTokens.map((t) => t[0]).join('');
+      if (nonConnInitials.length >= 2) acronyms.add(nonConnInitials);
+    }
+
+    const facilityStopWords = {
+      'hospital', 'medical', 'center', 'centre', 'clinic', 'clinics',
+      'foundation', 'infirmary', 'sanitarium', 'institute', 'inc', 'corp',
+      'corporation', 'co', 'ltd', 'memorial', 'general', 'community',
+      'district', 'city', 'provincial', 'regional', 'phils', 'philippines',
+      'care', 'health', 'diagnostic', 'lying',
+    };
+
+    final coreFacilityTokens = nonConnectorTokens.where((t) => !facilityStopWords.contains(t)).toList();
+    if (coreFacilityTokens.isNotEmpty) {
+      final coreInitials = coreFacilityTokens.map((t) => t[0]).join('');
+      if (coreInitials.length >= 2) acronyms.add(coreInitials);
+    }
+
+    return acronyms;
+  }
+
+  /// Evaluates similarity between search query and institution candidate.
+  /// Returns a record: (score, isHighConfidence). Score >= 65.0 is considered a match.
+  static (double, bool) _scoreInstitutionCandidate({
+    required String cleanQ,
+    required List<String> qTokens,
+    required List<String> coreTokens,
+    required bool isAcronymCandidate,
+    required String rawInstName,
+    required String normInstName,
+    required List<String> instTokens,
+    required Set<String> instAcronyms,
+  }) {
+    final bool isKnownAcronym = _philippineMedicalAcronyms.containsKey(cleanQ) &&
+        _philippineMedicalAcronyms[cleanQ]!.any((target) => normInstName.contains(target));
+
+    final bool isDynamicAcronym = isAcronymCandidate &&
+        (instAcronyms.contains(cleanQ) || (cleanQ.length >= 3 && instAcronyms.any((a) => a.startsWith(cleanQ))));
+
+    final bool hasWordBoundary = normInstName.startsWith(cleanQ) ||
+        normInstName.contains(' $cleanQ') ||
+        instTokens.any((t) => t == cleanQ || t.startsWith(cleanQ));
+
+    final bool hasDirectPhrase = cleanQ.length >= 5 && normInstName.contains(cleanQ);
+
+    final bool hasCoreMatch = coreTokens.isNotEmpty &&
+        coreTokens.any((ct) => instTokens.any((it) =>
+            it == ct ||
+            (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))) ||
+            (_fuzzySynonyms[ct]?.contains(it) ?? false)));
+
+    // Fast reject: eliminates unrelated entries (including short substring collisions like "industry" on "ust")
+    if (!isKnownAcronym && !isDynamicAcronym && !hasWordBoundary && !hasDirectPhrase && !hasCoreMatch) {
+      return (0.0, false);
+    }
+
+    double score = 0.0;
+    bool isHighConfidence = false;
+
+    // 1. Exact match
+    if (normInstName == cleanQ) {
+      score = 100.0;
+      isHighConfidence = true;
+    }
+    // 2. Known medical acronym (e.g. "ust" -> "University of Santo Tomas Hospital", "slmc" -> "St Luke's")
+    else if (isKnownAcronym) {
+      score = 96.0;
+      isHighConfidence = true;
+    }
+    // 3. Dynamic exact acronym match (e.g. "ust" from "University of Santo Tomas Hospital")
+    else if (isAcronymCandidate && instAcronyms.contains(cleanQ)) {
+      score = 94.0;
+      isHighConfidence = true;
+    }
+    // 4. Starts with query (prefix phrase match)
+    else if (normInstName.startsWith(cleanQ)) {
+      score = 92.0;
+      if (cleanQ.length >= 4) isHighConfidence = true;
+    }
+    // 5. Whole word phrase match
+    else if (normInstName.contains(' $cleanQ ') || normInstName.endsWith(' $cleanQ')) {
+      score = 88.0;
+      if (cleanQ.length >= 5) isHighConfidence = true;
+    }
+    // 6. Word prefix match (e.g. "metrop" matches "metropolitan")
+    else if (instTokens.any((t) => t.startsWith(cleanQ))) {
+      score = 85.0;
+      if (cleanQ.length >= 6) isHighConfidence = true;
+    }
+    // 7. Dynamic acronym prefix match
+    else if (isAcronymCandidate && instAcronyms.any((a) => a.startsWith(cleanQ))) {
+      score = 82.0;
+    }
+    // 8. Substring match for longer queries only (>= 5 chars)
+    else if (cleanQ.length >= 5 && normInstName.contains(cleanQ)) {
+      score = 80.0;
+      if (cleanQ.length >= 8) isHighConfidence = true;
+    }
+
+    // 9. Distinctive core token overlap
+    if (score < 80.0 && coreTokens.isNotEmpty) {
+      int matchedCore = 0;
+      for (var ct in coreTokens) {
+        if (instTokens.any((it) =>
+            it == ct ||
+            (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))) ||
+            (ct.length >= 4 && isSoundAlikeMatch(ct, it)) ||
+            (_fuzzySynonyms[ct]?.contains(it) ?? false))) {
+          matchedCore++;
+        }
+      }
+
+      if (coreTokens.length == 1) {
+        if (matchedCore == 1 && coreTokens.first.length >= 4) {
+          score = 75.0;
+        }
+      } else if (coreTokens.length >= 2) {
+        final ratio = matchedCore / coreTokens.length;
+        if (ratio >= 0.5) {
+          final tokenScore = 70.0 + (ratio * 25.0);
+          if (tokenScore > score) {
+            score = tokenScore;
+            if (ratio == 1.0 && coreTokens.length >= 2) {
+              isHighConfidence = true;
+            }
+          }
+        }
+      }
+    }
+
+    return score >= 65.0 ? (score, isHighConfidence) : (0.0, false);
+  }
+
   /// Smart predictive directory search with duplicate detection and PSGC location embedding.
   /// Detects if an institution is already present in the directory (exact match, token overlap, or acronym).
   static List<InstitutionSearchResult> searchDirectoryWithDuplicateDetection(
     String rawQuery,
     Iterable<Institution> allInstitutions, {
-    int limit = 8,
+    int limit = 50,
   }) {
     final cleanQ = rawQuery
         .replaceAll("'", "")
@@ -2260,84 +2487,29 @@ class LocationResolver {
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
 
-      // Fast-path candidate filter: skips 95%+ of irrelevant records instantly to eliminate UI lag
-      final bool hasDirectPhrase = normInstName.contains(cleanQ);
-      final bool hasCoreMatch = coreTokens.isNotEmpty && coreTokens.any((ct) => normInstName.contains(ct));
-
-      if (!hasDirectPhrase && !hasCoreMatch && !isAcronymCandidate) {
-        continue;
-      }
-
       final instTokens = normInstName.split(' ').where((t) => t.isNotEmpty).toList();
+      final instAcronyms = computeInstitutionAcronyms(instName);
 
-      double score = 0.0;
-      bool isHighConfidence = false;
-
-      // 1. Exact match
-      if (normInstName == cleanQ) {
-        score = 100.0;
-        isHighConfidence = true;
-      }
-      // 2. Starts with query (prefix phrase match)
-      else if (normInstName.startsWith(cleanQ)) {
-        score = 92.0;
-        if (cleanQ.length >= 6) isHighConfidence = true;
-      }
-      // 3. Contains full query phrase
-      else if (normInstName.contains(cleanQ)) {
-        score = 85.0;
-        if (cleanQ.length >= 8) isHighConfidence = true;
-      }
-      // 4. Acronym match (e.g. "MDH" -> "Manila Doctors Hospital", "SLMC" -> "St Luke's Medical Center")
-      else if (isAcronymCandidate) {
-        final acronym = instTokens.map((t) => t.isNotEmpty ? t[0] : '').join('');
-        if (acronym == cleanQ) {
-          score = 85.0;
-          isHighConfidence = true;
-        } else if (acronym.startsWith(cleanQ)) {
-          score = 75.0;
-        }
-      }
-
-      // 5. Distinctive word / phrase overlap (only matches if significant keywords overlap, never generic stop words)
-      if (score < 80.0 && coreTokens.isNotEmpty) {
-        int matchedCore = 0;
-        for (var ct in coreTokens) {
-          if (instTokens.any((it) => it == ct || (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))))) {
-            matchedCore++;
-          } else if (ct.length >= 4 && instTokens.any((it) => isSoundAlikeMatch(ct, it))) {
-            matchedCore++;
-          }
-        }
-
-        if (coreTokens.length == 1) {
-          if (matchedCore == 1 && coreTokens.first.length >= 4) {
-            score = 75.0;
-          }
-        } else if (coreTokens.length >= 2) {
-          final ratio = matchedCore / coreTokens.length;
-          if (ratio >= 0.5) {
-            final tokenScore = 70.0 + (ratio * 25.0);
-            if (tokenScore > score) {
-              score = tokenScore;
-              if (ratio == 1.0 && coreTokens.length >= 2) {
-                isHighConfidence = true;
-              }
-            }
-          }
-        }
-      }
-
-      final locStr = formatLocation(
-        streetAddress: inst.streetAddress,
-        cityMunicipality: inst.cityMunicipality,
-        provinceName: inst.provinceName,
-        regionName: inst.regionName,
+      final (score, isHighConfidence) = _scoreInstitutionCandidate(
+        cleanQ: cleanQ,
+        qTokens: qTokens,
+        coreTokens: coreTokens,
+        isAcronymCandidate: isAcronymCandidate,
+        rawInstName: instName,
+        normInstName: normInstName,
+        instTokens: instTokens,
+        instAcronyms: instAcronyms,
       );
 
-      // Clean confidence threshold: only genuine suggestions with score >= 65.0
       if (score >= 65.0) {
         seenIds.add(instId);
+        final locStr = formatLocation(
+          streetAddress: inst.streetAddress,
+          cityMunicipality: inst.cityMunicipality,
+          provinceName: inst.provinceName,
+          regionName: inst.regionName,
+        );
+
         results.add(InstitutionSearchResult(
           institution: inst,
           isExactOrHighConfidenceDuplicate: isHighConfidence,
@@ -2360,61 +2532,19 @@ class LocationResolver {
           .replaceAll(RegExp(r'\s+'), ' ')
           .trim();
 
-      final bool hasDirectPhrase = normInstName.contains(cleanQ);
-      final bool hasCoreMatch = coreTokens.isNotEmpty && coreTokens.any((ct) => normInstName.contains(ct));
-
-      if (!hasDirectPhrase && !hasCoreMatch && !isAcronymCandidate) {
-        continue;
-      }
-
       final instTokens = normInstName.split(' ').where((t) => t.isNotEmpty).toList();
+      final instAcronyms = computeInstitutionAcronyms(instName);
 
-      double score = 0.0;
-      bool isHighConfidence = false;
-
-      if (normInstName == cleanQ) {
-        score = 100.0;
-        isHighConfidence = true;
-      } else if (normInstName.startsWith(cleanQ)) {
-        score = 92.0;
-        if (cleanQ.length >= 6) isHighConfidence = true;
-      } else if (normInstName.contains(cleanQ)) {
-        score = 85.0;
-        if (cleanQ.length >= 8) isHighConfidence = true;
-      } else if (isAcronymCandidate) {
-        final acronym = instTokens.map((t) => t.isNotEmpty ? t[0] : '').join('');
-        if (acronym == cleanQ) {
-          score = 85.0;
-          isHighConfidence = true;
-        } else if (acronym.startsWith(cleanQ)) {
-          score = 75.0;
-        }
-      }
-
-      if (score < 80.0 && coreTokens.isNotEmpty) {
-        int matchedCore = 0;
-        for (var ct in coreTokens) {
-          if (instTokens.any((it) => it == ct || (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))))) {
-            matchedCore++;
-          }
-        }
-        if (coreTokens.length == 1) {
-          if (matchedCore == 1 && coreTokens.first.length >= 4) {
-            score = 75.0;
-          }
-        } else if (coreTokens.length >= 2) {
-          final ratio = matchedCore / coreTokens.length;
-          if (ratio >= 0.5) {
-            final tokenScore = 70.0 + (ratio * 25.0);
-            if (tokenScore > score) {
-              score = tokenScore;
-              if (ratio == 1.0 && coreTokens.length >= 2) {
-                isHighConfidence = true;
-              }
-            }
-          }
-        }
-      }
+      final (score, isHighConfidence) = _scoreInstitutionCandidate(
+        cleanQ: cleanQ,
+        qTokens: qTokens,
+        coreTokens: coreTokens,
+        isAcronymCandidate: isAcronymCandidate,
+        rawInstName: instName,
+        normInstName: normInstName,
+        instTokens: instTokens,
+        instAcronyms: instAcronyms,
+      );
 
       if (score >= 65.0) {
         seenIds.add(entry.key);

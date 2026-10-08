@@ -621,6 +621,58 @@ void main() {
     expect(exact, isNotEmpty);
     expect(exact.first.isExactOrHighConfidenceDuplicate, isTrue);
   });
+
+  test('Test V.0.6.5: Smart AI detector, acronym recognition (Ust -> UST Hospital), and false-positive elimination', () {
+    final facilities = [
+      Institution(
+        name: 'INST-UST-01',
+        institutionName: 'University of Santo Tomas Hospital',
+        cityMunicipality: 'City of Manila',
+        provinceName: 'Metro Manila',
+        regionName: 'NCR',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-UNITECH',
+        institutionName: 'Unitech Plastic Industry Corp.',
+        cityMunicipality: 'Valenzuela City',
+        provinceName: 'Metro Manila',
+        regionName: 'NCR',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-TRENER',
+        institutionName: 'Trener Industries (Philippines), Inc.',
+        cityMunicipality: 'San Fernando',
+        provinceName: 'Pampanga',
+        regionName: 'Region III',
+        workflowState: 'Pending Approval',
+      ),
+      Institution(
+        name: 'INST-TOPRITE',
+        institutionName: 'Toprite Plastic Industries, Inc',
+        cityMunicipality: 'Quezon City',
+        provinceName: 'Metro Manila',
+        regionName: 'NCR',
+        workflowState: 'Pending Approval',
+      ),
+    ];
+
+    // 1. Acronym "Ust" must accurately detect University of Santo Tomas Hospital
+    final ustMatches = LocationResolver.searchDirectoryWithDuplicateDetection('Ust', facilities);
+    expect(ustMatches.isNotEmpty, isTrue);
+    expect(ustMatches.first.institution.institutionName, 'University of Santo Tomas Hospital');
+    expect(ustMatches.first.isExactOrHighConfidenceDuplicate, isTrue);
+
+    // 2. Acronym "Ust" must NOT match plastic companies with interior word "industry"
+    expect(ustMatches.any((m) => m.institution.institutionName.contains('Plastic')), isFalse);
+    expect(ustMatches.any((m) => m.institution.institutionName.contains('Industr')), isFalse);
+
+    // 3. Dynamic acronyms computed for University of Santo Tomas Hospital
+    final acronyms = LocationResolver.computeInstitutionAcronyms('University of Santo Tomas Hospital');
+    expect(acronyms.contains('ust'), isTrue);
+    expect(acronyms.contains('usth'), isTrue);
+  });
 }
 
 

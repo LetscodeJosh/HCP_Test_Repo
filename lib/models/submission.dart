@@ -271,12 +271,15 @@ class HcpProfileSubmission {
   }
 
   Map<String, dynamic> toJson() {
-    final fn = firstName?.trim() ?? '';
-    final mn = (middleName != null && middleName!.trim().isNotEmpty) ? middleName!.trim() : '-';
-    final ln = lastName?.trim() ?? '';
-    final computedFullName = (hcpFullName != null && hcpFullName!.trim().isNotEmpty)
-        ? hcpFullName!.trim()
-        : [fn, mn != '-' ? mn : null, ln].where((p) => p != null && p.isNotEmpty).join(' ');
+    final fn = DataSanitizer.cleanTrimProper(firstName);
+    final rawMn = (middleName != null && middleName!.trim().isNotEmpty && middleName!.trim() != '-')
+        ? DataSanitizer.cleanTrimProper(middleName)
+        : null;
+    final mn = rawMn ?? '-';
+    final ln = DataSanitizer.cleanTrimProper(lastName);
+    final computedFullName = (hcpFullName != null && hcpFullName!.trim().isNotEmpty && !hcpFullName!.trim().startsWith('HCP-'))
+        ? DataSanitizer.cleanTrimProper(hcpFullName)
+        : [fn, rawMn, ln].where((p) => p != null && p.isNotEmpty).join(' ');
 
     final resolvedAction = (profileAction != null && profileAction!.trim().isNotEmpty)
         ? profileAction!.trim()

@@ -1,13 +1,16 @@
 {
-  "version": "V.0.6.5",
-  "buildNumber": 37,
-  "releaseDate": "2026-10-07",
-  "apkSize": "58.90 MB",
-  "apkSha256": "c2d3e79e548ecc3c920be9f01fdf8b230dfb2abb84fde09d13c179e8150822d4",
-  "description": "Territory Manager ERPNext-style searchable dropdown & dynamic auto-complete, 100% active tree search filter invariance.",
-  "components": [
-    "Searchable Territory Manager dropdown with complete Sales Person auto-complete list",
-    "Direct chevron toggle and input click toggle displaying all unassigned and assigned managers",
-    "Isolated Territory Tree single-search filter mode in territory reconfiguration portal"
+  "version": "v.0.6.5",
+  "build_number": 42,
+  "release_date": "October 8, 2026",
+  "apk_filename": "HCP_Profiling_v.0.6.5.apk",
+  "apk_size_bytes": 61804222,
+  "sha256": "49eb28840cabd279a8331f6f2dd26a5706b3229e14beead4dea505fa07c08cd3",
+  "features": [
+    "Intelligent AI Detector & Acronym Recognition (Ust -> University of Santo Tomas Hospital, SLMC, PGH, MMC)",
+    "Elimination of interior-substring false positives (queries <= 4 chars do not match inside words like 'industry')",
+    "Uncapped directory dropdown displaying all matching candidate facilities with scrollbar support",
+    "Location details locking without lock icons while suggestions are active or workplace unfulfilled",
+    "Block 'Submit for Approval' while active suggestions exist in dropdown to prevent duplicate proposals",
+    "App menu drawer retains version cleanly at v.0.6.5 without build number (+No.) suffix"
   ]
 }

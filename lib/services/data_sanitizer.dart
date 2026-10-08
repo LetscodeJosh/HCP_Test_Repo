@@ -157,7 +157,10 @@ class DataSanitizer {
     payload.forEach((key, value) {
       if (value is String) {
         final k = key.toLowerCase();
-        if (k.contains('code') || k.contains('territory') || k.contains('id') || k.contains('status') || k.contains('prc')) {
+        if (k.contains('name') || k.contains('middle')) {
+          result[key] = cleanTrimProper(value);
+        } else if (k.contains('code') || k.contains('territory') || k.contains('status') || k.contains('prc') ||
+            k == 'id' || k.endsWith('_id') || k.startsWith('id_') || k.contains('_id_')) {
           result[key] = cleanTrimUpper(value);
         } else if (k.contains('email')) {
           result[key] = cleanTrimLower(value);

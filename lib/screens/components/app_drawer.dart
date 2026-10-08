@@ -487,7 +487,7 @@ class AppDrawer extends StatelessWidget {
                 const Icon(Icons.info_outline_rounded, color: Color(0xFF64748B), size: 14),
                 const SizedBox(width: 6),
                 Text(
-                  AppVersion.fullVersion,
+                  AppVersion.version,
                   style: const TextStyle(
                     color: Color(0xFF94A3B8),
                     fontSize: 12,

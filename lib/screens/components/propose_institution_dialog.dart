@@ -120,20 +120,23 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
 
   bool get _isWorkplaceNameValid => _workplaceCtrl.text.trim().length >= 3;
 
-  /// Location fields are unlocked as soon as classification is selected and
-  /// workplace name is fulfilled (>= 3 chars), allowing the MedRep to freely
-  /// enter Region, Province, and City without being locked up.
+  /// Location details are fillable ONLY when classification is selected, workplace name is fulfilled (>= 3 chars),
+  /// NO matching suggestions exist in the dropdown, and no existing institution is currently selected.
+  /// (Strictly NO lock icon is implemented; clean disabled styling is applied).
   bool get _isLocationUnlocked =>
       _isClassificationFulfilled &&
       _isWorkplaceNameValid &&
+      _detectedMatches.isEmpty &&
       _selectedExistingInstitution == null;
 
-  /// Can submit whenever classification, workplace name, and mandatory location
-  /// (Province & City) are provided, or when an existing facility is selected.
-  /// Suggestions do NOT lock up the MedRep from submitting.
+  /// Submission policy:
+  /// - If an existing institution is selected: ALLOW ("Use Selected Institution").
+  /// - If active directory suggestions exist: BLOCK submission to prevent duplicate proposals.
+  /// - Otherwise, genuine new proposal: requires classification, workplace name, and mandatory location (Province & City).
   bool get _canSubmit {
     if (_isSaving) return false;
     if (_selectedExistingInstitution != null) return true; // Can immediately use existing facility!
+    if (_detectedMatches.isNotEmpty) return false; // Blocked while suggestions exist!
     if (!_isClassificationFulfilled) return false;
     if (!_isWorkplaceNameValid) return false;
     if (_selectedProvince == null || _selectedProvince!.trim().isEmpty) return false;
@@ -175,7 +178,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
       final matches = LocationResolver.searchDirectoryWithDuplicateDetection(
         text,
         directory,
-        limit: 6,
+        limit: 50,
       );
       setState(() {
         _detectedMatches = matches;
@@ -235,6 +238,10 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
     }
     if (wp.isEmpty) {
       setState(() => _validationErr = 'Workplace name is required');
+      return;
+    }
+    if (_detectedMatches.isNotEmpty && _selectedExistingInstitution == null) {
+      setState(() => _validationErr = 'Existing matching facilities detected in masterlist. Please select a facility from the suggestions above, or refine the name to propose a distinct facility.');
       return;
     }
     if (prov.isEmpty) {
@@ -586,7 +593,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                       ),
                     ),
 
-                    // SMART SIMILARITY SUGGESTION BANNER (Informative & Non-blocking)
+                    // SMART SIMILARITY SUGGESTION BANNER
                     if (_detectedMatches.isNotEmpty && _selectedExistingInstitution == null) ...[
                       const SizedBox(height: 8),
                       Container(
@@ -599,19 +606,19 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Icon(Icons.lightbulb_outline_rounded, color: Color(0xFF16A34A), size: 18),
+                            const Icon(Icons.psychology_outlined, color: Color(0xFF16A34A), size: 18),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'Similar Facilities in Masterlist (Smart Suggestion)',
-                                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 11.5),
+                                  Text(
+                                    'AI Smart Detector: Found ${_detectedMatches.length} Matching Facilit${_detectedMatches.length > 1 ? 'ies' : 'y'}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 11.5),
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
-                                    'Found ${_detectedMatches.length} existing facilit${_detectedMatches.length > 1 ? 'ies' : 'y'} with similar wording. You may tap a facility from the dropdown below to use it directly, or continue filling in the location details below to propose this new institution.',
+                                    'Found ${_detectedMatches.length} existing facilit${_detectedMatches.length > 1 ? 'ies' : 'y'} in directory. Tap a facility from the dropdown below to use it directly. Submitting a new proposal is restricted while matching directory facilities exist.',
                                     style: const TextStyle(color: Color(0xFF15803D), fontSize: 11, height: 1.3),
                                   ),
                                 ],
@@ -688,9 +695,9 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                                 children: [
                                   const Icon(Icons.travel_explore_rounded, color: Color(0xFF2563EB), size: 14),
                                   const SizedBox(width: 6),
-                                  const Text(
-                                    'Directory Facilities (Tap to Select):',
-                                    style: TextStyle(color: Color(0xFF1E40AF), fontSize: 11, fontWeight: FontWeight.bold),
+                                  Text(
+                                    'Directory Facilities (${_detectedMatches.length} Found - Tap to Select):',
+                                    style: const TextStyle(color: Color(0xFF1E40AF), fontSize: 11, fontWeight: FontWeight.bold),
                                   ),
                                   const Spacer(),
                                   InkWell(
@@ -701,8 +708,10 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                               ),
                             ),
                             ConstrainedBox(
-                              constraints: const BoxConstraints(maxHeight: 180),
-                              child: ListView.separated(
+                              constraints: const BoxConstraints(maxHeight: 240),
+                              child: Scrollbar(
+                                thumbVisibility: true,
+                                child: ListView.separated(
                                 shrinkWrap: true,
                                 padding: EdgeInsets.zero,
                                 itemCount: _detectedMatches.length,
@@ -760,12 +769,13 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                                     ),
                                   );
                                 },
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ] else if (_workplaceCtrl.text.trim().length >= 3 && _selectedExistingInstitution == null) ...[
+                    ] else if (_workplaceCtrl.text.trim().length >= 3 && _detectedMatches.isEmpty && _selectedExistingInstitution == null) ...[
                       const SizedBox(height: 6),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -774,13 +784,13 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                           borderRadius: BorderRadius.circular(6),
                           border: Border.all(color: const Color(0xFFBBF7D0)),
                         ),
-                        child: Row(
-                          children: const [
+                        child: const Row(
+                          children: [
                             Icon(Icons.check_circle_outline_rounded, size: 14, color: Color(0xFF16A34A)),
                             SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                '✓ Facility name entered. Location fields below are unlocked and editable.',
+                                '✓ Facility name verified. No matching duplicates found in directory. Location fields below are editable.',
                                 style: TextStyle(color: Color(0xFF166534), fontSize: 11),
                               ),
                             ),
@@ -818,6 +828,29 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                         ],
                       ],
                     ),
+                    if (!_isLocationUnlocked && _detectedMatches.isNotEmpty && _selectedExistingInstitution == null) ...[
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, size: 14, color: Color(0xFF64748B)),
+                            SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                'Location details are disabled while matching facilities are detected. Tap a facility from the dropdown above to use it directly, or refine the name to propose a distinct facility.',
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 11),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
 
                     // Region Selector
@@ -1044,7 +1077,11 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                       child: _isSaving
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                           : Text(
-                              _selectedExistingInstitution != null ? 'Use Selected Institution' : 'Submit for Approval',
+                              _selectedExistingInstitution != null
+                                  ? 'Use Selected Institution'
+                                  : (_detectedMatches.isNotEmpty && _selectedExistingInstitution == null
+                                      ? 'Select from Suggestions Above'
+                                      : 'Submit for Approval'),
                               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12.5),
                             ),
                     ),

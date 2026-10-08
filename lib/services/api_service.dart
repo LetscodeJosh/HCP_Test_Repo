@@ -2339,6 +2339,9 @@ class ApiService extends ChangeNotifier {
   /// SFE Remediation Action: Remaps a rejected institution to a valid approved masterlist facility.
   /// Replaces the rejected institution in HCP Profile Submission, HCP Account, and HCP DocTypes,
   /// updating status notes and allowing MedReps to immediately continue HCP profiling.
+  /// SFE Remediation Action: Remaps a rejected institution to a valid approved masterlist facility.
+  /// Replaces the rejected institution in HCP Profile Submission, HCP Account, and HCP DocTypes,
+  /// updating status notes and allowing MedReps to immediately continue HCP profiling.
   Future<bool> remapRejectedInstitution({
     required String rejectedInstitutionNameOrId,
     required Institution replacementInstitution,
@@ -2352,34 +2355,62 @@ class ApiService extends ChangeNotifier {
 
       final String remappedTag = 'Remapped by SFE to: ${replacementInstitution.institutionName}';
 
-      // 1. Update the rejected institution document in ERPNext
-      final instUrl = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(rejectedInstitutionNameOrId)}');
+      String oldId = rejectedInstitutionNameOrId.trim();
+      String oldName = rejectedInstitutionNameOrId.trim();
+
+      final idx = _cachedInstitutions.indexWhere(
+          (i) => i.name.toLowerCase() == rejectedInstitutionNameOrId.toLowerCase() ||
+                 i.institutionName.toLowerCase() == rejectedInstitutionNameOrId.toLowerCase());
+      if (idx >= 0) {
+        final old = _cachedInstitutions[idx];
+        oldId = old.name;
+        oldName = old.institutionName;
+      } else {
+        final resId = LocationResolver.resolveInstitutionId(rejectedInstitutionNameOrId);
+        final resName = LocationResolver.resolveInstitutionName(rejectedInstitutionNameOrId);
+        if (resId.isNotEmpty) oldId = resId;
+        if (resName.isNotEmpty) oldName = resName;
+      }
+
+      // 1. Transition Institution doc in ERPNext using workflow
+      final wfUrl = Uri.parse('$baseUrl/api/method/frappe.model.workflow.apply_workflow');
+      final wfRes = await http.post(
+        wfUrl,
+        headers: _headers,
+        body: jsonEncode({
+          'doc': {
+            'doctype': 'Institution',
+            'name': oldId,
+          },
+          'action': 'Remap',
+        }),
+      );
+
+      // Also ensure rejection_reason / notes are saved on Institution
+      final instUrl = Uri.parse('$baseUrl/api/resource/Institution/${Uri.encodeComponent(oldId)}');
       await http.put(
         instUrl,
         headers: _headers,
         body: jsonEncode({
-          'workflow_state': 'Remapped',
           'rejection_reason': '$remappedTag ($note)',
+          if (wfRes.statusCode != 200) 'workflow_state': 'Remapped',
         }),
       );
 
       // 2. Update local cached institution
-      final idx = _cachedInstitutions.indexWhere(
-          (i) => i.name == rejectedInstitutionNameOrId || i.institutionName.toLowerCase() == rejectedInstitutionNameOrId.toLowerCase());
-      String oldName = rejectedInstitutionNameOrId;
       if (idx >= 0) {
         final old = _cachedInstitutions[idx];
-        oldName = old.institutionName;
         final updatedAudit = List<InstitutionAuditLogEntry>.from(old.auditTrail);
         updatedAudit.add(
           InstitutionAuditLogEntry(
             timestamp: DateTime.now(),
             user: loggedInFullName ?? loggedInEmail ?? 'SFE Specialist',
-            role: 'SFE Specialist',
+            role: isSfe ? 'SFE Specialist' : (isAdmin ? 'System Admin' : 'Reviewer'),
             action: 'Remapped by SFE',
             details: '$remappedTag. $note',
             snapshot: {
               'original_rejected': old.institutionName,
+              'original_id': old.name,
               'replacement': replacementInstitution.institutionName,
               'replacement_id': replacementInstitution.name,
               'note': note,
@@ -2393,58 +2424,81 @@ class ApiService extends ChangeNotifier {
         );
       }
 
-      // 3. Remap across linked HCP Accounts
-      for (int i = 0; i < _cachedHcpAccounts.length; i++) {
-        final acc = _cachedHcpAccounts[i];
-        final bool hasMatch = (acc.workplaceId != null && (acc.workplaceId == rejectedInstitutionNameOrId || acc.workplaceId == oldName)) ||
-            acc.workplaces.any((w) => w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName);
+      // 3. Remap across linked HCP Profile Submissions (Server + Cache)
+      final Set<String> targetSubNames = {};
+      try {
+        final q1 = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission?filters=[["institution","in",["${Uri.encodeComponent(oldId)}","${Uri.encodeComponent(oldName)}"]]]&fields=["name"]&limit=500');
+        final r1 = await http.get(q1, headers: _headers);
+        if (r1.statusCode == 200) {
+          final data = jsonDecode(r1.body)['data'] as List?;
+          data?.forEach((d) => targetSubNames.add(d['name'].toString()));
+        }
+      } catch (_) {}
 
-        if (hasMatch) {
-          final updatedWps = acc.workplaces.map((w) {
-            if (w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName) {
-              return HcpAccountWorkplace(
-                hcpWorkplace: replacementInstitution.name,
-                address: replacementInstitution.institutionName,
-                cityMunicipality: replacementInstitution.cityMunicipality,
-                provinceName: replacementInstitution.provinceName,
-                isPrimary: w.isPrimary,
-                preferred: w.preferred,
-              );
-            }
-            return w;
-          }).toList();
+      try {
+        final q2 = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission?filters=[["HCP%20Profile%20Submission%20Workplaces","hcp_workplace","in",["${Uri.encodeComponent(oldId)}","${Uri.encodeComponent(oldName)}"]]]&fields=["name"]&limit=500');
+        final r2 = await http.get(q2, headers: _headers);
+        if (r2.statusCode == 200) {
+          final data = jsonDecode(r2.body)['data'] as List?;
+          data?.forEach((d) => targetSubNames.add(d['name'].toString()));
+        }
+      } catch (_) {}
 
-          _cachedHcpAccounts[i] = acc.copyWith(
-            workplaceId: (acc.workplaceId == rejectedInstitutionNameOrId || acc.workplaceId == oldName)
-                ? replacementInstitution.name
-                : acc.workplaceId,
-            workplaces: updatedWps,
-            workplaceApprovalNote: remappedTag,
-          );
-
-          if (acc.name != null && acc.name!.isNotEmpty) {
-            http.put(
-              Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(acc.name!)}'),
-              headers: _headers,
-              body: jsonEncode({
-                'workplace_id': replacementInstitution.name,
-                'workplace_approval_note': remappedTag,
-                'table_workplaces': updatedWps.map((w) => w.toJson()).toList(),
-              }),
-            ).catchError((_) => http.Response('', 500));
-          }
+      for (final s in _cachedSubmissions) {
+        if (s.name != null && (s.institution == oldId || s.institution == oldName || s.workplaces.any((w) => w.hcpWorkplace == oldId || w.hcpWorkplace == oldName || w.workplaceName == oldName || w.workplaceName == oldId))) {
+          targetSubNames.add(s.name!);
         }
       }
 
-      // 4. Remap across linked HCP Profile Submissions
+      for (final subName in targetSubNames) {
+        try {
+          final subGetUrl = Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(subName)}');
+          final subGetRes = await http.get(subGetUrl, headers: _headers);
+          if (subGetRes.statusCode == 200) {
+            final subDoc = jsonDecode(subGetRes.body)['data'] as Map<String, dynamic>;
+            final rawWps = (subDoc['table_workplaces'] as List? ?? []).cast<Map<String, dynamic>>();
+            bool modifiedWps = false;
+            final updatedWpsList = rawWps.map((wp) {
+              final wId = (wp['hcp_workplace'] ?? '').toString();
+              final wName = (wp['workplace_name'] ?? '').toString();
+              if (wId == oldId || wId == oldName || wName == oldName || wName == oldId) {
+                modifiedWps = true;
+                final copy = Map<String, dynamic>.from(wp);
+                copy['hcp_workplace'] = replacementInstitution.name;
+                copy['workplace_name'] = replacementInstitution.institutionName;
+                copy['city_municipality'] = replacementInstitution.cityMunicipality;
+                copy['province_name'] = replacementInstitution.provinceName;
+                copy['city_title'] = replacementInstitution.cityMunicipality;
+                copy['province_title'] = replacementInstitution.provinceName;
+                return copy;
+              }
+              return wp;
+            }).toList();
+
+            final subPutBody = <String, dynamic>{};
+            if (modifiedWps) {
+              subPutBody['table_workplaces'] = updatedWpsList;
+            }
+            if (subDoc['institution'] == oldId || subDoc['institution'] == oldName) {
+              subPutBody['institution'] = replacementInstitution.name;
+            }
+            subPutBody['rejection_remarks'] = remappedTag;
+
+            await http.put(subGetUrl, headers: _headers, body: jsonEncode(subPutBody));
+          }
+        } catch (e) {
+          AppLogger.e('ApiService', 'Error updating submission $subName: $e');
+        }
+      }
+
+      // Update in-memory submissions
       for (int i = 0; i < _cachedSubmissions.length; i++) {
         final sub = _cachedSubmissions[i];
-        final bool hasMatch = (sub.institution != null && (sub.institution == rejectedInstitutionNameOrId || sub.institution == oldName)) ||
-            sub.workplaces.any((w) => w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName || w.workplaceName == oldName);
-
+        final bool hasMatch = (sub.institution != null && (sub.institution == oldId || sub.institution == oldName)) ||
+            sub.workplaces.any((w) => w.hcpWorkplace == oldId || w.hcpWorkplace == oldName || w.workplaceName == oldName || w.workplaceName == oldId);
         if (hasMatch) {
           final updatedWps = sub.workplaces.map((w) {
-            if (w.hcpWorkplace == rejectedInstitutionNameOrId || w.hcpWorkplace == oldName || w.workplaceName == oldName) {
+            if (w.hcpWorkplace == oldId || w.hcpWorkplace == oldName || w.workplaceName == oldName || w.workplaceName == oldId) {
               return w.copyWith(
                 hcpWorkplace: replacementInstitution.name,
                 workplaceName: replacementInstitution.institutionName,
@@ -2457,38 +2511,87 @@ class ApiService extends ChangeNotifier {
             }
             return w;
           }).toList();
-
           _cachedSubmissions[i] = sub.copyWith(
-            institution: (sub.institution == rejectedInstitutionNameOrId || sub.institution == oldName)
+            institution: (sub.institution == oldId || sub.institution == oldName)
                 ? replacementInstitution.institutionName
                 : sub.institution,
             workplaces: updatedWps,
             rejectionRemarks: remappedTag,
           );
-
-          if (sub.name != null && sub.name!.isNotEmpty) {
-            http.put(
-              Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(sub.name!)}'),
-              headers: _headers,
-              body: jsonEncode({
-                'institution': replacementInstitution.institutionName,
-                'rejection_remarks': remappedTag,
-                'table_workplaces': updatedWps.map((w) => w.toJson()).toList(),
-              }),
-            ).catchError((_) => http.Response('', 500));
-          }
         }
       }
 
-      // 5. Remap across linked HCP Doctors
+      // 4. Remap across linked HCP Doctors (Server + Cache)
+      final Set<String> targetDocNames = {};
+      try {
+        final qd1 = Uri.parse('$baseUrl/api/resource/HCP?filters=[["institution","in",["${Uri.encodeComponent(oldId)}","${Uri.encodeComponent(oldName)}"]]]&fields=["name"]&limit=500');
+        final rd1 = await http.get(qd1, headers: _headers);
+        if (rd1.statusCode == 200) {
+          final data = jsonDecode(rd1.body)['data'] as List?;
+          data?.forEach((d) => targetDocNames.add(d['name'].toString()));
+        }
+      } catch (_) {}
+
+      try {
+        final qd2 = Uri.parse('$baseUrl/api/resource/HCP?filters=[["HCP%20Workplaces","hcp_workplace","in",["${Uri.encodeComponent(oldId)}","${Uri.encodeComponent(oldName)}"]]]&fields=["name"]&limit=500');
+        final rd2 = await http.get(qd2, headers: _headers);
+        if (rd2.statusCode == 200) {
+          final data = jsonDecode(rd2.body)['data'] as List?;
+          data?.forEach((d) => targetDocNames.add(d['name'].toString()));
+        }
+      } catch (_) {}
+
+      for (final d in _cachedDoctors) {
+        if (d.name != null && (d.institution == oldId || d.institution == oldName || d.workplaces.any((w) => w.workplace == oldId || w.workplace == oldName))) {
+          targetDocNames.add(d.name!);
+        }
+      }
+
+      for (final docName in targetDocNames) {
+        try {
+          final docGetUrl = Uri.parse('$baseUrl/api/resource/HCP/${Uri.encodeComponent(docName)}');
+          final docGetRes = await http.get(docGetUrl, headers: _headers);
+          if (docGetRes.statusCode == 200) {
+            final docData = jsonDecode(docGetRes.body)['data'] as Map<String, dynamic>;
+            final rawWps = (docData['hcp_workplace'] as List? ?? []).cast<Map<String, dynamic>>();
+            bool modifiedWps = false;
+            final updatedWpsList = rawWps.map((wp) {
+              final wId = (wp['hcp_workplace'] ?? '').toString();
+              if (wId == oldId || wId == oldName) {
+                modifiedWps = true;
+                final copy = Map<String, dynamic>.from(wp);
+                copy['hcp_workplace'] = replacementInstitution.name;
+                copy['city_municipality'] = replacementInstitution.cityMunicipality;
+                copy['province_name'] = replacementInstitution.provinceName;
+                return copy;
+              }
+              return wp;
+            }).toList();
+
+            final docPutBody = <String, dynamic>{};
+            if (modifiedWps) {
+              docPutBody['hcp_workplace'] = updatedWpsList;
+            }
+            if (docData['institution'] == oldId || docData['institution'] == oldName) {
+              docPutBody['institution'] = replacementInstitution.name;
+            }
+            docPutBody['rejection_reason'] = '';
+
+            await http.put(docGetUrl, headers: _headers, body: jsonEncode(docPutBody));
+          }
+        } catch (e) {
+          AppLogger.e('ApiService', 'Error updating doctor $docName: $e');
+        }
+      }
+
+      // Update in-memory doctors
       for (int i = 0; i < _cachedDoctors.length; i++) {
         final doc = _cachedDoctors[i];
-        final bool hasMatch = (doc.institution != null && (doc.institution == rejectedInstitutionNameOrId || doc.institution == oldName)) ||
-            doc.workplaces.any((w) => w.workplace == rejectedInstitutionNameOrId || w.workplace == oldName);
-
+        final bool hasMatch = (doc.institution != null && (doc.institution == oldId || doc.institution == oldName)) ||
+            doc.workplaces.any((w) => w.workplace == oldId || w.workplace == oldName);
         if (hasMatch) {
           final updatedWps = doc.workplaces.map((w) {
-            if (w.workplace == rejectedInstitutionNameOrId || w.workplace == oldName) {
+            if (w.workplace == oldId || w.workplace == oldName) {
               return HcpWorkplace(
                 workplace: replacementInstitution.name,
                 address: replacementInstitution.institutionName,
@@ -2499,30 +2602,118 @@ class ApiService extends ChangeNotifier {
             }
             return w;
           }).toList();
-
           _cachedDoctors[i] = doc.copyWith(
             workplaces: updatedWps,
             institution: replacementInstitution.name,
           );
-
-          if (doc.name != null && doc.name!.isNotEmpty) {
-            http.put(
-              Uri.parse('$baseUrl/api/resource/HCP/${Uri.encodeComponent(doc.name!)}'),
-              headers: _headers,
-              body: jsonEncode({
-                'institution': replacementInstitution.name,
-                'table_workplaces': updatedWps.map((w) => {
-                  'workplace': w.workplace,
-                  'address': w.address,
-                  'is_primary': w.isPrimary ? 1 : 0,
-                }).toList(),
-              }),
-            ).catchError((_) => http.Response('', 500));
-          }
         }
       }
 
-      // 6. Notify MedRep of Remapping
+      // 5. Remap across linked HCP Accounts (Server + Cache)
+      final Set<String> targetAccNames = {};
+      try {
+        final qa1 = Uri.parse('$baseUrl/api/resource/HCP%20Account?filters=[["workplace_id","in",["${Uri.encodeComponent(oldId)}","${Uri.encodeComponent(oldName)}"]]]&fields=["name"]&limit=500');
+        final ra1 = await http.get(qa1, headers: _headers);
+        if (ra1.statusCode == 200) {
+          final data = jsonDecode(ra1.body)['data'] as List?;
+          data?.forEach((d) => targetAccNames.add(d['name'].toString()));
+        }
+      } catch (_) {}
+
+      try {
+        final qa2 = Uri.parse('$baseUrl/api/resource/HCP%20Account?filters=[["HCP%20Account%20Workplace","hcp_workplace","in",["${Uri.encodeComponent(oldId)}","${Uri.encodeComponent(oldName)}"]]]&fields=["name"]&limit=500');
+        final ra2 = await http.get(qa2, headers: _headers);
+        if (ra2.statusCode == 200) {
+          final data = jsonDecode(ra2.body)['data'] as List?;
+          data?.forEach((d) => targetAccNames.add(d['name'].toString()));
+        }
+      } catch (_) {}
+
+      for (final a in _cachedHcpAccounts) {
+        if (a.name != null && (a.workplaceId == oldId || a.workplaceId == oldName || a.workplaces.any((w) => w.hcpWorkplace == oldId || w.hcpWorkplace == oldName))) {
+          targetAccNames.add(a.name!);
+        }
+      }
+
+      for (final accName in targetAccNames) {
+        try {
+          final accGetUrl = Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(accName)}');
+          final accGetRes = await http.get(accGetUrl, headers: _headers);
+          if (accGetRes.statusCode == 200) {
+            final accData = jsonDecode(accGetRes.body)['data'] as Map<String, dynamic>;
+            final rawWps = (accData['workplace_info'] as List? ?? []).cast<Map<String, dynamic>>();
+            bool modifiedWps = false;
+            final updatedWpsList = rawWps.map((wp) {
+              final wId = (wp['hcp_workplace'] ?? '').toString();
+              if (wId == oldId || wId == oldName) {
+                modifiedWps = true;
+                final copy = Map<String, dynamic>.from(wp);
+                copy['hcp_workplace'] = replacementInstitution.name;
+                copy['city_municipality'] = replacementInstitution.cityMunicipality;
+                copy['province_name'] = replacementInstitution.provinceName;
+                return copy;
+              }
+              return wp;
+            }).toList();
+
+            final accPutBody = <String, dynamic>{};
+            if (modifiedWps) {
+              accPutBody['workplace_info'] = updatedWpsList;
+            }
+            if (accData['workplace_id'] == oldId || accData['workplace_id'] == oldName) {
+              accPutBody['workplace_id'] = replacementInstitution.name;
+            }
+            accPutBody['workplace_approval_note'] = remappedTag;
+
+            await http.put(accGetUrl, headers: _headers, body: jsonEncode(accPutBody));
+          }
+        } catch (e) {
+          AppLogger.e('ApiService', 'Error updating account $accName: $e');
+        }
+      }
+
+      // Update in-memory accounts
+      for (int i = 0; i < _cachedHcpAccounts.length; i++) {
+        final acc = _cachedHcpAccounts[i];
+        final bool hasMatch = (acc.workplaceId != null && (acc.workplaceId == oldId || acc.workplaceId == oldName)) ||
+            acc.workplaces.any((w) => w.hcpWorkplace == oldId || w.hcpWorkplace == oldName);
+        if (hasMatch) {
+          final updatedWps = acc.workplaces.map((w) {
+            if (w.hcpWorkplace == oldId || w.hcpWorkplace == oldName) {
+              return HcpAccountWorkplace(
+                hcpWorkplace: replacementInstitution.name,
+                address: replacementInstitution.institutionName,
+                cityMunicipality: replacementInstitution.cityMunicipality,
+                provinceName: replacementInstitution.provinceName,
+                isPrimary: w.isPrimary,
+                preferred: w.preferred,
+              );
+            }
+            return w;
+          }).toList();
+          _cachedHcpAccounts[i] = acc.copyWith(
+            workplaceId: (acc.workplaceId == oldId || acc.workplaceId == oldName)
+                ? replacementInstitution.name
+                : acc.workplaceId,
+            workplaces: updatedWps,
+            workplaceApprovalNote: remappedTag,
+          );
+        }
+      }
+
+      // 6. Persist local cache files
+      await _writeToCache('institutions_cache.json', jsonEncode(_cachedInstitutions.map((e) => e.toJson()).toList()));
+      if (_cachedDoctors.isNotEmpty) {
+        await _writeToCache('hcp_cache.json', jsonEncode(_cachedDoctors.map((e) => e.toJson()).toList()));
+      }
+      if (_cachedHcpAccounts.isNotEmpty) {
+        await _writeToCache('hcp_accounts_cache.json', jsonEncode(_cachedHcpAccounts.map((e) => e.toJson()).toList()));
+      }
+      if (_cachedSubmissions.isNotEmpty) {
+        await _writeToCache('submissions_cache.json', jsonEncode(_cachedSubmissions.map((e) => e.toJson()).toList()));
+      }
+
+      // 7. Notify MedRep of Remapping
       NotificationService.showInstitutionRemappedNotification(
         oldInstitutionName: oldName,
         newInstitutionName: replacementInstitution.institutionName,
@@ -2530,7 +2721,8 @@ class ApiService extends ChangeNotifier {
       ).catchError((e) => AppLogger.e('ApiService', 'Notification dispatch failed: $e'));
 
       notifyListeners();
-      AppLogger.i('ApiService', 'Successfully remapped rejected institution $oldName to ${replacementInstitution.institutionName}');
+      fetchInstitutions().catchError((_) => <Institution>[]);
+      AppLogger.i('ApiService', 'Successfully remapped rejected institution $oldName ($oldId) to ${replacementInstitution.institutionName}');
       return true;
     } catch (e, st) {
       AppLogger.e('ApiService', 'remapRejectedInstitution error: $e', e, st);

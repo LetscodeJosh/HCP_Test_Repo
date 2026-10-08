@@ -1096,7 +1096,7 @@ class _SfeInstitutionDashboardScreenState extends State<SfeInstitutionDashboardS
                                   final matches = LocationResolver.searchDirectoryWithDuplicateDetection(
                                     text,
                                     allDirectoryInstitutions,
-                                    limit: 6,
+                                    limit: 50,
                                   );
                                   InstitutionSearchResult? dup;
                                   for (var m in matches) {

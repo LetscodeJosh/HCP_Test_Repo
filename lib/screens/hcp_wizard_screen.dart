@@ -9,6 +9,7 @@ import '../models/hcp_account.dart';
 import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../services/api_service.dart';
+import '../services/data_sanitizer.dart';
 import 'hcp_dashboard_screen.dart';
 import 'components/propose_institution_dialog.dart';
 
@@ -184,9 +185,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   void _syncFullName() {
-    final fn = _firstNameController.text.trim();
-    final mn = _middleNameController.text.trim();
-    final ln = _lastNameController.text.trim();
+    final fn = DataSanitizer.cleanTrimProper(_firstNameController.text);
+    final mn = DataSanitizer.cleanTrimProper(_middleNameController.text);
+    final ln = DataSanitizer.cleanTrimProper(_lastNameController.text);
     final parts = [
       if (fn.isNotEmpty) fn,
       if (mn.isNotEmpty && mn != '-') mn,
@@ -3999,6 +4000,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _firstNameController,
+                      textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
                       onChanged: (_) => _syncFullName(),
                       decoration: InputDecoration(
@@ -4017,6 +4019,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _middleNameController,
+                      textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
                       onChanged: (_) => _syncFullName(),
                       decoration: InputDecoration(
@@ -4039,6 +4042,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _lastNameController,
+                      textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
                       onChanged: (_) => _syncFullName(),
                       decoration: InputDecoration(
@@ -4121,6 +4125,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _firstNameController,
+                      textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
                       onChanged: (_) => _syncFullName(),
                       decoration: InputDecoration(
@@ -4137,6 +4142,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _middleNameController,
+                      textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
                       onChanged: (_) => _syncFullName(),
                       decoration: InputDecoration(
@@ -4153,6 +4159,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _lastNameController,
+                      textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
                       onChanged: (_) => _syncFullName(),
                       decoration: InputDecoration(

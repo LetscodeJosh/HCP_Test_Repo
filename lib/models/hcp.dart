@@ -200,15 +200,21 @@ class Hcp {
   }
 
   Map<String, dynamic> toJson() {
+    final cFn = DataSanitizer.cleanTrimProper(firstName);
+    final cMn = (middleName != null && middleName!.trim().isNotEmpty && middleName!.trim() != '-')
+        ? DataSanitizer.cleanTrimProper(middleName)
+        : null;
+    final cLn = DataSanitizer.cleanTrimProper(lastName);
+
     final computedParts = [
-      if (firstName.trim().isNotEmpty) firstName.trim(),
-      if (middleName != null && middleName!.trim().isNotEmpty && middleName!.trim() != '-') middleName!.trim(),
-      if (lastName.trim().isNotEmpty) lastName.trim(),
+      if (cFn.isNotEmpty) cFn,
+      if (cMn != null && cMn.isNotEmpty) cMn,
+      if (cLn.isNotEmpty) cLn,
     ].join(' ');
 
     final computedFullName = (hcpFullName != null && hcpFullName!.trim().isNotEmpty && !hcpFullName!.trim().startsWith('HCP-'))
-        ? hcpFullName!.trim()
-        : (computedParts.isNotEmpty ? computedParts : '${firstName.trim()} ${lastName.trim()}'.trim());
+        ? DataSanitizer.cleanTrimProper(hcpFullName)
+        : (computedParts.isNotEmpty ? computedParts : '$cFn $cLn'.trim());
 
     HcpWorkplace? primaryWp;
     if (workplaces.isNotEmpty) {
@@ -237,9 +243,9 @@ class Hcp {
 
     return DataSanitizer.sanitizePayload({
       if (name != null) 'name': name,
-      'first_name': firstName.trim(),
-      if (middleName != null && middleName!.trim().isNotEmpty) 'middle_name': middleName!.trim(),
-      'last_name': lastName.trim(),
+      'first_name': cFn,
+      if (cMn != null && cMn.isNotEmpty) 'middle_name': cMn,
+      'last_name': cLn,
       'hcp_full_name': computedFullName,
       'full_name': computedFullName,
       'doctor_name': computedFullName,

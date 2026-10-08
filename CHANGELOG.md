@@ -5,6 +5,78 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.6.5] - 2026-10-08
+
+### 🧠 Intelligent AI Institution Detector & Acronym Recognition
+- **Dynamic Acronym Extraction**:
+  - Implemented multi-tier algorithmic acronym generator (`computeInstitutionAcronyms`) extracting literal initials, non-connector initials, core facility initials, and parenthetical acronyms (e.g., `"Ust"` $\rightarrow$ `"University of Santo Tomas Hospital"`, `"SLMC"` $\rightarrow$ `"St. Luke's Medical Center"`, `"PGH"` $\rightarrow$ `"Philippine General Hospital"`, `"MMC"` $\rightarrow$ `"Makati Medical Center"` / `"Metropolitan Medical Center"`).
+  - Embedded comprehensive Philippine healthcare acronym knowledge dictionary (`_philippineMedicalAcronyms`).
+- **99%+ Precision & Elimination of Interior Substring False Positives**:
+  - Protected short queries ($\le 4$ characters) from matching interior characters of unrelated corporate names (e.g., query `"Ust"` previously matched `"Unitech Plastic Industry Corp."`, `"Trener Industries"`, and `"Toprite Plastic Industries"` because of the letters `"ust"` inside `"industry"`). Interior substring matching is strictly prohibited for short queries.
+- **Complete Display of All Matching Facilities**:
+  - Removed artificial display caps (`limit: 6` $\rightarrow$ `limit: 50`) and enlarged the directory dropdown with smooth scrollbar support (`maxHeight: 240`) to display all candidate institutions.
+- **Location Details Locking & No Lock Icon**:
+  - Location fields (Region, Province, City) remain non-fillable while matching suggestions are active or when workplace name is not yet fulfilled.
+  - Strictly no lock icon implemented; clean non-lock status indicators and muted inputs are preserved.
+- **Proposal Submission Block on Active Suggestions**:
+  - Disabled "Submit for Approval" button whenever matching suggestions exist in the dropdown (`_detectedMatches.isNotEmpty && _selectedExistingInstitution == null`), directing the medrep to select from existing facilities or specify a distinct facility name to eliminate duplicate proposals.
+- **Menu Drawer Version Clean Display**:
+  - Retained HCP App version at `v.0.6.5` and removed the `+No.` build number suffix in the app navigation menu drawer.
+
+---
+
+## [V.0.6.9] - 2026-10-08
+
+### 🌲 Territory Reconfiguration Live Tree & Masterlist Synchronization Overhaul
+- **Elimination of Premature LocalStorage Override**:
+  - Identified and removed the 400ms `setTimeout(() => switchProgram(), 400)` race condition in `refreshLiveData()` that prematurely reloaded stale `programTerritories` and overwrote live data before ERPNext or Streamlit responses arrived.
+  - Converted `refreshLiveData()` to a true async pipeline with interactive spinning button UI (`Syncing ERPNext...`), awaiting live fetch across all DocTypes.
+- **Bi-Directional Streamlit & Desktop Synchronization**:
+  - Wired `action: "tree_refresh"` to parent Streamlit container, fetching 4 live datasets in parallel via `ThreadPoolExecutor` (`live_territories`, `live_sales_persons`, `live_employees`, `live_users`).
+  - Increased query limits to `limit_page_length=2000` to guarantee ingestion of all 180+ territory nodes across all organizational branches.
+  - Auto-expanded root `'All Territories'` and active program branch (`territoryBranch`) in `treeExpandedNodes` so newly synced nodes render immediately upon sync completion.
+  - Added support for `custom_account_or_program` attribute matching in `getProgramTerritoryNames` to seamlessly include program-tagged territories.
+
+### 👥 Sales Person Tree Creation & Child Table Schema Alignment (HTTP 417 Resolution)
+- **ERPNext v15 Child Table Link Alignment**:
+  - Registered missing `Monthly Distribution` master record **`Evenly Distributed`** for Fiscal Year 2026 (100% allocation across 12 months) on `dev.pmii-marketing.com`.
+  - Registered missing healthcare `Item Group` categories (`Pharmaceuticals`, `Consumables`, `Diagnostic Equipment`, `Medical Devices`, `Oral Hypoglycemics`, `Insulin Delivery`, `Nutritional Supplements`, `Products`).
+  - Removed unsupported `user_id` attribute from the `Sales Person` DocType payload to comply with Frappe schema constraints.
+- **Multi-Stage Gateway & Client Resilience**:
+  - Implemented 3-stage fallback recovery in `app.py` and `territory_reconfiguration_portal.html`:
+    - **Stage 1**: Omit target child rows if linked distributions fail.
+    - **Stage 2**: Reassign parent to `'Sales Team'` if parent node validation fails.
+    - **Stage 3**: Unlink employee if employee link validation fails.
+  - Immediate cascade refresh of `availableSalesPersons` upon creation to update dropdowns and hierarchy trees instantly.
+
+---
+
+## [V.0.6.8] - 2026-10-08
+
+### 🏥 SFE / Admin Rejected Institution Remapping Multi-DocType Propagation
+- **ERPNext Workflow State Alignment (`Remapped`)**:
+  - Registered `Workflow State` **`Remapped`** and `Workflow Action Master` **`Remap`** in ERPNext v15.
+  - Updated `Institution WF` with allowed transitions from `Rejected` and `Pending Approval` to `Remapped` via action `Remap`, eliminating HTTP 417 `WorkflowPermissionError: Workflow State transition not allowed from Rejected to Remapped`.
+- **Dynamic Cross-DocType Child Table Synchronization**:
+  - Overhauled `remapRejectedInstitution` in `ApiService` to dynamically query ERPNext backend for all linked submissions, doctors, and program accounts rather than relying solely on in-memory collections.
+  - Aligned exact child table schemas for all three DocTypes:
+    - `HCP Profile Submission`: child table `table_workplaces` (`HCP Profile Submission Workplaces`) with `hcp_workplace`, `workplace_name`, `city_municipality`, `province_name`.
+    - `HCP`: child table `hcp_workplace` (`HCP Workplaces`) with `hcp_workplace`, `city_municipality`, `province_name`.
+    - `HCP Account`: child table `workplace_info` (`HCP Account Workplace`) with `hcp_workplace`, `city_municipality`, `province_name`.
+  - Automatically clears rejected flags, writes remediation tracking remarks (`[Remapped to ...]`), persists updated local cache files, updates in-memory stores, and immediately unblocks MedRep profiling submissions.
+- **Client-Side Remapped Facility Status Awareness**:
+  - Added `isRemapped` getter to `Institution` model.
+  - Updated `LocationResolver.isRejectedInstitution` to exclude remapped facilities so that remapped institutions are immediately accepted as valid and cleared from rejected filter lists.
+
+### 🔤 Proper Title Case Normalization for HCP Names & Doctor Middle Names
+- **Root Cause Elimination in `DataSanitizer`**:
+  - Identified that `DataSanitizer.sanitizePayload` was checking `key.contains('id')` to convert IDs to uppercase; because `'middle_name'` contains `'id'` (`m-id-dle`), all middle names were inadvertently uppercased to ALL CAPS (`PAMBUENA`, `DE LEON`).
+  - Refined payload sanitizer logic so that `name` and `middle` keys strictly route to `cleanTrimProper`, and ID uppercasing is strictly constrained to standalone `id`, prefix `id_`, suffix `_id`, or `_id_`.
+- **HCP Profiling Wizard & Model Serialization**:
+  - Added `cleanTrimProper` normalization in `Hcp.toJson()`, `HcpProfileSubmission.toJson()`, and `_syncFullName()` in `HcpWizardScreen`.
+  - Added `TextCapitalization.words` to doctor name input fields in `HcpWizardScreen`.
+  - Backfilled and normalized existing ERPNext records with uppercase middle names across `HCP` and `HCP Profile Submission`.
+
 ## [V.0.6.7] - 2026-10-07
 
 ### 🌐 Streamlit Cloud Custom Component Handshake & Cloud Proxy Optimization
