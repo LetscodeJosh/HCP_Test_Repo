@@ -718,6 +718,110 @@ void main() {
     expect(pendingInst.canResubmit, isFalse);
     expect(pendingInst.isPendingApproval, isTrue);
   });
+
+  test('Test 3-Program Rejected Institution Lifecycle (Abbott Diabetes Care, Bayer, RiteMed)', () {
+    // -------------------------------------------------------------
+    // PROGRAM 1: Abbott Diabetes Care (ADC) — Smart Detector Resubmit
+    // -------------------------------------------------------------
+    final adcInstInitial = Institution(
+      name: 'INST-ADC-001',
+      institutionName: 'St. Lukes Hospital BGC',
+      workflowState: 'Pending Approval',
+      resubmissionCount: 0,
+    );
+    expect(adcInstInitial.isPendingApproval, isTrue);
+    expect(adcInstInitial.canResubmit, isFalse); // Locked while pending
+
+    final adcInstRejected = adcInstInitial.copyWith(
+      workflowState: 'Rejected',
+      rejectionReason: 'Duplicate facility. Use official name: St. Lukes Medical Center - Global City',
+    );
+    expect(adcInstRejected.isRejected, isTrue);
+    expect(adcInstRejected.canResubmit, isTrue); // Unlocked for resubmission (Attempt 1/2)
+    expect(adcInstRejected.requiresSfeSpecialistCall, isFalse);
+
+    // MedRep triggers Smart Detector and resubmits
+    final adcInstResubmitted = adcInstRejected.copyWith(
+      institutionName: "St. Luke's Medical Center - Global City",
+      workflowState: 'Approved',
+      resubmissionCount: 1,
+    );
+    expect(adcInstResubmitted.isApproved, isTrue);
+    expect(adcInstResubmitted.canResubmit, isFalse);
+
+    // -------------------------------------------------------------
+    // PROGRAM 2: Bayer Pharmaceuticals — Two-Strike Archive Ceiling
+    // -------------------------------------------------------------
+    final bayerInstAttempt1 = Institution(
+      name: 'INST-BAYER-001',
+      institutionName: 'Makati Heart Diagnostic',
+      institutionType: 'Clinic',
+      serviceCapability: 'Level 3 Tertiary', // Invalid capability
+      workflowState: 'Rejected',
+      rejectionReason: 'Outpatient clinics cannot have Level 3 Tertiary capability',
+      resubmissionCount: 0,
+    );
+    expect(bayerInstAttempt1.canResubmit, isTrue);
+
+    // MedRep attempts revision 1 but fails validation
+    final bayerInstAttempt2 = bayerInstAttempt1.copyWith(
+      resubmissionCount: 1,
+      workflowState: 'Rejected',
+      rejectionReason: 'Capability still invalid for clinic classification',
+    );
+    expect(bayerInstAttempt2.canResubmit, isTrue);
+
+    // Second revision rejected -> hits 2/2 ceiling -> locked into permanent archive (zero deletion)
+    final bayerInstArchived = bayerInstAttempt2.copyWith(
+      resubmissionCount: 2,
+      workflowState: 'Rejected',
+    );
+    expect(bayerInstArchived.canResubmit, isFalse); // Locked!
+    expect(bayerInstArchived.requiresSfeSpecialistCall, isTrue); // Prompts SFE phone contact
+
+    // -------------------------------------------------------------
+    // PROGRAM 3: RiteMed — Canonical Masterlist Remapping by SFE
+    // -------------------------------------------------------------
+    final ritemedPendingInst = Institution(
+      name: 'INST-RITEMED-RAW-001',
+      institutionName: 'PGH OPD Manila', // Flawed acronym proposal
+      workflowState: 'Pending Approval',
+      resubmissionCount: 0,
+    );
+
+    // Doctor profiled under RiteMed program
+    final ritemedDoctorAccount = HcpAccount(
+      name: 'HCP-ACC-RITEMED-101',
+      hcp: 'HCP-DR-CRUZ',
+      accountName: 'RiteMed',
+      territory: 'RITEMED-MNL-01',
+      workplaceId: ritemedPendingInst.name,
+    );
+    expect(ritemedDoctorAccount.getEffectiveWorkplaceApprovalNote([ritemedPendingInst]), 'this institution is not yet approved');
+
+    // Canonical DOH-accredited master institution
+    final canonicalDohHospital = Institution(
+      name: 'INST-DOH-PGH',
+      institutionName: 'Philippine General Hospital',
+      workflowState: 'Approved',
+    );
+
+    // SFE remaps RiteMed doctor account directly to canonical DOH hospital
+    final remappedDoctorAccount = ritemedDoctorAccount.copyWith(
+      workplaceId: canonicalDohHospital.name,
+    );
+    expect(remappedDoctorAccount.workplaceId, equals('INST-DOH-PGH'));
+    expect(remappedDoctorAccount.getEffectiveWorkplaceApprovalNote([canonicalDohHospital]), 'this institution is now approved');
+
+    // Flawed proposal is archived/rejected, NOT recycled into masterlist
+    final archivedRawInst = ritemedPendingInst.copyWith(
+      workflowState: 'Rejected',
+      rejectionReason: 'Remapped by SFE to Philippine General Hospital (INST-DOH-PGH)',
+      resubmissionCount: 2, // Prohibits further resubmission
+    );
+    expect(archivedRawInst.isRejected, isTrue);
+    expect(archivedRawInst.canResubmit, isFalse); // Never recycled
+  });
 }
 
 
