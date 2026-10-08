@@ -2,10 +2,19 @@
 
 **Build Date**: October 8, 2026  
 **Version**: `v.0.6.5`  
-**APK SHA-256**: `a74ea8a3d4067056637b565a448408f6d2f3c306e93eb5ec9c1f6b15e4f4d2f0`  
+**APK SHA-256**: `e290dbbcb4b5f8aaf8bc063f7bb1a44a1884852a4c3f1b68f8c90eb6cb04d26a`  
 **File Size**: `58.94 MB`
 
 ---
+
+### 🏛️ ERPNext Rejection Reflection & 1:1 Audit Parity
+- **Full Rejection Reflection Across ERPNext (`ERPN`)**:
+  - Rejection messages and reasons now reflect seamlessly across `HCP Profile Submission`, `HCP Account`, and `HCP` doctypes on ERPNext with identical wording as the HCP App (`[REJECTED INSTITUTION: <reason>]`).
+  - Added custom fields `rejection_reason` and `workplace_approval_note` to `HCP Account` and `HCP` doctypes.
+  - Deployed dynamic Client Scripts (`HCP Profile Submission-Client`, `HCP Account-Client`, `HCP-Client`, `Institution-Client`) that automatically highlight rejected entities with prominent red warning banners and descriptive notes.
+  - Deployed custom List View indicators (`HCP-List`, `HCP Account-List`, `HCP Profile Submission-List`, `Institution-List`) that render red indicator tags and badges directly in list view tables for 1-click audit verification.
+- **Active Rejected Institutions in HCP Profiling (ERPN Version)**:
+  - Rejected institutions (such as `INST-08005` - *Yamete Hospital*) remain fully active and visible across ERPNext and mobile profiling. They are never suppressed, hidden, or deleted, allowing SFE Specialists and managers to track, audit, and remap doctor affiliations smoothly.
 
 ### 🧠 Smart Detector & Resubmission Governance
 - **Smart Detector Active on Resubmit**:

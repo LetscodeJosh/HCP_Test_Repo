@@ -3,8 +3,8 @@
   "build_number": 42,
   "release_date": "October 8, 2026",
   "apk_filename": "HCP_Profiling_v.0.6.5.apk",
-  "apk_size_bytes": 61804230,
-  "sha256": "a74ea8a3d4067056637b565a448408f6d2f3c306e93eb5ec9c1f6b15e4f4d2f0",
+  "apk_size_bytes": 61804226,
+  "sha256": "e290dbbcb4b5f8aaf8bc063f7bb1a44a1884852a4c3f1b68f8c90eb6cb04d26a",
   "features": [
     "Smart Detector Active on Resubmit (debounced live acronym & duplicate detection on MedRep modification; SFE free from restriction)",
     "Human-Readable Location Display on Resubmission (automatic PSGC code-to-name resolution for Region, Province, and City)",
@@ -12,6 +12,7 @@
     "Two-Strike Resubmission Ceiling & Permanent Archive (max 2 resubmission attempts before permanent archive with zero deletion)",
     "SFE Direct Remapping Authority (rebinds doctor profiles directly to canonical DOH-accredited facilities without recycling typos)",
     "Multi-Tier Notification Architecture (Homescreen & Lockscreen public priority heads-up push with 5-channel fail-safe matrix)",
-    "App menu drawer retains version cleanly at v.0.6.5 without build number (+No.) suffix"
+    "App menu drawer retains version cleanly at v.0.6.5 without build number (+No.) suffix",
+    "Full ERPNext Rejection Message & Active Rejected Institution Reflection (Synchronized across HCP Profile Submission, HCP Account, HCP, and Institution List/Form Views)"
   ]
 }

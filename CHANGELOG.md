@@ -22,6 +22,11 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   - Disabled "Submit for Approval" button whenever matching suggestions exist in the dropdown (`_detectedMatches.isNotEmpty && _selectedExistingInstitution == null`), directing the medrep to select from existing facilities or specify a distinct facility name to eliminate duplicate proposals.
 - **Menu Drawer Version Clean Display**:
   - Retained HCP App version at `v.0.6.5` and removed the `+No.` build number suffix in the app navigation menu drawer.
+- **ERPNext Rejection Reflection & 1:1 Audit Parity**:
+  - Full bidirectional reflection of rejection messages and notes across `HCP Profile Submission`, `HCP Account`, and `HCP` doctypes on ERPNext (`[REJECTED INSTITUTION: <reason>]`).
+  - Added custom fields `rejection_reason` and `workplace_approval_note` across `HCP Account` and `HCP` DocTypes on live ERPNext.
+  - Deployed dynamic Client Scripts (`HCP Profile Submission-Client`, `HCP Account-Client`, `HCP-Client`, `Institution-Client`) and custom List View indicators (`HCP-List`, `HCP Account-List`, `HCP Profile Submission-List`, `Institution-List`) displaying prominent red status tags and badges.
+  - Active Rejected Institutions in HCP Profiling (ERPN version): Rejected institutions remain active, visible, and fully trackable with zero deletion, facilitating continuous audit and 1-click SFE remapping.
 
 ---
 

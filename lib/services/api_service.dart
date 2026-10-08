@@ -2266,7 +2266,10 @@ class ApiService extends ChangeNotifier {
               http.put(
                 Uri.parse('$baseUrl/api/resource/HCP%20Account/${Uri.encodeComponent(acc.name!)}'),
                 headers: _headers,
-                body: jsonEncode({'workplace_approval_note': rejectionTag}),
+                body: jsonEncode({
+                  'workplace_approval_note': rejectionTag,
+                  'rejection_reason': cleanReason,
+                }),
               ).catchError((_) => http.Response('', 500));
             }
           }
@@ -2293,6 +2296,7 @@ class ApiService extends ChangeNotifier {
                 Uri.parse('$baseUrl/api/resource/HCP%20Profile%20Submission/${Uri.encodeComponent(sub.name!)}'),
                 headers: _headers,
                 body: jsonEncode({
+                  'rejection_reason': rejectionTag,
                   'rejection_remarks': rejectionTag,
                   'table_workplaces': updatedWps.map((w) => w.toJson()).toList(),
                 }),
@@ -2310,7 +2314,10 @@ class ApiService extends ChangeNotifier {
             http.put(
               Uri.parse('$baseUrl/api/resource/HCP/${Uri.encodeComponent(doc.name!)}'),
               headers: _headers,
-              body: jsonEncode({'rejection_reason': cleanReason}),
+              body: jsonEncode({
+                'workplace_approval_note': rejectionTag,
+                'rejection_reason': cleanReason,
+              }),
             ).catchError((_) => http.Response('', 500));
           }
         }
@@ -2483,6 +2490,7 @@ class ApiService extends ChangeNotifier {
               subPutBody['institution'] = replacementInstitution.name;
             }
             subPutBody['rejection_remarks'] = remappedTag;
+            subPutBody['rejection_reason'] = '';
 
             await http.put(subGetUrl, headers: _headers, body: jsonEncode(subPutBody));
           }
@@ -2576,6 +2584,7 @@ class ApiService extends ChangeNotifier {
               docPutBody['institution'] = replacementInstitution.name;
             }
             docPutBody['rejection_reason'] = '';
+            docPutBody['workplace_approval_note'] = remappedTag;
 
             await http.put(docGetUrl, headers: _headers, body: jsonEncode(docPutBody));
           }
@@ -2664,6 +2673,7 @@ class ApiService extends ChangeNotifier {
               accPutBody['workplace_id'] = replacementInstitution.name;
             }
             accPutBody['workplace_approval_note'] = remappedTag;
+            accPutBody['rejection_reason'] = '';
 
             await http.put(accGetUrl, headers: _headers, body: jsonEncode(accPutBody));
           }
