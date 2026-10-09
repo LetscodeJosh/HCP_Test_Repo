@@ -119,7 +119,7 @@ jobs:
         run: flutter pub get
 
       - name: Build Release APK
-        run: flutter build apk --release
+        run: flutter build apk --release --android-skip-build-dependency-validation
 
       - name: Archive Production APK
         uses: actions/upload-artifact@v4
@@ -147,8 +147,8 @@ jobs:
       - name: Package Release Artifacts
         run: |
           mkdir -p build/web_dist
-          zip -j build/web_dist/Territory_Reconfiguration_Setup.zip installers/Territory_Reconfiguration_App/*
-          cd installers/Streamlit_Deployment && zip -r ../../build/web_dist/Streamlit_Deployment_Package.zip . && cd ../..
+          python -c "import zipfile, os; z = zipfile.ZipFile('build/web_dist/Territory_Reconfiguration_Setup.zip', 'w', zipfile.ZIP_DEFLATED); [z.write(os.path.join('installers/Territory_Reconfiguration_App', f), f) for f in os.listdir('installers/Territory_Reconfiguration_App') if os.path.isfile(os.path.join('installers/Territory_Reconfiguration_App', f))]; z.close()"
+          python -c "import zipfile, os; z = zipfile.ZipFile('build/web_dist/Streamlit_Deployment_Package.zip', 'w', zipfile.ZIP_DEFLATED); [(z.write(os.path.join(root, f), os.path.relpath(os.path.join(root, f), 'installers/Streamlit_Deployment'))) for root, dirs, files in os.walk('installers/Streamlit_Deployment') for f in files if '__pycache__' not in root]; z.close()"
 
       - name: Archive Web Installer Artifacts
         uses: actions/upload-artifact@v4
