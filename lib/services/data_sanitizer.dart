@@ -13,10 +13,9 @@ class DataSanitizer {
     'PSGC', 'R&D', 'HQ'
   };
 
-  // Minor connecting words in names and locations to keep lowercase unless at start
+  // Minor connecting words in locations and facilities to keep lowercase unless at start
   static final Set<String> _lowercaseConnectors = {
-    'of', 'the', 'in', 'on', 'at', 'to', 'for', 'and', 'de', 'del', 'dela',
-    'da', 'dos', 'van', 'von'
+    'of', 'the', 'in', 'on', 'at', 'to', 'for', 'and'
   };
 
   /// Cleans a string of control characters, invisible whitespace, and collapses multiple spaces.

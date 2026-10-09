@@ -3,9 +3,10 @@
   "build_number": 42,
   "release_date": "October 8, 2026",
   "apk_filename": "HCP_Profiling_v.0.6.5.apk",
-  "apk_size_bytes": 61804226,
-  "sha256": "e290dbbcb4b5f8aaf8bc063f7bb1a44a1884852a4c3f1b68f8c90eb6cb04d26a",
+  "apk_size_bytes": 61804333,
+  "sha256": "94535f9010c8ad2ccbdfd9a391d1f902c2e1b358bc92bbc0c9afa3b5a952f490",
   "features": [
+    "Strict Title Casing Sanitizer: Enforces uppercase initial letters on every doctor name word across mobile app and ERPNext",
     "Smart Detector Active on Resubmit (debounced live acronym & duplicate detection on MedRep modification; SFE free from restriction)",
     "Human-Readable Location Display on Resubmission (automatic PSGC code-to-name resolution for Region, Province, and City)",
     "Immediate Read-Only Submission Lock (proposals locked while pending review; editable only when rejected)",

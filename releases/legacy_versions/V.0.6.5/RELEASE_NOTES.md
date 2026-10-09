@@ -2,10 +2,16 @@
 
 **Build Date**: October 8, 2026  
 **Version**: `v.0.6.5`  
-**APK SHA-256**: `e290dbbcb4b5f8aaf8bc063f7bb1a44a1884852a4c3f1b68f8c90eb6cb04d26a`  
+**APK SHA-256**: `94535f9010c8ad2ccbdfd9a391d1f902c2e1b358bc92bbc0c9afa3b5a952f490`  
 **File Size**: `58.94 MB`
 
 ---
+
+### 🔤 Doctor Name Title Casing & Sanitizer Parity
+- **Strict Uppercase Initial Letter for Every Word**:
+  - Eliminated automatic lowercasing of Philippine surname particles (`Dela`, `De`, `Del`, `Da`, `Dos`) in `DataSanitizer.cleanTrimProper()`.
+  - Every word in doctor names (first name, middle name, last name, full name) across both the mobile application and ERPNext is strictly capitalized (`John Anthony Dela Luna`, `Pantalone Yan De Luna`, `Gabriel Antonio De Leon Cruz`).
+  - Scanned and harmonized all existing records in ERPNext (`HCP`, `HCP Account`, and `HCP Profile Submission`) to ensure 100% compliance.
 
 ### 🏛️ ERPNext Rejection Reflection & 1:1 Audit Parity
 - **Full Rejection Reflection Across ERPNext (`ERPN`)**:

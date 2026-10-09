@@ -19,7 +19,7 @@ void main() {
     });
 
     test('3. Proper Case: Capitalizes names and respects minor connectors', () {
-      expect(DataSanitizer.properCase('juan dela cruz'), 'Juan dela Cruz');
+      expect(DataSanitizer.properCase('juan dela cruz'), 'Juan Dela Cruz');
       expect(DataSanitizer.properCase('DR. MARIA SANTOS-REYES'), 'Dr. Maria Santos-Reyes');
       expect(DataSanitizer.properCase('CARDINAL SANTOS MEDICAL CENTER'), 'Cardinal Santos Medical Center');
       expect(DataSanitizer.properCase('our lady of lourdes hospital'), 'Our Lady of Lourdes Hospital');
@@ -27,7 +27,7 @@ void main() {
     });
 
     test('4. Proper Case: Preserves critical medical acronyms and Roman numerals', () {
-      expect(DataSanitizer.properCase('DR. JUAN DELA CRUZ, MD'), 'Dr. Juan dela Cruz, MD');
+      expect(DataSanitizer.properCase('DR. JUAN DELA CRUZ, MD'), 'Dr. Juan Dela Cruz, MD');
       expect(DataSanitizer.properCase('ob-gyn clinic'), 'OB-GYN Clinic');
       expect(DataSanitizer.properCase('st. luke\'s medical center bgc'), 'St. Luke\'s Medical Center BGC');
       expect(DataSanitizer.properCase('philippine general hospital pgh'), 'Philippine General Hospital PGH');
