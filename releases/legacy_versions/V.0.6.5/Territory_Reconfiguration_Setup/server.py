@@ -11,6 +11,25 @@ import threading
 import webbrowser
 import socket
 import time
+import secrets
+
+try:
+    from secure_frappe_gateway import (
+        GLOBAL_SESSION_REGISTRY,
+        VibeSecAuthorizer,
+        ResourceRequestSchema,
+        SecurityValidationError,
+        sanitize_log_message
+    )
+except ImportError:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from secure_frappe_gateway import (
+        GLOBAL_SESSION_REGISTRY,
+        VibeSecAuthorizer,
+        ResourceRequestSchema,
+        SecurityValidationError,
+        sanitize_log_message
+    )
 
 # Ensure standard streams exist when run under pythonw (GUI background mode)
 if sys.stdout is None:
@@ -176,6 +195,65 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
 
     def proxy_erpnext_request(self, method):
         parsed = urllib.parse.urlparse(self.path)
+        path_parts = [p for p in parsed.path.strip("/").split("/") if p]
+
+        doctype = ""
+        docname = None
+        if len(path_parts) >= 2 and path_parts[0] == "api" and path_parts[1] == "resource":
+            doctype = urllib.parse.unquote(path_parts[2]) if len(path_parts) >= 3 else ""
+            docname = urllib.parse.unquote(path_parts[3]) if len(path_parts) >= 4 else None
+        elif len(path_parts) >= 2 and path_parts[0] == "api" and path_parts[1] == "method":
+            doctype = "RPC_METHOD"
+            docname = path_parts[2] if len(path_parts) >= 3 else None
+
+        # 1. Server-Side Session Validation & Anti-BOLA/IDOR Check
+        headers_dict = {k: v for k, v in self.headers.items()}
+        cookie_str = self.headers.get("Cookie", "")
+        token = VibeSecAuthorizer.extract_token_from_request(headers_dict, cookie_str)
+        session = GLOBAL_SESSION_REGISTRY.get(token)
+
+        auth_decision = VibeSecAuthorizer.evaluate_request(
+            session=session,
+            doctype=doctype,
+            docname=docname,
+            headers=headers_dict,
+            method=method
+        )
+
+        if not auth_decision.allowed:
+            # STOP IMMEDIATELY — RETURN CLEAN 403/401 WITHOUT CALLING ERPNEXT!
+            err_body = json.dumps({
+                "success": False,
+                "error": auth_decision.reason,
+                "code": auth_decision.status_code,
+                "security_alert": "BOLA/IDOR attempt blocked by VibeSec Gateway"
+            }).encode("utf-8")
+            self.send_response(auth_decision.status_code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(err_body)))
+            self.end_headers()
+            self.wfile.write(err_body)
+            return
+
+        # 2. Strict Schema Validation on resource parameters
+        if doctype and doctype != "RPC_METHOD":
+            query_dict = urllib.parse.parse_qs(parsed.query)
+            flat_query = {k: v[0] if len(v) == 1 else v for k, v in query_dict.items()}
+            try:
+                ResourceRequestSchema.from_request(doctype, docname, flat_query)
+            except SecurityValidationError as sve:
+                err_body = json.dumps({
+                    "success": False,
+                    "error": f"Schema Validation Error: {str(sve)}",
+                    "code": 400
+                }).encode("utf-8")
+                self.send_response(400)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(err_body)))
+                self.end_headers()
+                self.wfile.write(err_body)
+                return
+
         target_url = f"{ERPNEXT_SERVER_URL}{parsed.path}"
         if parsed.query:
             target_url += f"?{parsed.query}"
@@ -190,6 +268,10 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
         content_type = self.headers.get('Content-Type')
         if content_type:
             headers['Content-Type'] = content_type
+
+        # Credentials isolation: Inject isolated Frappe API token if set in environment
+        if os.environ.get('FRAPPE_API_KEY') and os.environ.get('FRAPPE_API_SECRET'):
+            headers['Authorization'] = f"token {os.environ.get('FRAPPE_API_KEY')}:{os.environ.get('FRAPPE_API_SECRET')}"
 
         req = urllib.request.Request(target_url, data=req_body, headers=headers, method=method)
         try:
@@ -209,7 +291,7 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(err_body)
         except Exception as e:
-            err_json = json.dumps({'error': str(e), 'target_url': target_url}).encode('utf-8')
+            err_json = json.dumps({'error': sanitize_log_message(str(e)), 'target_url': target_url}).encode('utf-8')
             self.send_response(502)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Content-Length', str(len(err_json)))
@@ -277,8 +359,27 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
                 pwd = data.get('pwd') or data.get('password') or ''
                 result = authenticate_erpnext_user(usr, pwd)
                 status_code = 200 if (result.get('success') and result.get('authorized')) else 401
-                self.send_response(status_code)
-                self.send_header('Content-Type', 'application/json')
+
+                if result.get('success') and result.get('authorized'):
+                    token = secrets.token_urlsafe(32)
+                    u_info = result.get('user', {})
+                    GLOBAL_SESSION_REGISTRY.register(
+                        token=token,
+                        user_email=u_info.get('email', usr),
+                        full_name=u_info.get('full_name', usr),
+                        roles=u_info.get('roles', []),
+                        customer_id=u_info.get('customer_id'),
+                        is_admin=u_info.get('is_admin', False),
+                        is_sfe=u_info.get('is_sfe', False)
+                    )
+                    result['session_token'] = token
+                    self.send_response(status_code)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Set-Cookie', f'sfe_session={token}; Path=/; HttpOnly; SameSite=Lax')
+                else:
+                    self.send_response(status_code)
+                    self.send_header('Content-Type', 'application/json')
+
                 self.end_headers()
                 self.wfile.write(json.dumps(result).encode('utf-8'))
             except Exception as e:
@@ -288,7 +389,7 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({
                     'success': False,
                     'authorized': False,
-                    'message': f'Server authentication error: {str(e)}'
+                    'message': f'Server authentication error: {sanitize_log_message(str(e))}'
                 }).encode('utf-8'))
             return
 
@@ -324,8 +425,9 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
 
 
     def log_message(self, format, *args):
-        # Clean logging
-        sys.stderr.write(f"[{self.log_date_time_string()}] {format % args}\n")
+        # Clean logging with credential sanitization
+        cleaned_msg = sanitize_log_message(format % args)
+        sys.stderr.write(f"[{self.log_date_time_string()}] {cleaned_msg}\n")
 
 def is_port_in_use(port):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
