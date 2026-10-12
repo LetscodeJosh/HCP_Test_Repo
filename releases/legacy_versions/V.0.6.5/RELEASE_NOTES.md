@@ -1,40 +1,40 @@
 # Release Notes - HCP Profiling App v.0.6.5
 
-**Build Date**: October 8, 2026  
+**Build Date**: October 11, 2026  
 **Version**: `v.0.6.5`  
-**APK SHA-256**: `94535f9010c8ad2ccbdfd9a391d1f902c2e1b358bc92bbc0c9afa3b5a952f490`  
-**File Size**: `58.94 MB`
+**APK SHA-256**: `d3155edebd163e888cb7f428cead9f2c678fe5b45892acbe5d4609c21105e4a1`  
+**File Size**: `58.89 MB` (61754884 bytes)
 
 ---
 
-### 🔤 Doctor Name Title Casing & Sanitizer Parity
-- **Strict Uppercase Initial Letter for Every Word**:
-  - Eliminated automatic lowercasing of Philippine surname particles (`Dela`, `De`, `Del`, `Da`, `Dos`) in `DataSanitizer.cleanTrimProper()`.
-  - Every word in doctor names (first name, middle name, last name, full name) across both the mobile application and ERPNext is strictly capitalized (`John Anthony Dela Luna`, `Pantalone Yan De Luna`, `Gabriel Antonio De Leon Cruz`).
-  - Scanned and harmonized all existing records in ERPNext (`HCP`, `HCP Account`, and `HCP Profile Submission`) to ensure 100% compliance.
+### 🏥 Human-Readable Institution Name Export & SFE Audit Tagging
+- **Zero Institution Code Export Guarantee**:
+  - Exported Excel and CSV files from ERPNext across `HCP Profile Submission`, `HCP Account`, and `HCP` doctypes display human-readable institution names (e.g., `Pims Institution`, `Yamete Hospital`, `Unsaman General Hospital`) rather than foreign key codes (`INST-08007`).
+  - Added custom fields and synchronized data models ensuring facility names remain clean and descriptive across all reporting layers.
+- **Permanent Facility Identification in Rejection Notes**:
+  - Rejection note tags permanently retain human-readable facility names paired with specific rejection causes (e.g., `[REJECTED INSTITUTION: Pims Institution - reject]`).
+  - Tagged directly to the submitting MedRep owner email for effortless SFE tracking and analysis.
 
-### 🏛️ ERPNext Rejection Reflection & 1:1 Audit Parity
-- **Full Rejection Reflection Across ERPNext (`ERPN`)**:
-  - Rejection messages and reasons now reflect seamlessly across `HCP Profile Submission`, `HCP Account`, and `HCP` doctypes on ERPNext with identical wording as the HCP App (`[REJECTED INSTITUTION: <reason>]`).
-  - Added custom fields `rejection_reason` and `workplace_approval_note` to `HCP Account` and `HCP` doctypes.
-  - Deployed dynamic Client Scripts (`HCP Profile Submission-Client`, `HCP Account-Client`, `HCP-Client`, `Institution-Client`) that automatically highlight rejected entities with prominent red warning banners and descriptive notes.
-  - Deployed custom List View indicators (`HCP-List`, `HCP Account-List`, `HCP Profile Submission-List`, `Institution-List`) that render red indicator tags and badges directly in list view tables for 1-click audit verification.
-- **Active Rejected Institutions in HCP Profiling (ERPN Version)**:
-  - Rejected institutions (such as `INST-08005` - *Yamete Hospital*) remain fully active and visible across ERPNext and mobile profiling. They are never suppressed, hidden, or deleted, allowing SFE Specialists and managers to track, audit, and remap doctor affiliations smoothly.
+### 📋 Complete List View Column Preservation (Zero Columns Disabled)
+- **100% Active Column Invariant**:
+  - Retained all original list view columns (`Consent`, `Valid From`, `Valid To`, `Type`, `Practice`, `Account/Program`, `Territory`, `Territory Manager`) in active status (`in_list_view: 1`).
+  - Added dedicated `Rejected Institution` column with prominent red badges and tooltip rejection notes without column slicing.
 
-### 🧠 Smart Detector & Resubmission Governance
-- **Smart Detector Active on Resubmit**:
-  - Live debounced (300ms) duplicate and acronym detection is fully activated during MedRep/DSM resubmission dialogs. Renamed cleanly from "AI Smart Detector" to **"Smart Detector"**.
-  - SFE Specialists remain unconstrained as they reference the canonical DOH-accredited hospital/clinic masterlist.
-- **Human-Readable Location Fields**:
-  - Eliminated raw PSGC codes (e.g. `1380600000`, `PRV-1380600000`) in the resubmission dialog. Region, Province, and City fields strictly resolve to human-readable names via `LocationResolver`.
-- **Immediate Submission Lock**:
-  - Institution proposals lock immediately into read-only mode upon submission. Editable only when rejected by SFE.
-- **Two-Strike Resubmission Ceiling & Strict Zero Deletion**:
-  - MedReps/DSMs have up to 2 attempts (`Attempt 1/2` and `Attempt 2/2`) to correct rejected proposals. If still unverified after 2 attempts, editing is permanently disabled and the facility is archived (strictly zero deletion) with guidance to contact SFE directly.
-- **SFE Canonical Remapping Workflow**:
-  - SFE Specialists rebind doctor profiles directly to approved DOH facilities without recycling MedRep typos. The flawed submission is archived/rejected, and doctor profiling is unblocked immediately.
-- **Multi-Tier Push Notification Architecture**:
-  - High-priority public lockscreen and homescreen heads-up alerts with a 5-tier fail-safe matrix ensuring 100% notification reach even if device notifications are turned off.
-- **Menu Drawer Version Clean Display**:
-  - HCP App version is retained at `v.0.6.5` and the `+No.` suffix is removed from the drawer menu navigation.
+### 🔁 Multi-Doctor Rejection Cascade & Autonomous Synchronization
+- **Instant Facility-Wide Rejection Cascading**:
+  - Rejection of an unverified institution immediately marks all linked doctors under that MedRep across `HCP Profile Submission`, `HCP Account`, and `HCP`.
+- **Zero-Loss Batch Remapping**:
+  - Remapping a facility updates all linked doctors in batch and clears rejection flags immediately.
+- **Inviolable Consent Signature Preservation**:
+  - Captured doctor digital signatures (`consent_signature`) are preserved byte-for-byte during remapping.
+
+### 🛡️ Dashboard Streamlining & Unified Administrator Parity
+- **Temporary HCP Dashboard Suppression**:
+  - Removed HCP Dashboard from application navigation drawer and post-login routing pending data finalization. Users and administrators land directly on the unified Doctor Account screen.
+- **Admin Switch Toggle Pruning**:
+  - Removed the "Switch to SFE Portal" / "SFE View Active" toggle for administrators.
+- **Unified 6-Administrator Access Standard**:
+  - Fully standardized access and privileges for all six administrators: `lesantos@pims-marketing.com`, `jptan@profinsights.biz`, `crpineda@pims-marketing.com`, `bsbenitez@profinsights.biz`, `dahuinda@profinsights.biz`, and `ammiole@profinsights.biz`. All 6 administrators share identical functionality, purposes, full masterlist doctor counts, and approval workflows.
+- **Institution Name Resolution in HCP Account Screen**:
+  - Fixed raw code display (`INST-08007`) across HCP Account cards, workplace chips, and doctor detail dialogs. Pre-warms dynamic institution lookup and resolves rejected institutions (e.g., `Pims Institution`) to their human-readable title 100% in sync with ERPNext.
+

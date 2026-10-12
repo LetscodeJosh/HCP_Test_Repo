@@ -53,7 +53,85 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-ERPNEXT_SERVER_URL = os.environ.get("ERPNEXT_URL", "https://dev.pmii-marketing.com")
+def load_dotenv_safely(env_path=".env"):
+    """Safely loads key-value pairs from .env if it exists without third-party dependencies."""
+    if os.path.exists(env_path):
+        try:
+            with open(env_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+        except Exception:
+            pass
+
+# Load local .env if present (ignored by git for security)
+load_dotenv_safely(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
+def get_erpnext_url():
+    """Dynamically resolves ERPNext server endpoint strictly from Streamlit secrets, environment, or .env."""
+    try:
+        if hasattr(st, "secrets") and "ERPNEXT_URL" in st.secrets:
+            val = str(st.secrets["ERPNEXT_URL"]).strip().rstrip("/")
+            if val:
+                return val
+    except Exception:
+        pass
+    env_url = os.environ.get("ERPNEXT_URL") or os.environ.get("ERPNEXT_SERVER_URL")
+    if env_url:
+        return env_url.strip().rstrip("/")
+    return ""
+
+ERPNEXT_SERVER_URL = get_erpnext_url()
+
+def get_server_display_name():
+    """Returns safe display name of the active ERPNext host for user feedback."""
+    if not ERPNEXT_SERVER_URL:
+        return "ERPNext Server"
+    host = urllib.parse.urlparse(ERPNEXT_SERVER_URL).netloc
+    return host if host else "ERPNext Server"
+
+class LoginRateLimiter:
+    """In-memory rate limiter to protect ERPNext authentication against brute force attacks."""
+    def __init__(self, max_attempts: int = 5, window_seconds: int = 60, lockout_seconds: int = 300):
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self.lockout_seconds = lockout_seconds
+        self.attempts = {}
+        self.lockouts = {}
+
+    def is_locked(self, identifier: str):
+        now = time.time()
+        key = identifier.lower().strip()
+        lockout_until = self.lockouts.get(key, 0)
+        if now < lockout_until:
+            return True, int(lockout_until - now)
+        if key in self.lockouts:
+            del self.lockouts[key]
+        return False, 0
+
+    def record_attempt(self, identifier: str, success: bool):
+        now = time.time()
+        key = identifier.lower().strip()
+        if success:
+            self.attempts.pop(key, None)
+            self.lockouts.pop(key, None)
+            return
+
+        recent = [t for t in self.attempts.get(key, []) if now - t < self.window_seconds]
+        recent.append(now)
+        self.attempts[key] = recent
+
+        if len(recent) >= self.max_attempts:
+            self.lockouts[key] = now + self.lockout_seconds
+            self.attempts.pop(key, None)
+
+RATE_LIMITER = LoginRateLimiter()
 
 def safe_str(val, default=""):
     if val is None:
@@ -61,14 +139,15 @@ def safe_str(val, default=""):
     return str(val).strip()
 
 def get_authenticated_opener():
+    if "opener" in st.session_state and st.session_state["opener"]:
+        return st.session_state["opener"]
+
     opener = create_erpnext_opener()
-    creds = [
-        ("lesantos@pims-marketing.com", "pims@admin"),
-        ("jptan@profinsights.biz", "pims@admin"),
-    ]
-    for usr, pwd in creds:
+    svc_user = os.environ.get("PIMS_SERVICE_USER") or (st.secrets.get("PIMS_SERVICE_USER") if hasattr(st, "secrets") and "PIMS_SERVICE_USER" in st.secrets else None)
+    svc_pwd = os.environ.get("PIMS_SERVICE_PASSWORD") or (st.secrets.get("PIMS_SERVICE_PASSWORD") if hasattr(st, "secrets") and "PIMS_SERVICE_PASSWORD" in st.secrets else None)
+    if svc_user and svc_pwd:
         try:
-            login_data = json.dumps({"usr": usr, "pwd": pwd}).encode("utf-8")
+            login_data = json.dumps({"usr": svc_user, "pwd": svc_pwd}).encode("utf-8")
             login_headers = {
                 "Content-Type": "application/json",
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PIMS-Streamlit-Client"
@@ -83,8 +162,8 @@ def get_authenticated_opener():
             if res_data.get("message") == "Logged In":
                 return opener
         except Exception:
-            continue
-    return None
+            pass
+    return opener
 
 def create_erpnext_opener():
     ctx = ssl.create_default_context()
@@ -109,16 +188,18 @@ def verify_erpnext_credentials(usr, pwd):
     usr = usr.strip()
     pwd = pwd.strip()
 
-    # Transparent password alias support for administrators Joshua Tan and Leonniel Santos
-    remote_pwd = pwd
-    admin_emails = ["jptan@profinsights.biz", "lesantos@pims-marketing.com"]
-    known_aliases = ["uepcs101c!", "uepcs101c", "pims@admin", "pimsadmin", "admin", "admin123", "password", "uepcs"]
-    if usr.lower() in admin_emails and pwd.lower() in known_aliases:
-        remote_pwd = "pims@admin"
+    # Rate limiting protection against brute force and credential stuffing
+    is_locked, remaining = RATE_LIMITER.is_locked(usr)
+    if is_locked:
+        return {
+            "success": False,
+            "authorized": False,
+            "message": f"Too many failed login attempts. Security lockout active. Please wait {remaining} seconds before retrying."
+        }, None
 
     opener = create_erpnext_opener()
 
-    login_payload = json.dumps({"usr": usr, "pwd": remote_pwd}).encode("utf-8")
+    login_payload = json.dumps({"usr": usr, "pwd": pwd}).encode("utf-8")
     login_headers = {
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) PIMS-Streamlit-Client"
@@ -134,63 +215,36 @@ def verify_erpnext_credentials(usr, pwd):
         login_res = opener.open(login_req, timeout=8)
         login_data = json.loads(login_res.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        # If 401 on primary attempt and this is an admin account, automatically try pims@admin fallback
-        if e.code == 401 and usr.lower() in admin_emails and remote_pwd != "pims@admin":
-            try:
-                fallback_payload = json.dumps({"usr": usr, "pwd": "pims@admin"}).encode("utf-8")
-                fallback_req = urllib.request.Request(
-                    f"{ERPNEXT_SERVER_URL}/api/method/login",
-                    data=fallback_payload,
-                    headers=login_headers
-                )
-                login_res = opener.open(fallback_req, timeout=8)
-                login_data = json.loads(login_res.read().decode("utf-8"))
-            except Exception:
-                login_data = {}
-        
-        if login_data.get("message") != "Logged In":
-            if e.code == 401:
-                return {
-                    "success": False,
-                    "authorized": False,
-                    "message": "Invalid username or password. Please verify your credentials registered in https://dev.pmii-marketing.com/app/user."
-                }, None
+        if e.code == 401:
+            RATE_LIMITER.record_attempt(usr, success=False)
             return {
                 "success": False,
                 "authorized": False,
-                "message": f"ERPNext authentication error (HTTP {e.code}). Please try again."
+                "message": "Invalid username or password. Please verify your ERPNext credentials or contact your administrator."
             }, None
-    except Exception as e:
-        if usr.lower() in admin_emails:
-            full_name = "Joshua Tan" if "jptan" in usr.lower() else "Leonniel Santos"
-            return {
-                "success": True,
-                "authorized": True,
-                "message": f"Welcome back, {full_name}!",
-                "user": {
-                    "email": usr,
-                    "full_name": full_name,
-                    "role_profile": "Administrator",
-                    "role_title": "Administrator",
-                    "is_admin": True,
-                    "is_sfe": True,
-                    "roles": ["System Manager", "Administrator", "Sales Manager"],
-                    "auth_source": "Enterprise Offline Resilience Engine"
-                }
-            }, opener
         return {
             "success": False,
             "authorized": False,
-            "message": f"Cannot connect to ERPNext ({str(e)}). Please verify your network."
+            "message": f"ERPNext authentication error (HTTP {e.code}). Please try again."
+        }, None
+    except Exception as e:
+        server_host = get_server_display_name()
+        return {
+            "success": False,
+            "authorized": False,
+            "message": f"Unable to establish a secure connection to the authentication server ({server_host}). Please verify network connectivity."
         }, None
 
     if login_data.get("message") != "Logged In":
+        RATE_LIMITER.record_attempt(usr, success=False)
         return {
             "success": False,
             "authorized": False,
             "message": "Authentication failed on ERPNext."
         }, None
 
+    # Reset rate limiting counter upon verified authentication
+    RATE_LIMITER.record_attempt(usr, success=True)
     full_name = login_data.get("full_name") or usr
 
     # Fast-path for Administrator / Admin
@@ -207,7 +261,7 @@ def verify_erpnext_credentials(usr, pwd):
                 "is_admin": True,
                 "is_sfe": False,
                 "roles": ["System Manager", "Administrator"],
-                "auth_source": "ERPNext Live User Masterlist (dev.pmii-marketing.com)"
+                "auth_source": f"ERPNext Live User Masterlist ({get_server_display_name()})"
             }
         }, opener
 
@@ -236,7 +290,7 @@ def verify_erpnext_credentials(usr, pwd):
         return {
             "success": False,
             "authorized": False,
-            "message": f"Access Restricted: User '{usr}' does not have SFE or Administrator roles in https://dev.pmii-marketing.com/app/user."
+            "message": f"Access Restricted: User '{usr}' does not have authorized SFE or Administrator roles. Please contact your system administrator."
         }, None
 
     role_title = "Administrator" if is_admin else "SFE Lead"
@@ -253,7 +307,7 @@ def verify_erpnext_credentials(usr, pwd):
             "is_admin": is_admin,
             "is_sfe": is_sfe,
             "roles": roles,
-            "auth_source": "ERPNext Live User Masterlist (dev.pmii-marketing.com)"
+            "auth_source": f"ERPNext Live User Masterlist ({get_server_display_name()})"
         }
     }, opener
 
@@ -385,7 +439,7 @@ def execute_tree_action(opener, action, payload):
             try:
                 res = opener.open(req, timeout=10)
                 if res.status in [200, 201]:
-                    return "success", f'Territory "{t_name}" created live on dev.pmii-marketing.com!'
+                    return "success", f'Territory "{t_name}" created live on {get_server_display_name()}!'
                 return "warning", f"ERPNext responded with HTTP {res.status}"
             except urllib.error.HTTPError as he:
                 err_text = he.read().decode("utf-8", errors="ignore")
@@ -402,7 +456,7 @@ def execute_tree_action(opener, action, payload):
                     )
                     res = opener.open(req, timeout=10)
                     if res.status in [200, 201]:
-                        return "success", f'Territory "{t_name}" created live on dev.pmii-marketing.com!'
+                        return "success", f'Territory "{t_name}" created live on {get_server_display_name()}!'
                 raise he
 
         elif action == "tree_edit":
@@ -432,7 +486,7 @@ def execute_tree_action(opener, action, payload):
             try:
                 res = opener.open(req, timeout=10)
                 if res.status == 200:
-                    return "success", f'Territory "{orig_name}" updated live on dev.pmii-marketing.com!'
+                    return "success", f'Territory "{orig_name}" updated live on {get_server_display_name()}!'
                 return "warning", f"ERPNext responded with HTTP {res.status}"
             except urllib.error.HTTPError as he:
                 err_text = he.read().decode("utf-8", errors="ignore")
@@ -447,7 +501,7 @@ def execute_tree_action(opener, action, payload):
                     )
                     res = opener.open(req, timeout=10)
                     if res.status == 200:
-                        return "success", f'Territory "{orig_name}" updated live on dev.pmii-marketing.com!'
+                        return "success", f'Territory "{orig_name}" updated live on {get_server_display_name()}!'
                 raise he
 
         elif action == "tree_rename":
@@ -468,7 +522,7 @@ def execute_tree_action(opener, action, payload):
             )
             res = opener.open(req, timeout=10)
             if res.status == 200:
-                return "success", f'Renamed "{old_name}" -> "{new_name}" live on dev.pmii-marketing.com!'
+                return "success", f'Renamed "{old_name}" -> "{new_name}" live on {get_server_display_name()}!'
             return "warning", f"ERPNext responded with HTTP {res.status}"
 
         elif action == "tree_delete":
@@ -482,7 +536,7 @@ def execute_tree_action(opener, action, payload):
             )
             res = opener.open(req, timeout=10)
             if res.status in [200, 202]:
-                return "success", f'Territory "{name}" deleted from dev.pmii-marketing.com!'
+                return "success", f'Territory "{name}" deleted from {get_server_display_name()}!'
             return "warning", f"ERPNext responded with HTTP {res.status}"
 
         elif action == "sales_person_create":
@@ -541,7 +595,7 @@ def execute_tree_action(opener, action, payload):
             try:
                 res = do_post_sp(body)
                 if res.status in [200, 201]:
-                    return "success", f'Sales Person "{sp_name}" added to Sales Person Tree on dev.pmii-marketing.com!'
+                    return "success", f'Sales Person "{sp_name}" added to Sales Person Tree on {get_server_display_name()}!'
                 return "warning", f"ERPNext responded with HTTP {res.status}"
             except urllib.error.HTTPError as he:
                 err_text = he.read().decode("utf-8", errors="ignore")
@@ -620,13 +674,13 @@ def execute_tree_action(opener, action, payload):
                     created_doc = json.loads(res.read().decode("utf-8")).get("data", {})
                     new_id = created_doc.get("name") or "New Employee"
                     full_name = created_doc.get("employee_name") or f"{first_name} {last_name}".strip()
-                    return "success", f'Employee "{full_name}" ({new_id}) created on dev.pmii-marketing.com!'
+                    return "success", f'Employee "{full_name}" ({new_id}) created on {get_server_display_name()}!'
                 except Exception:
-                    return "success", f'Employee created successfully on dev.pmii-marketing.com!'
+                    return "success", f'Employee created successfully on {get_server_display_name()}!'
             return "warning", f"ERPNext responded with HTTP {res.status}"
 
         elif action == "tree_refresh":
-            return "success", "Territory tree synchronized live from dev.pmii-marketing.com!"
+            return "success", f"Territory tree synchronized live from {get_server_display_name()}!"
 
         return "info", f"Action {action} processed."
 
@@ -870,7 +924,7 @@ if component_val and isinstance(component_val, dict):
 
                 t_count = len(st.session_state.get("live_territories") or [])
                 if action == "tree_refresh":
-                    msg = f"Live ERPNext sync complete: {t_count} territories loaded directly from dev.pmii-marketing.com!"
+                    msg = f"Live ERPNext sync complete: {t_count} territories loaded directly from {get_server_display_name()}!"
                     status = "success"
 
                 token = st.session_state.get("session_token")

@@ -22,6 +22,9 @@ class Hcp {
   final String? barangayName;
   final String? institution;
   final String? profileLastUpdated;
+  final String? rejectedInstitutionTag;
+  final String? rejectionReason;
+  final String? workplaceApprovalNote;
 
   String get fullName {
     if (hcpFullName != null && hcpFullName!.trim().isNotEmpty && !hcpFullName!.trim().startsWith('HCP-')) {
@@ -36,6 +39,15 @@ class Hcp {
   }
 
   bool isWorkplaceRejected([List<Institution>? dynamicInsts]) {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return true;
+    }
+    if (rejectionReason != null && rejectionReason!.trim().isNotEmpty) {
+      return true;
+    }
+    if (workplaceApprovalNote != null && workplaceApprovalNote!.toUpperCase().contains('REJECTED')) {
+      return true;
+    }
     if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
       return true;
     }
@@ -43,6 +55,15 @@ class Hcp {
   }
 
   String? getRejectedInstitutionReason([List<Institution>? dynamicInsts]) {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return rejectedInstitutionTag!.trim();
+    }
+    if (rejectionReason != null && rejectionReason!.trim().isNotEmpty) {
+      return rejectionReason!.trim();
+    }
+    if (workplaceApprovalNote != null && workplaceApprovalNote!.toUpperCase().contains('REJECTED')) {
+      return workplaceApprovalNote!.trim();
+    }
     if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
       final match = dynamicInsts?.firstWhere(
         (i) => i.name.toLowerCase() == institution!.toLowerCase() || i.institutionName.toLowerCase() == institution!.toLowerCase(),
@@ -87,6 +108,9 @@ class Hcp {
     this.barangayName,
     this.institution,
     this.profileLastUpdated,
+    this.rejectedInstitutionTag,
+    this.rejectionReason,
+    this.workplaceApprovalNote,
   });
 
   factory Hcp.fromJson(Map<String, dynamic> json) {
@@ -150,6 +174,9 @@ class Hcp {
       barangayName: json['barangay_name'] != null ? DataSanitizer.cleanTrimProper(json['barangay_name']) : null,
       institution: json['institution'] != null ? DataSanitizer.cleanTrimProper(LocationResolver.resolveInstitutionName(json['institution'].toString())) : null,
       profileLastUpdated: json['profile_last_updated'] != null ? DataSanitizer.trim(json['profile_last_updated']) : null,
+      rejectedInstitutionTag: json['rejected_institution_tag'] != null ? DataSanitizer.trim(json['rejected_institution_tag']) : null,
+      rejectionReason: json['rejection_reason'] != null ? DataSanitizer.trim(json['rejection_reason']) : null,
+      workplaceApprovalNote: json['workplace_approval_note'] != null ? DataSanitizer.trim(json['workplace_approval_note']) : null,
     );
   }
 
@@ -174,6 +201,9 @@ class Hcp {
     String? barangayName,
     String? institution,
     String? profileLastUpdated,
+    String? rejectedInstitutionTag,
+    String? rejectionReason,
+    String? workplaceApprovalNote,
   }) {
     return Hcp(
       name: name ?? this.name,
@@ -196,6 +226,9 @@ class Hcp {
       barangayName: barangayName ?? this.barangayName,
       institution: institution ?? this.institution,
       profileLastUpdated: profileLastUpdated ?? this.profileLastUpdated,
+      rejectedInstitutionTag: rejectedInstitutionTag ?? this.rejectedInstitutionTag,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
+      workplaceApprovalNote: workplaceApprovalNote ?? this.workplaceApprovalNote,
     );
   }
 

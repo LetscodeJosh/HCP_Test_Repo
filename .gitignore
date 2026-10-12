@@ -44,3 +44,12 @@ app.*.map.json
 /android/app/release
 
 scratch/
+
+# Environment and Secrets
+.env
+.env.*
+!.env.example
+secrets.toml
+.streamlit/secrets.toml
+*.pem
+*.key

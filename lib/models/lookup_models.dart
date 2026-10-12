@@ -1330,9 +1330,10 @@ class LocationResolver {
 
   static void registerInstitutions(Iterable<Institution> list) {
     for (var i in list) {
-      if (!i.isRejected && i.name.isNotEmpty && i.institutionName.isNotEmpty) {
+      if (i.name.isNotEmpty && i.institutionName.isNotEmpty) {
         _dynamicInstitutions[i.name] = i.institutionName;
         _dynamicInstitutions[i.name.toLowerCase()] = i.institutionName;
+        _dynamicInstitutions[i.name.toUpperCase()] = i.institutionName;
       }
     }
   }
@@ -1744,7 +1745,9 @@ class LocationResolver {
     // 1. Check passed dynamic list
     if (dynamicInsts != null && dynamicInsts.isNotEmpty) {
       final found = dynamicInsts.firstWhere(
-        (i) => i.name == trimmed || i.name.toLowerCase() == trimmed.toLowerCase() || i.institutionName.toLowerCase() == trimmed.toLowerCase(),
+        (i) => i.name == trimmed ||
+            i.name.toLowerCase() == trimmed.toLowerCase() ||
+            i.institutionName.toLowerCase() == trimmed.toLowerCase(),
         orElse: () => Institution(name: '', institutionName: ''),
       );
       if (found.institutionName.isNotEmpty) return found.institutionName;
@@ -1757,22 +1760,28 @@ class LocationResolver {
     if (_dynamicInstitutions.containsKey(trimmed.toLowerCase())) {
       return _dynamicInstitutions[trimmed.toLowerCase()]!;
     }
+    final upperKey = trimmed.toUpperCase();
+    if (_dynamicInstitutions.containsKey(upperKey)) {
+      return _dynamicInstitutions[upperKey]!;
+    }
 
     // 3. Check static map
     if (_staticInstitutions.containsKey(trimmed)) {
       return _staticInstitutions[trimmed]!;
     }
-    final upperKey = trimmed.toUpperCase();
     if (_staticInstitutions.containsKey(upperKey)) {
       return _staticInstitutions[upperKey]!;
     }
 
-    // Check by integer index (e.g. INST-6 -> INST-00006)
+    // Check by integer index (e.g. INST-6 -> INST-00006 or INST-08007)
     if (upperKey.startsWith('INST-')) {
       final numPart = upperKey.replaceFirst('INST-', '');
       final parsed = int.tryParse(numPart);
       if (parsed != null) {
         final formattedKey = 'INST-${parsed.toString().padLeft(5, '0')}';
+        if (_dynamicInstitutions.containsKey(formattedKey)) {
+          return _dynamicInstitutions[formattedKey]!;
+        }
         if (_staticInstitutions.containsKey(formattedKey)) {
           return _staticInstitutions[formattedKey]!;
         }
@@ -1780,7 +1789,7 @@ class LocationResolver {
     }
 
     // If already human readable, return it
-    if (!trimmed.startsWith('INST-')) {
+    if (!upperKey.startsWith('INST-')) {
       return trimmed;
     }
     return trimmed;

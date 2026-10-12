@@ -5,6 +5,32 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.6.5] - 2026-10-11
+
+### 🏥 Multi-Doctor Institution Rejection Cascade, Smart Attestation & Zero-Loss Remapping
+- **Human-Readable Facility Export (Zero Institution Codes)**:
+  - Full human-readable facility names (e.g., `Pims Institution`, `Yamete Hospital`, `Unsaman General Hospital`) now automatically populate and export in ERPNext Excel/CSV exports across `HCP Profile Submission`, `HCP Account`, and `HCP` doctypes.
+  - Rejection note tags permanently retain human-readable institution names and specific audit reasons (e.g., `[REJECTED INSTITUTION: Pims Institution - reject]`) tagged directly to the responsible MedRep owner for comprehensive SFE audit analysis.
+- **Dynamic List View Column Preservation**:
+  - All original list view columns (`Consent`, `Valid From`, `Valid To`, `Type`, `Practice`, `Account/Program`, `Territory`, `Territory Manager`) remain 100% active (`in_list_view: 1`) alongside the dedicated `Rejected Institution` column.
+  - Prominent red indicator badges in List View and top alert banners in Form View without slicing or dropping any columns.
+- **Multi-Doctor Rejection Propagation**:
+  - When SFE rejects a newly proposed institution with cause, rejection tags (`[REJECTED INSTITUTION: <name> - <reason>]`) and status indicators automatically propagate across all doctors assigned to that MedRep who are affiliated with that facility.
+  - Live ERPNext v15 bidirectional synchronization across `HCP Profile Submission`, `HCP Account`, and `HCP` doctypes, plus memory cache and disk snapshots.
+- **Batch Remapping & Facility Synchronization**:
+  - Remapping a rejected facility to an approved masterlist institution immediately updates and resolves all connected doctor records in batch under that MedRep.
+  - Clears rejection remarks and indicators across all linked records in ERPNext and mobile app.
+- **Inviolable Consent Signature Preservation**:
+  - Captured doctor digital signatures (`consent_signature`) and consent agreements are strictly preserved byte-for-byte during facility remapping, editing, and resubmissions. MedReps never lose signed consents when modifying rejected institutions.
+- **Mandatory Attestation & Smart Similarity Detector Gate**:
+  - Real-time similarity detector remains continuously active while typing workplace names.
+  - Mandatory certification checkbox gated before Location Details (Region, Province, City, Barangay, Street) can be entered: *"This certifies that this institution which is not in the directory is valid and accurate"*.
+  - Submission and field entry remain locked until explicit certification is acknowledged.
+- **1-Click Remapping UI**:
+  - Added direct `Remap` action buttons in Doctor Profiling Wizard and Doctor Profile Workplace Table next to rejected institution badges.
+
+---
+
 ## [v.0.6.5] - 2026-10-08
 
 ### 🧠 Intelligent AI Institution Detector & Acronym Recognition

@@ -95,6 +95,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
   List<InstitutionSearchResult> _detectedMatches = [];
   bool _showDropdown = false;
   Institution? _selectedExistingInstitution;
+  bool _isCertifiedNotInDirectory = false;
   bool _isSaving = false;
   String? _validationErr;
 
@@ -121,24 +122,26 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
   bool get _isWorkplaceNameValid => _workplaceCtrl.text.trim().length >= 3;
 
   /// Location details are fillable ONLY when classification is selected, workplace name is fulfilled (>= 3 chars),
-  /// NO matching suggestions exist in the dropdown, and no existing institution is currently selected.
-  /// (Strictly NO lock icon is implemented; clean disabled styling is applied).
+  /// NO matching suggestions exist in the dropdown, no existing institution is currently selected,
+  /// AND the mandatory certification checkbox is ticked confirming the facility is not in directory.
   bool get _isLocationUnlocked =>
       _isClassificationFulfilled &&
       _isWorkplaceNameValid &&
       _detectedMatches.isEmpty &&
-      _selectedExistingInstitution == null;
+      _selectedExistingInstitution == null &&
+      _isCertifiedNotInDirectory;
 
   /// Submission policy:
   /// - If an existing institution is selected: ALLOW ("Use Selected Institution").
   /// - If active directory suggestions exist: BLOCK submission to prevent duplicate proposals.
-  /// - Otherwise, genuine new proposal: requires classification, workplace name, and mandatory location (Province & City).
+  /// - Otherwise, genuine new proposal: requires classification, workplace name, mandatory certification, and location.
   bool get _canSubmit {
     if (_isSaving) return false;
     if (_selectedExistingInstitution != null) return true; // Can immediately use existing facility!
     if (_detectedMatches.isNotEmpty) return false; // Blocked while suggestions exist!
     if (!_isClassificationFulfilled) return false;
     if (!_isWorkplaceNameValid) return false;
+    if (!_isCertifiedNotInDirectory) return false; // Mandatory certification checkbox must be checked!
     if (_selectedProvince == null || _selectedProvince!.trim().isEmpty) return false;
     if (_selectedCity == null || _selectedCity!.trim().isEmpty) return false;
     return true;
@@ -160,6 +163,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
     if (_selectedExistingInstitution != null) {
       setState(() {
         _selectedExistingInstitution = null;
+        _isCertifiedNotInDirectory = false;
       });
     }
 
@@ -167,6 +171,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
       setState(() {
         _detectedMatches = [];
         _showDropdown = false;
+        _isCertifiedNotInDirectory = false;
         _validationErr = null;
       });
       return;
@@ -183,6 +188,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
       setState(() {
         _detectedMatches = matches;
         _showDropdown = matches.isNotEmpty;
+        _isCertifiedNotInDirectory = false; // Require re-certification when name changes
         _validationErr = null;
       });
     });
@@ -191,6 +197,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
   void _selectFromDirectory(Institution inst, InstitutionSearchResult item) {
     setState(() {
       _selectedExistingInstitution = inst;
+      _isCertifiedNotInDirectory = true; // Pre-verified from directory
       _workplaceCtrl.text = inst.institutionName.isNotEmpty ? inst.institutionName : inst.name;
       if (inst.regionName != null && inst.regionName!.isNotEmpty) _selectedRegion = inst.regionName;
       if (inst.provinceName != null && inst.provinceName!.isNotEmpty) _selectedProvince = inst.provinceName;
@@ -242,6 +249,10 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
     }
     if (_detectedMatches.isNotEmpty && _selectedExistingInstitution == null) {
       setState(() => _validationErr = 'Existing matching facilities detected in masterlist. Please select a facility from the suggestions above, or refine the name to propose a distinct facility.');
+      return;
+    }
+    if (!_isCertifiedNotInDirectory) {
+      setState(() => _validationErr = 'Please confirm the certification checkbox verifying that this institution is not in the directory and is valid and accurate.');
       return;
     }
     if (prov.isEmpty) {
@@ -790,11 +801,87 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                             SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                '✓ Facility name verified. No matching duplicates found in directory. Location fields below are editable.',
+                                '✓ Facility name verified. No matching duplicates found in directory. Check certification below to unlock location fields.',
                                 style: TextStyle(color: Color(0xFF166534), fontSize: 11),
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ],
+
+                    // MANDATORY CERTIFICATION CHECKBOX (Required before unlocking location)
+                    if (_selectedExistingInstitution == null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _isCertifiedNotInDirectory ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: _isCertifiedNotInDirectory ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+                            width: _isCertifiedNotInDirectory ? 1.5 : 1.0,
+                          ),
+                        ),
+                        child: InkWell(
+                          onTap: (!_isClassificationFulfilled || !_isWorkplaceNameValid || _detectedMatches.isNotEmpty)
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _isCertifiedNotInDirectory = !_isCertifiedNotInDirectory;
+                                  });
+                                },
+                          borderRadius: BorderRadius.circular(6),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: Checkbox(
+                                  value: _isCertifiedNotInDirectory,
+                                  activeColor: const Color(0xFF16A34A),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                  onChanged: (!_isClassificationFulfilled || !_isWorkplaceNameValid || _detectedMatches.isNotEmpty)
+                                      ? null
+                                      : (val) {
+                                          setState(() {
+                                            _isCertifiedNotInDirectory = val ?? false;
+                                          });
+                                        },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'This certifies that this institution which is not in the directory is valid and accurate.',
+                                      style: TextStyle(
+                                        color: Color(0xFF0F172A),
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.w600,
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _isCertifiedNotInDirectory
+                                          ? '✓ Certified. Location fields below are now unlocked for encoding.'
+                                          : (_detectedMatches.isNotEmpty
+                                              ? 'Active directory suggestions found above. Select a facility or refine name.'
+                                              : 'Mandatory: Check to confirm and unlock Region, Province, and City.'),
+                                      style: TextStyle(
+                                        color: _isCertifiedNotInDirectory ? const Color(0xFF166534) : const Color(0xFF64748B),
+                                        fontSize: 10.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],

@@ -38,7 +38,16 @@ Streamlit_Deployment/
    - **Main file path:** `app.py`
    - **App URL:** (Optional: customize your subdomain, e.g. `pims-territory.streamlit.app`)
 3. Click **"Deploy!"**
-4. Streamlit will build your app and give you a permanent live HTTPS link (e.g. `https://pims-territory.streamlit.app`).
+
+### Step 4: Configure Secure Secrets
+In Streamlit Cloud:
+1. Go to your App Settings $\rightarrow$ **Secrets**.
+2. Add your ERPNext endpoint securely:
+   ```toml
+   ERPNEXT_URL = "https://your-frappe-server.com"
+   SESSION_SECRET = "your-random-64-character-hex-secret"
+   ```
+3. Save secrets. The portal will automatically connect to your instance securely without exposing endpoints in source code.
 
 ---
 

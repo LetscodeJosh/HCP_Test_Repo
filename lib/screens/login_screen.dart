@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../app_config.dart';
 import '../services/api_service.dart';
 import '../services/biometric_service.dart';
-import 'hcp_dashboard_screen.dart';
+import 'doctor_account_screen.dart';
 import 'list_screen.dart';
 import 'credits_screen.dart';
 
@@ -105,7 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy
                 ? const ListScreen()
-                : const HcpDashboardScreen(),
+                : const DoctorAccountScreen(),
           ),
         );
       } else {
@@ -170,7 +170,7 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (_) => AppConfig.mode == AppMode.corenergy
                 ? const ListScreen()
-                : const HcpDashboardScreen(),
+                : const DoctorAccountScreen(),
           ),
         );
       } else {

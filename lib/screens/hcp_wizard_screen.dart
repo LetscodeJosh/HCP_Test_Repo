@@ -10,8 +10,9 @@ import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../services/api_service.dart';
 import '../services/data_sanitizer.dart';
-import 'hcp_dashboard_screen.dart';
+import 'doctor_account_screen.dart';
 import 'components/propose_institution_dialog.dart';
+import 'components/remap_institution_dialog.dart';
 
 class HcpWizardScreen extends StatefulWidget {
   final Hcp? doctor;
@@ -732,7 +733,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             onPressed: () {
               Navigator.pop(ctx);
               Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
+                MaterialPageRoute(builder: (_) => const DoctorAccountScreen()),
                 (route) => false,
               );
             },
@@ -4565,12 +4566,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                                   overflow: TextOverflow.ellipsis,
                                                 ),
                                               ),
-                                              if (isRejectedInst)
+                                              if (isRejectedInst) ...[
                                                 GestureDetector(
                                                   onTap: () {
                                                     ScaffoldMessenger.of(context).showSnackBar(
                                                       SnackBar(
-                                                        content: Text('REJECTED: ${matchedInst.rejectionReason ?? "Invalid institution details"}. Please remove or resubmit via Institution Submission.'),
+                                                        content: Text('REJECTED: ${matchedInst.rejectionReason ?? "Invalid institution details"}. Tap "Remap" to select an approved facility.'),
                                                         behavior: SnackBarBehavior.floating,
                                                         backgroundColor: const Color(0xFFDC2626),
                                                       ),
@@ -4596,7 +4597,59 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                                       ],
                                                     ),
                                                   ),
-                                                )
+                                                ),
+                                                InkWell(
+                                                  onTap: () async {
+                                                    final changed = await RemapInstitutionDialog.show(context, matchedInst);
+                                                    if (changed == true) {
+                                                      final api = Provider.of<ApiService>(context, listen: false);
+                                                      setState(() {
+                                                        _institutions = api.cachedInstitutions;
+                                                        for (int i = 0; i < _selectedWorkplaces.length; i++) {
+                                                          final cur = _selectedWorkplaces[i];
+                                                          if (cur.hcpWorkplace == matchedInst.name || cur.workplaceName == matchedInst.institutionName) {
+                                                            final latestInst = _institutions.firstWhere(
+                                                              (inst) => inst.name == matchedInst.name,
+                                                              orElse: () => matchedInst,
+                                                            );
+                                                            _selectedWorkplaces[i] = cur.copyWith(
+                                                              workflowState: latestInst.workflowState,
+                                                            );
+                                                          }
+                                                        }
+                                                      });
+                                                      if (mounted) {
+                                                        ScaffoldMessenger.of(context).showSnackBar(
+                                                          const SnackBar(
+                                                            content: Text('Facility remapped successfully! Existing doctor signature and consent preserved.'),
+                                                            backgroundColor: Color(0xFF16A34A),
+                                                            behavior: SnackBarBehavior.floating,
+                                                          ),
+                                                        );
+                                                      }
+                                                    }
+                                                  },
+                                                  child: Container(
+                                                    margin: const EdgeInsets.only(left: 5),
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFF0066FF),
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: const Row(
+                                                      mainAxisSize: MainAxisSize.min,
+                                                      children: [
+                                                        Icon(Icons.swap_horiz_rounded, size: 10, color: Colors.white),
+                                                        SizedBox(width: 2),
+                                                        Text(
+                                                          'Remap',
+                                                          style: TextStyle(color: Colors.white, fontSize: 9.5, fontWeight: FontWeight.bold),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ),
+                                              ]
                                               else if (w.workflowState == 'Pending Approval' || w.workflowState == 'Pending SFE Approval' || w.isCustom)
                                                 Container(
                                                   margin: const EdgeInsets.only(left: 6),

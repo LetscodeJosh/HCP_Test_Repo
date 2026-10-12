@@ -46,8 +46,12 @@ class HcpProfileSubmission {
   final String? profileAction; // 'New HCP' or 'Existing HCP'
   final String? rejectionRemarks;
   final String? rejectedBy;
+  final String? rejectedInstitutionTag;
 
   bool isWorkplaceRejected([List<Institution>? dynamicInsts]) {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return true;
+    }
     if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
       return true;
     }
@@ -61,6 +65,9 @@ class HcpProfileSubmission {
   }
 
   String? getRejectedInstitutionReason([List<Institution>? dynamicInsts]) {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return rejectedInstitutionTag!.trim();
+    }
     if (institution != null && LocationResolver.isRejectedInstitution(institution, dynamicInsts)) {
       final match = dynamicInsts?.firstWhere(
         (i) => i.name.toLowerCase() == institution!.toLowerCase() || i.institutionName.toLowerCase() == institution!.toLowerCase(),
@@ -135,6 +142,7 @@ class HcpProfileSubmission {
     this.profileAction,
     this.rejectionRemarks,
     this.rejectedBy,
+    this.rejectedInstitutionTag,
   });
 
   factory HcpProfileSubmission.fromJson(Map<String, dynamic> json) {
@@ -267,6 +275,7 @@ class HcpProfileSubmission {
       profileAction: resolvedAction,
       rejectionRemarks: isActuallyRejected ? (json['rejection_reason'] ?? json['rejection_remarks'] ?? json['remarks']) : null,
       rejectedBy: isActuallyRejected ? (json['rejected_by'] ?? json['comment_by'] ?? json['owner']) : null,
+      rejectedInstitutionTag: json['rejected_institution_tag']?.toString(),
     );
   }
 
@@ -362,6 +371,7 @@ class HcpProfileSubmission {
         'rejection_remarks': rejectionRemarks,
       },
       if (rejectedBy != null) 'rejected_by': rejectedBy,
+      if (rejectedInstitutionTag != null) 'rejected_institution_tag': rejectedInstitutionTag,
     });
   }
 
@@ -418,6 +428,7 @@ class HcpProfileSubmission {
     String? profileAction,
     String? rejectionRemarks,
     String? rejectedBy,
+    String? rejectedInstitutionTag,
   }) {
     return HcpProfileSubmission(
       name: name ?? this.name,
@@ -464,6 +475,7 @@ class HcpProfileSubmission {
       profileAction: profileAction ?? this.profileAction,
       rejectionRemarks: rejectionRemarks ?? this.rejectionRemarks,
       rejectedBy: rejectedBy ?? this.rejectedBy,
+      rejectedInstitutionTag: rejectedInstitutionTag ?? this.rejectedInstitutionTag,
     );
   }
 }

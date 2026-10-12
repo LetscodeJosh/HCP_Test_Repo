@@ -19,6 +19,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
   List<HcpAccount> _filteredAccounts = [];
   List<Hcp> _doctors = [];
   List<HcpType> _hcpTypes = [];
+  List<Institution> _institutions = [];
   bool _isLoading = true;
 
   // ERPNext Matching Filters (Unified with Doctor Listing)
@@ -54,15 +55,23 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     setState(() => _isLoading = true);
     final apiService = Provider.of<ApiService>(context, listen: false);
     try {
-      final items = await apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]);
-      final doctorsList = await apiService.fetchDoctors().catchError((_) => <Hcp>[]);
-      final types = await apiService.fetchHcpTypes().catchError((_) => <HcpType>[]);
+      final results = await Future.wait([
+        apiService.fetchHcpAccounts().catchError((_) => <HcpAccount>[]),
+        apiService.fetchDoctors().catchError((_) => <Hcp>[]),
+        apiService.fetchHcpTypes().catchError((_) => <HcpType>[]),
+        apiService.fetchInstitutions().catchError((_) => <Institution>[]),
+      ]);
+      final items = results[0] as List<HcpAccount>;
+      final doctorsList = results[1] as List<Hcp>;
+      final types = results[2] as List<HcpType>;
+      final insts = results[3] as List<Institution>;
 
       if (!mounted) return;
       setState(() {
         _allAccounts = items;
         _doctors = doctorsList;
         _hcpTypes = types;
+        _institutions = insts;
         _applyFilters();
         _isLoading = false;
       });
@@ -196,34 +205,42 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
 
   /// Retain and copy previous month workplace if current account is missing it
   List<HcpAccountWorkplace> _getEffectiveWorkplaces(HcpAccount account) {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final instList = _institutions.isNotEmpty ? _institutions : apiService.cachedInstitutions;
     if (account.workplaces.isNotEmpty) {
       return account.workplaces.map((w) {
-        final wpResolved = LocationResolver.resolveInstitutionName(w.hcpWorkplace);
+        final wpResolved = LocationResolver.resolveInstitutionName(w.hcpWorkplace, instList);
         final loc = LocationResolver.resolveCompleteWorkplaceLocation(
           workplaceNameOrId: wpResolved.isNotEmpty ? wpResolved : w.hcpWorkplace,
           rawCity: w.cityMunicipality,
           rawProvince: w.provinceName,
+          institutions: instList,
         );
+        final effAddr = (w.address != null && w.address!.isNotEmpty && !w.address!.toUpperCase().startsWith('INST-'))
+            ? w.address!
+            : (wpResolved.isNotEmpty ? wpResolved : w.hcpWorkplace);
         return HcpAccountWorkplace(
           hcpWorkplace: wpResolved.isNotEmpty ? wpResolved : w.hcpWorkplace,
           cityMunicipality: loc.cityName,
           provinceName: loc.provinceName,
-          address: w.address,
+          address: effAddr,
           isPrimary: w.isPrimary,
           preferred: w.preferred,
         );
       }).toList();
     }
     if (account.workplaceId != null && account.workplaceId!.trim().isNotEmpty) {
-      final wpResolved = LocationResolver.resolveInstitutionName(account.workplaceId!.trim());
+      final wpResolved = LocationResolver.resolveInstitutionName(account.workplaceId!.trim(), instList);
       final loc = LocationResolver.resolveCompleteWorkplaceLocation(
         workplaceNameOrId: wpResolved.isNotEmpty ? wpResolved : account.workplaceId!.trim(),
+        institutions: instList,
       );
       return [
         HcpAccountWorkplace(
           hcpWorkplace: wpResolved.isNotEmpty ? wpResolved : account.workplaceId!.trim(),
           cityMunicipality: loc.cityName,
           provinceName: loc.provinceName,
+          address: wpResolved.isNotEmpty ? wpResolved : account.workplaceId!.trim(),
           isPrimary: true,
           preferred: true,
         ),
@@ -239,32 +256,38 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
       final prev = prevAccs.first;
       if (prev.workplaces.isNotEmpty) {
         return prev.workplaces.map((w) {
-          final wpResolved = LocationResolver.resolveInstitutionName(w.hcpWorkplace);
+          final wpResolved = LocationResolver.resolveInstitutionName(w.hcpWorkplace, instList);
           final loc = LocationResolver.resolveCompleteWorkplaceLocation(
             workplaceNameOrId: wpResolved.isNotEmpty ? wpResolved : w.hcpWorkplace,
             rawCity: w.cityMunicipality,
             rawProvince: w.provinceName,
+            institutions: instList,
           );
+          final effAddr = (w.address != null && w.address!.isNotEmpty && !w.address!.toUpperCase().startsWith('INST-'))
+              ? w.address!
+              : (wpResolved.isNotEmpty ? wpResolved : w.hcpWorkplace);
           return HcpAccountWorkplace(
             hcpWorkplace: wpResolved.isNotEmpty ? wpResolved : w.hcpWorkplace,
             cityMunicipality: loc.cityName,
             provinceName: loc.provinceName,
-            address: w.address,
+            address: effAddr,
             isPrimary: w.isPrimary,
             preferred: w.preferred,
           );
         }).toList();
       }
       if (prev.workplaceId != null && prev.workplaceId!.trim().isNotEmpty) {
-        final wpResolved = LocationResolver.resolveInstitutionName(prev.workplaceId!.trim());
+        final wpResolved = LocationResolver.resolveInstitutionName(prev.workplaceId!.trim(), instList);
         final loc = LocationResolver.resolveCompleteWorkplaceLocation(
           workplaceNameOrId: wpResolved.isNotEmpty ? wpResolved : prev.workplaceId!.trim(),
+          institutions: instList,
         );
         return [
           HcpAccountWorkplace(
             hcpWorkplace: wpResolved.isNotEmpty ? wpResolved : prev.workplaceId!.trim(),
             cityMunicipality: loc.cityName,
             provinceName: loc.provinceName,
+            address: wpResolved.isNotEmpty ? wpResolved : prev.workplaceId!.trim(),
             isPrimary: true,
             preferred: true,
           ),
@@ -275,14 +298,19 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     if (doc.workplaces.isNotEmpty) {
       return doc.workplaces
           .map((w) {
+            final wpResolved = LocationResolver.resolveInstitutionName(w.workplace, instList);
             final loc = LocationResolver.resolveCompleteWorkplaceLocation(
-              workplaceNameOrId: w.workplace,
+              workplaceNameOrId: wpResolved.isNotEmpty ? wpResolved : w.workplace,
               rawCity: w.cityMunicipality,
               rawProvince: w.provinceName,
+              institutions: instList,
             );
+            final effAddr = (w.address != null && w.address!.isNotEmpty && !w.address!.toUpperCase().startsWith('INST-'))
+                ? w.address!
+                : (wpResolved.isNotEmpty ? wpResolved : w.workplace);
             return HcpAccountWorkplace(
-              hcpWorkplace: LocationResolver.resolveInstitutionName(w.workplace),
-              address: w.address,
+              hcpWorkplace: wpResolved.isNotEmpty ? wpResolved : w.workplace,
+              address: effAddr,
               cityMunicipality: loc.cityName,
               provinceName: loc.provinceName,
               isPrimary: w.isPrimary,
@@ -294,11 +322,16 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     final inst = (doc.institution != null && doc.institution!.isNotEmpty)
         ? doc.institution!
         : 'Manila Doctors Hospital';
-    final loc = LocationResolver.resolveCompleteWorkplaceLocation(workplaceNameOrId: inst);
+    final resolvedInst = LocationResolver.resolveInstitutionName(inst, instList);
+    final finalInst = resolvedInst.isNotEmpty ? resolvedInst : inst;
+    final loc = LocationResolver.resolveCompleteWorkplaceLocation(
+      workplaceNameOrId: finalInst,
+      institutions: instList,
+    );
     return [
       HcpAccountWorkplace(
         hcpWorkplace: loc.workplaceName,
-        address: inst,
+        address: finalInst,
         cityMunicipality: loc.cityName,
         provinceName: loc.provinceName,
         isPrimary: true,
@@ -368,16 +401,37 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
 
   String _getEffectiveInstitutionDisplay(HcpAccount account, Hcp doc) {
     final wps = _getEffectiveWorkplaces(account);
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final instList = _institutions.isNotEmpty ? _institutions : apiService.cachedInstitutions;
     if (wps.isNotEmpty) {
       final pref = wps.firstWhere((w) => w.preferred || w.isPrimary, orElse: () => wps.first);
-      if (pref.address != null && pref.address!.isNotEmpty) {
+      if (pref.address != null && pref.address!.isNotEmpty && !pref.address!.toUpperCase().startsWith('INST-')) {
         return pref.address!;
       }
-      return LocationResolver.resolveInstitutionName(pref.hcpWorkplace);
+      final resolvedWp = LocationResolver.resolveInstitutionName(pref.hcpWorkplace, instList);
+      if (resolvedWp.isNotEmpty && !resolvedWp.toUpperCase().startsWith('INST-')) {
+        return resolvedWp;
+      }
+      if (pref.address != null && pref.address!.isNotEmpty) {
+        final resAddr = LocationResolver.resolveInstitutionName(pref.address!, instList);
+        if (resAddr.isNotEmpty && !resAddr.toUpperCase().startsWith('INST-')) {
+          return resAddr;
+        }
+      }
+      if (resolvedWp.isNotEmpty) return resolvedWp;
+      if (pref.hcpWorkplace.isNotEmpty) return pref.hcpWorkplace;
     }
-    return (doc.institution != null && doc.institution!.isNotEmpty)
-        ? doc.institution!
-        : 'Manila Doctors Hospital';
+    final docInst = doc.institution;
+    if (docInst != null && docInst.isNotEmpty) {
+      final resDocInst = LocationResolver.resolveInstitutionName(docInst, instList);
+      if (resDocInst.isNotEmpty && !resDocInst.toUpperCase().startsWith('INST-')) {
+        return resDocInst;
+      }
+      if (docInst.isNotEmpty && !docInst.toUpperCase().startsWith('INST-')) {
+        return docInst;
+      }
+    }
+    return 'Manila Doctors Hospital';
   }
 
   int _getProgramTotalCount(ApiService apiService) {
@@ -966,7 +1020,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                                   ],
                                                   Expanded(
                                                     child: Text(
-                                                      LocationResolver.resolveInstitutionName(w.workplace),
+                                                      LocationResolver.resolveInstitutionName(w.workplace, _institutions.isNotEmpty ? _institutions : apiService.cachedInstitutions),
                                                       style: TextStyle(
                                                         color: isWpRejected
                                                             ? const Color(0xFFEF4444)

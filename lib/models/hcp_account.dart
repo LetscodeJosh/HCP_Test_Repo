@@ -22,6 +22,8 @@ class HcpAccount {
   final String? subSpecialty;
   final String? workplaceId;
   final String? workplaceApprovalNote;
+  final String? rejectedInstitutionTag;
+  final String? rejectionReason;
   final String? contactNumber;
   final String? contactEmail;
   final List<HcpAccountSpecialization> specialties;
@@ -34,6 +36,12 @@ class HcpAccount {
   String get accountOrProgram => accountName;
 
   String get effectiveWorkplaceApprovalNote {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return rejectedInstitutionTag!.trim();
+    }
+    if (rejectionReason != null && rejectionReason!.trim().isNotEmpty) {
+      return rejectionReason!.trim();
+    }
     if (workplaceApprovalNote != null && workplaceApprovalNote!.trim().isNotEmpty) {
       return workplaceApprovalNote!.trim();
     }
@@ -42,6 +50,12 @@ class HcpAccount {
   }
 
   String getEffectiveWorkplaceApprovalNote([List<Institution>? dynamicInsts]) {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return rejectedInstitutionTag!.trim();
+    }
+    if (rejectionReason != null && rejectionReason!.trim().isNotEmpty) {
+      return rejectionReason!.trim();
+    }
     final wp = workplaceId ?? (workplaces.isNotEmpty ? workplaces.first.hcpWorkplace : '');
     if (LocationResolver.isRejectedInstitution(wp, dynamicInsts)) {
       final reason = getRejectedInstitutionReason(dynamicInsts);
@@ -56,6 +70,12 @@ class HcpAccount {
   }
 
   bool isWorkplaceRejected([List<Institution>? dynamicInsts]) {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return true;
+    }
+    if (rejectionReason != null && rejectionReason!.trim().isNotEmpty) {
+      return true;
+    }
     final wp = workplaceId ?? (workplaces.isNotEmpty ? workplaces.first.hcpWorkplace : '');
     return LocationResolver.isRejectedInstitution(wp, dynamicInsts) ||
         (workplaceApprovalNote != null && workplaceApprovalNote!.toUpperCase().contains('REJECTED')) ||
@@ -63,6 +83,12 @@ class HcpAccount {
   }
 
   String? getRejectedInstitutionReason([List<Institution>? dynamicInsts]) {
+    if (rejectedInstitutionTag != null && rejectedInstitutionTag!.trim().isNotEmpty) {
+      return rejectedInstitutionTag!.trim();
+    }
+    if (rejectionReason != null && rejectionReason!.trim().isNotEmpty) {
+      return rejectionReason!.trim();
+    }
     final wp = workplaceId ?? (workplaces.isNotEmpty ? workplaces.first.hcpWorkplace : '');
     if (LocationResolver.isRejectedInstitution(wp, dynamicInsts)) {
       final match = dynamicInsts?.firstWhere(
@@ -111,6 +137,8 @@ class HcpAccount {
     this.subSpecialty,
     this.workplaceId,
     this.workplaceApprovalNote,
+    this.rejectedInstitutionTag,
+    this.rejectionReason,
     this.contactNumber,
     this.contactEmail,
     this.specialties = const [],
@@ -269,6 +297,8 @@ class HcpAccount {
     String? subSpecialty,
     String? workplaceId,
     String? workplaceApprovalNote,
+    String? rejectedInstitutionTag,
+    String? rejectionReason,
     String? contactNumber,
     String? contactEmail,
     List<HcpAccountSpecialization>? specialties,
@@ -299,6 +329,8 @@ class HcpAccount {
       subSpecialty: subSpecialty ?? this.subSpecialty,
       workplaceId: workplaceId ?? this.workplaceId,
       workplaceApprovalNote: workplaceApprovalNote ?? this.workplaceApprovalNote,
+      rejectedInstitutionTag: rejectedInstitutionTag ?? this.rejectedInstitutionTag,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       contactNumber: contactNumber ?? this.contactNumber,
       contactEmail: contactEmail ?? this.contactEmail,
       specialties: specialties ?? this.specialties,
@@ -447,6 +479,12 @@ class HcpAccount {
           : null,
       workplaceApprovalNote: (json['workplace_approval_note'] != null || json['custom_workplace_approval_note'] != null || json['institution_approval_note'] != null)
           ? DataSanitizer.trim(json['workplace_approval_note'] ?? json['custom_workplace_approval_note'] ?? json['institution_approval_note'])
+          : null,
+      rejectedInstitutionTag: (json['rejected_institution_tag'] != null)
+          ? DataSanitizer.trim(json['rejected_institution_tag'])
+          : null,
+      rejectionReason: (json['rejection_reason'] != null)
+          ? DataSanitizer.trim(json['rejection_reason'])
           : null,
       contactNumber: (json['contact_number'] != null || json['mobile_number'] != null || json['phone_number'] != null)
           ? DataSanitizer.cleanPhone(json['contact_number'] ?? json['mobile_number'] ?? json['phone_number'])
@@ -721,11 +759,15 @@ class HcpAccountWorkplace {
     final wpName = LocationResolver.resolveInstitutionName(rawWp.toString());
     final rawCity = json['city_municipality'] ?? json['city'] ?? json['city_title'];
     final rawProv = json['province_name'] ?? json['province'] ?? json['province_title'];
+    final effWp = wpName.isNotEmpty ? wpName : rawWp.toString();
+    final effAddress = (json['address'] != null && !json['address'].toString().toUpperCase().startsWith('INST-'))
+        ? json['address']
+        : effWp;
     return HcpAccountWorkplace(
-      hcpWorkplace: wpName.isNotEmpty ? wpName : rawWp.toString(),
+      hcpWorkplace: effWp,
       cityMunicipality: rawCity != null ? LocationResolver.resolveCityName(rawCity.toString()) : null,
       provinceName: rawProv != null ? LocationResolver.resolveProvinceName(rawProv.toString()) : null,
-      address: json['address'],
+      address: effAddress,
       isPrimary: pref,
       preferred: pref,
     );
@@ -746,6 +788,30 @@ class HcpAccountWorkplace {
       'preferred': (isPrimary || preferred) ? 1 : 0,
       'is_preferred': (isPrimary || preferred) ? 1 : 0,
     };
+  }
+
+  HcpAccountWorkplace copyWith({
+    String? hcpWorkplace,
+    String? workplace,
+    String? cityMunicipality,
+    String? provinceName,
+    String? city,
+    String? province,
+    String? address,
+    bool? isPrimary,
+    bool? preferred,
+  }) {
+    return HcpAccountWorkplace(
+      hcpWorkplace: hcpWorkplace ?? this.hcpWorkplace,
+      workplace: workplace,
+      cityMunicipality: cityMunicipality ?? this.cityMunicipality,
+      provinceName: provinceName ?? this.provinceName,
+      city: city,
+      province: province,
+      address: address ?? this.address,
+      isPrimary: isPrimary ?? this.isPrimary,
+      preferred: preferred ?? this.preferred,
+    );
   }
 }
 

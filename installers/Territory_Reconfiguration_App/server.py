@@ -50,15 +50,8 @@ ASSETS_HTML = os.path.join(BASE_DIR, 'assets', 'web', 'territory_reconfiguration
 # 🚀 SERVER ENVIRONMENT SWITCH (SINGLE-LINE TOGGLE)
 # Change to 'production' or 'development'
 # ===========================================================================
-ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development').lower()
-
-DEV_SERVER_URL = 'https://dev.pmii-marketing.com'
-PROD_SERVER_URL = 'https://pmii-marketing.com'
-
-ERPNEXT_SERVER_URL = os.environ.get(
-    'ERPNEXT_URL',
-    PROD_SERVER_URL if ENVIRONMENT == 'production' else DEV_SERVER_URL
-)
+# Environment-driven ERPNext URL (strictly isolated from version control)
+ERPNEXT_SERVER_URL = os.environ.get('ERPNEXT_URL', '').rstrip('/')
 
 ACTIVE_COOKIE_JAR = http.cookiejar.CookieJar()
 ACTIVE_SSL_CTX = ssl.create_default_context()
@@ -88,12 +81,57 @@ def get_latest_portal_html():
         content = f.read()
     return content, chosen_path
 
+class LoginRateLimiter:
+    """In-memory rate limiter to protect ERPNext authentication against brute force attacks."""
+    def __init__(self, max_attempts: int = 5, window_seconds: int = 60, lockout_seconds: int = 300):
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self.lockout_seconds = lockout_seconds
+        self.attempts = {}
+        self.lockouts = {}
+
+    def is_locked(self, identifier: str):
+        now = time.time()
+        key = identifier.lower().strip()
+        lockout_until = self.lockouts.get(key, 0)
+        if now < lockout_until:
+            return True, int(lockout_until - now)
+        if key in self.lockouts:
+            del self.lockouts[key]
+        return False, 0
+
+    def record_attempt(self, identifier: str, success: bool):
+        now = time.time()
+        key = identifier.lower().strip()
+        if success:
+            self.attempts.pop(key, None)
+            self.lockouts.pop(key, None)
+            return
+
+        recent = [t for t in self.attempts.get(key, []) if now - t < self.window_seconds]
+        recent.append(now)
+        self.attempts[key] = recent
+
+        if len(recent) >= self.max_attempts:
+            self.lockouts[key] = now + self.lockout_seconds
+            self.attempts.pop(key, None)
+
+RATE_LIMITER = LoginRateLimiter()
+
 def authenticate_erpnext_user(usr, pwd):
     if not usr or not pwd:
         return {'success': False, 'authorized': False, 'message': 'Both username and password are required.'}
 
     usr = usr.strip()
     pwd = pwd.strip()
+
+    is_locked, remaining = RATE_LIMITER.is_locked(usr)
+    if is_locked:
+        return {
+            'success': False,
+            'authorized': False,
+            'message': f'Too many failed login attempts. Security lockout active. Please wait {remaining} seconds before retrying.'
+        }
 
     login_data = json.dumps({'usr': usr, 'pwd': pwd}).encode('utf-8')
     headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PIMS-Portal'}
@@ -105,14 +143,18 @@ def authenticate_erpnext_user(usr, pwd):
         login_res = json.loads(res.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            return {'success': False, 'authorized': False, 'message': 'Invalid username or password. Please verify your credentials registered in https://dev.pmii-marketing.com/app/user.'}
+            RATE_LIMITER.record_attempt(usr, success=False)
+            return {'success': False, 'authorized': False, 'message': 'Invalid username or password. Please verify your credentials in your ERPNext account.'}
         return {'success': False, 'authorized': False, 'message': f'ERPNext authentication error (HTTP {e.code}). Please try again.'}
     except Exception as e:
-        return {'success': False, 'authorized': False, 'message': f'Cannot reach ERPNext server at {erp_url}: {str(e)}'}
+        server_host = urllib.parse.urlparse(erp_url).netloc or 'ERPNext Server'
+        return {'success': False, 'authorized': False, 'message': f'Cannot reach ERPNext authentication server ({server_host}). Please verify connectivity.'}
 
     if login_res.get('message') != 'Logged In':
+        RATE_LIMITER.record_attempt(usr, success=False)
         return {'success': False, 'authorized': False, 'message': 'Authentication failed on ERPNext.'}
 
+    RATE_LIMITER.record_attempt(usr, success=True)
     full_name = login_res.get('full_name') or usr
     role_profile = ''
     roles = []
@@ -155,7 +197,7 @@ def authenticate_erpnext_user(usr, pwd):
         return {
             'success': False,
             'authorized': False,
-            'message': f"Access Restricted: User '{usr}' does not have SFE or Administrator roles in https://dev.pmii-marketing.com/app/user."
+            'message': f"Access Restricted: User '{usr}' does not have authorized SFE or Administrator roles. Please contact your system administrator."
         }
 
     role_title = 'Administrator' if is_admin else 'SFE Lead'

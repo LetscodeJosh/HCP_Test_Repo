@@ -1,19 +1,20 @@
 {
   "version": "v.0.6.5",
-  "build_number": 42,
-  "release_date": "October 8, 2026",
-  "apk_filename": "HCP_Profiling_v.0.6.5.apk",
-  "apk_size_bytes": 61804333,
-  "sha256": "94535f9010c8ad2ccbdfd9a391d1f902c2e1b358bc92bbc0c9afa3b5a952f490",
+  "build_number": 44,
+  "release_date": "October 11, 2026",
+  "apk_filename": "HCP_Profiling_V.0.6.5.apk",
+  "apk_size_bytes": 61902626,
+  "sha256": "d3155edebd163e888cb7f428cead9f2c678fe5b45892acbe5d4609c21105e4a1",
   "features": [
-    "Strict Title Casing Sanitizer: Enforces uppercase initial letters on every doctor name word across mobile app and ERPNext",
-    "Smart Detector Active on Resubmit (debounced live acronym & duplicate detection on MedRep modification; SFE free from restriction)",
-    "Human-Readable Location Display on Resubmission (automatic PSGC code-to-name resolution for Region, Province, and City)",
-    "Immediate Read-Only Submission Lock (proposals locked while pending review; editable only when rejected)",
-    "Two-Strike Resubmission Ceiling & Permanent Archive (max 2 resubmission attempts before permanent archive with zero deletion)",
-    "SFE Direct Remapping Authority (rebinds doctor profiles directly to canonical DOH-accredited facilities without recycling typos)",
-    "Multi-Tier Notification Architecture (Homescreen & Lockscreen public priority heads-up push with 5-channel fail-safe matrix)",
-    "App menu drawer retains version cleanly at v.0.6.5 without build number (+No.) suffix",
-    "Full ERPNext Rejection Message & Active Rejected Institution Reflection (Synchronized across HCP Profile Submission, HCP Account, HCP, and Institution List/Form Views)"
-  ]
+    "Human-Readable Facility Export (Zero Institution Codes in ERPNext Excel/CSV exports across HCP Profile Submission, HCP Account, and HCP)",
+    "Rejection note tags permanently display human-readable institution names and audit causes tagged directly to MedRep owners (e.g. [REJECTED INSTITUTION: Pims Institution - reject])",
+    "Dynamic List View Column Preservation: 100% active status on all original columns alongside the dedicated Rejected Institution column",
+    "Multi-Doctor Rejection Propagation across all affiliated doctors when an institution is rejected by SFE",
+    "Batch Remapping & Facility Synchronization to unblock MedRep doctor profiling with zero data loss",
+    "Inviolable Consent Signature Preservation during facility remapping and edits",
+    "Mandatory Attestation & Smart Similarity Detector Gate during new institution submissions",
+    "1-Click Remapping UI in Doctor Profiling Wizard and Doctor Profile Workplace Table"
+  ],
+  "size_bytes": 61754884,
+  "size_mb": "58.89 MB"
 }

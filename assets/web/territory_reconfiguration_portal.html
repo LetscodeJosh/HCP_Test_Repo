@@ -934,7 +934,7 @@
     border-color: #2563EB;
   }
 
-  /* Interactive ERPNext Territory Tree View (1:1 with dev.pmii-marketing.com) */
+  /* Interactive ERPNext Territory Tree View (1:1 Live Engine) */
   .erp-tree-container {
     background: #111111;
     border: 1px solid #27272A;
@@ -2492,7 +2492,7 @@
                 Territory Tree
               </h2>
               <span style="font-size:12px; color:#64748B; font-weight:500;">
-                (ERPNext Masterlist Structure &bull; dev.pmii-marketing.com)
+                (ERPNext Masterlist Structure &bull; Live Synchronization)
               </span>
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
@@ -3345,7 +3345,7 @@
           <label style="font-size:11.5px; font-weight:700; color:#475569; display:block; margin-bottom:4px;">
             New MedRep User ID / Email
           </label>
-          <input type="text" id="resignNewUserIdInput" class="form-control" placeholder="e.g. rep@pmii-marketing.com" style="font-size:12px; height:34px; padding:0 10px; border-radius:6px;">
+          <input type="text" id="resignNewUserIdInput" class="form-control" placeholder="e.g. rep@company.com" style="font-size:12px; height:34px; padding:0 10px; border-radius:6px;">
         </div>
       </div>
     </div>
@@ -9507,17 +9507,14 @@ const BASELINE_ERP_TERRITORIES = [
     }
 
     const isKnownAdmin = (
-      usr.toLowerCase() === 'jptan@profinsights.biz' ||
       usr.toLowerCase() === 'lesantos@pims-marketing.com' ||
+      usr.toLowerCase() === 'jptan@profinsights.biz' ||
+      usr.toLowerCase() === 'crpineda@pims-marketing.com' ||
+      usr.toLowerCase() === 'bsbenitez@profinsights.biz' ||
+      usr.toLowerCase() === 'dahuinda@profinsights.biz' ||
+      usr.toLowerCase() === 'ammiole@profinsights.biz' ||
       usr.toLowerCase() === 'administrator'
-    ) && (
-      pwd === 'pims@admin' ||
-      pwd === 'UEPCS101c!' ||
-      pwd === 'UEPCS101c' ||
-      pwd.toLowerCase() === 'pimsadmin' ||
-      pwd.toLowerCase() === 'admin' ||
-      pwd.length >= 4
-    );
+    ) && (typeof pwd === 'string' && pwd.length >= 4);
 
     // 1. If running inside Streamlit component iframe:
     if (isStreamlitActive || (window.parent && window.parent !== window)) {
@@ -9542,7 +9539,12 @@ const BASELINE_ERP_TERRITORIES = [
             // Immediate client-side failover transition to authenticated workspace
             const userObj = {
               email: usr,
-              full_name: usr.toLowerCase().includes('jptan') ? 'Joshua Tan' : (usr.toLowerCase().includes('lesantos') ? 'Leonniel Santos' : 'System Administrator'),
+              full_name: usr.toLowerCase().includes('jptan') ? 'Joshua Tan' : (
+                usr.toLowerCase().includes('lesantos') ? 'Leonniel Santos' : (
+                usr.toLowerCase().includes('crpineda') ? 'Clarisse Pineda' : (
+                usr.toLowerCase().includes('bsbenitez') ? 'Berthem Jr. Benitez' : (
+                usr.toLowerCase().includes('dahuinda') ? 'Danilo Jr. Ahuinda' : (
+                usr.toLowerCase().includes('ammiole') ? 'Allen Miole' : 'System Administrator'))))),
               role_profile: 'Administrator',
               role_title: 'Administrator',
               is_admin: true,
@@ -9564,7 +9566,7 @@ const BASELINE_ERP_TERRITORIES = [
             if (btn && btn.disabled) {
               btn.disabled = false;
               if (btnText) btnText.innerHTML = 'Login to Reconfiguration Portal';
-              showLoginError('Authentication response timed out. Please verify your connection to https://dev.pmii-marketing.com and try again.');
+              showLoginError('Authentication response timed out. Please verify your network connection and try again.');
             }
           }
         }
@@ -9603,13 +9605,13 @@ const BASELINE_ERP_TERRITORIES = [
 
       const errMsg = (data && data.message)
         ? data.message
-        : 'Invalid username or password. Please verify your credentials registered in https://dev.pmii-marketing.com/app/user.';
+        : 'Invalid username or password. Please verify your credentials in your ERPNext account.';
       showLoginError(errMsg);
     } catch (err) {
       if (err.name === 'AbortError') {
-        showLoginError('Authentication timed out (6s). Please check server connectivity to https://dev.pmii-marketing.com.');
+        showLoginError('Authentication timed out (6s). Please check your server connectivity.');
       } else {
-        showLoginError('Authentication server error. Please verify your network connection to https://dev.pmii-marketing.com.');
+        showLoginError('Authentication server error. Please verify your network connection.');
       }
     } finally {
       if (btn) btn.disabled = false;
@@ -10891,7 +10893,7 @@ const BASELINE_ERP_TERRITORIES = [
   }
 
   // ========================================================
-  // ERPNext Interactive Territory Tree Engine (1:1 dev.pmii-marketing.com)
+  // ERPNext Interactive Territory Tree Engine (Live Synchronization)
   // ========================================================
   let territoryTreeData = [];
   let treeExpandedNodes = new Set([
@@ -10919,7 +10921,7 @@ const BASELINE_ERP_TERRITORIES = [
 
   let availableSalesPersons = [];
   let availableEmployees = [];
-  // Baseline User IDs matching ERPNext live instance (dev.pmii-marketing.com)
+  // Baseline User IDs matching ERPNext live instance
   const BASELINE_USERS = [
   {
     "name": "lesantos@pims-marketing.com",
@@ -14947,7 +14949,7 @@ const BASELINE_ERP_TERRITORIES = [
       postSp(payload).then(async res => {
         if (res.ok) {
           console.log(`[ERPNext] Created Sales Person "${spName}" online`);
-          showToast(`Sales Person "${spName}" created live on dev.pmii-marketing.com!`, 'success');
+          showToast(`Sales Person "${spName}" created live on ERPNext!`, 'success');
           syncSalesPersonsAndEmployeesWithERPNext();
         } else if (res.status === 417) {
           // Resilience Stage 1: Retry without targets if child table validation failed
@@ -15145,7 +15147,7 @@ const BASELINE_ERP_TERRITORIES = [
           newEmpRecord.employee_name = serverName;
           localStorage.setItem('pims_employees_v1', JSON.stringify(availableEmployees));
           console.log(`[ERPNext] Created Employee "${serverName}" (${serverId}) online`);
-          showToast(`Employee "${serverName}" (${serverId}) created live on dev.pmii-marketing.com!`, 'success');
+          showToast(`Employee "${serverName}" (${serverId}) created live on ERPNext!`, 'success');
           
           // Re-update display in sales person form if open
           const spEmpInp = document.getElementById('newSpEmployeeInput');

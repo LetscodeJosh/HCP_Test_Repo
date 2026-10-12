@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/api_service.dart';
-import '../hcp_dashboard_screen.dart';
 import '../doctor_masterlist_screen.dart';
 import '../submission_history_screen.dart';
 import '../login_screen.dart';
@@ -318,22 +317,7 @@ class AppDrawer extends StatelessWidget {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   children: [
-                    _buildMenuItem(
-                      context,
-                      icon: Icons.analytics_rounded,
-                      title: 'HCP Dashboard',
-                      isSelected: currentItem == DrawerItem.dashboard,
-                      onTap: () {
-                        Navigator.of(context).pop();
-                        if (currentItem != DrawerItem.dashboard) {
-                          Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
-                          );
-                        }
-                      },
-                    ),
                     if (apiService.isAdmin || apiService.isSfe) ...[
-                      const SizedBox(height: 4),
                       _buildMenuItem(
                         context,
                         icon: Icons.people_alt_rounded,
@@ -348,8 +332,8 @@ class AppDrawer extends StatelessWidget {
                           }
                         },
                       ),
+                      const SizedBox(height: 4),
                     ],
-                    const SizedBox(height: 4),
                     _buildMenuItem(
                       context,
                       icon: Icons.badge_rounded,
@@ -427,56 +411,6 @@ class AppDrawer extends StatelessWidget {
                   ],
                 ),
               ),
-
-          if (apiService.userPosition == UserPosition.admin) ...[
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: ListTile(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(
-                    color: apiService.sfeModeOverride ? const Color(0xFFA855F7).withOpacity(0.4) : const Color(0xFF334155),
-                  ),
-                ),
-                tileColor: apiService.sfeModeOverride ? const Color(0xFFA855F7).withOpacity(0.12) : const Color(0xFF1E293B).withOpacity(0.5),
-                leading: Icon(
-                  apiService.sfeModeOverride ? Icons.verified_user_rounded : Icons.admin_panel_settings_rounded,
-                  color: apiService.sfeModeOverride ? const Color(0xFFA855F7) : const Color(0xFF38BDF8),
-                ),
-                title: Text(
-                  apiService.sfeModeOverride ? 'SFE View Active' : 'Switch to SFE Portal',
-                  style: TextStyle(
-                    color: apiService.sfeModeOverride ? const Color(0xFFA855F7) : const Color(0xFFE2E8F0),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                subtitle: Text(
-                  apiService.sfeModeOverride ? 'Tap to return to Admin View' : 'Preview SFE Institution submissions',
-                  style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                ),
-                trailing: Switch(
-                  value: apiService.sfeModeOverride,
-                  activeColor: const Color(0xFFA855F7),
-                  onChanged: (val) {
-                    apiService.toggleSfeMode();
-                    Navigator.of(context).pop();
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
-                    );
-                  },
-                ),
-                onTap: () {
-                  apiService.toggleSfeMode();
-                  Navigator.of(context).pop();
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const HcpDashboardScreen()),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 4),
-          ],
 
           // App Version & Credits (Just above Log Out)
           Padding(

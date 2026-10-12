@@ -43,14 +43,8 @@ import urllib.request
 # 1. CREDENTIALS ISOLATION & CONFIGURATION
 # =============================================================================
 
-DEV_SERVER_URL = "https://dev.pmii-marketing.com"
-PROD_SERVER_URL = "https://pmii-marketing.com"
-
-# Environment toggle
-ENVIRONMENT = os.environ.get("ENVIRONMENT", "development").lower()
-DEFAULT_ERP_URL = PROD_SERVER_URL if ENVIRONMENT == "production" else DEV_SERVER_URL
-
-ERPNEXT_SERVER_URL = os.environ.get("ERPNEXT_URL", DEFAULT_ERP_URL).rstrip("/")
+# Environment-driven configuration isolated strictly from version control
+ERPNEXT_SERVER_URL = os.environ.get("ERPNEXT_URL", "").rstrip("/")
 
 # Frappe Token / Secret credentials isolated from OS environment
 FRAPPE_API_KEY = os.environ.get("FRAPPE_API_KEY", "")
@@ -58,18 +52,26 @@ FRAPPE_API_SECRET = os.environ.get("FRAPPE_API_SECRET", "")
 ERPNEXT_ADMIN_USER = os.environ.get("ERPNEXT_ADMIN_USER", "")
 ERPNEXT_ADMIN_PASSWORD = os.environ.get("ERPNEXT_ADMIN_PASSWORD", "")
 
-# Secret for signing session HMACs (fallback to random per-boot if unset)
-SESSION_SIGNING_KEY = os.environ.get("SESSION_SECRET", os.environ.get("SECRET_KEY", "vibesec_pims_secret_k9x2_secure"))
+def _resolve_session_secret() -> str:
+    secret = os.environ.get("SESSION_SECRET") or os.environ.get("SECRET_KEY")
+    if secret:
+        return secret
+    import secrets
+    return secrets.token_hex(32)
+
+SESSION_SIGNING_KEY = _resolve_session_secret()
 
 
 def sanitize_log_message(msg: str) -> str:
-    """Scrub sensitive credentials, passwords, tokens, and cookies from log output."""
+    """Scrub sensitive credentials, passwords, tokens, cookies, and emails from log output."""
     if not isinstance(msg, str):
         msg = str(msg)
     # Redact passwords, secrets, tokens
     msg = re.sub(r'(pwd|password|secret|api_secret|token|sid|key)=["\']?[^"\'&\s]+["\']?', r'\1=***REDACTED***', msg, flags=re.IGNORECASE)
     # Redact auth headers
     msg = re.sub(r'(Bearer|token)\s+[a-zA-Z0-9_\-\.~]+', r'\1 ***REDACTED***', msg, flags=re.IGNORECASE)
+    # Redact sensitive corporate email addresses
+    msg = re.sub(r'[a-zA-Z0-9_.+-]+@(pims-marketing\.com|profinsights\.biz)', r'***USER_REDACTED***', msg, flags=re.IGNORECASE)
     return msg
 
 

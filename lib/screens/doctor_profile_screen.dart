@@ -7,6 +7,7 @@ import '../models/lookup_models.dart';
 import '../services/api_service.dart';
 import 'hcp_wizard_screen.dart';
 import 'self_service_qr_screen.dart';
+import 'components/remap_institution_dialog.dart';
 
 class DoctorProfileScreen extends StatefulWidget {
   final Hcp doctor;
@@ -529,7 +530,7 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                     ],
                   ),
                 ),
-                if (isWpRejected)
+                if (isWpRejected) ...[
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
@@ -545,7 +546,52 @@ class _DoctorProfileScreenState extends State<DoctorProfileScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                  )
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () async {
+                      final matchedInst = api.cachedInstitutions.firstWhere(
+                        (i) => i.name.toLowerCase() == w.workplace.toLowerCase() || i.institutionName.toLowerCase() == w.workplace.toLowerCase(),
+                        orElse: () => Institution(name: w.workplace, institutionName: w.workplace, workflowState: 'Rejected', rejectionReason: rejReason),
+                      );
+                      final changed = await RemapInstitutionDialog.show(context, matchedInst);
+                      if (changed == true) {
+                        _loadFullDetails();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Workplace remapped successfully! All connected doctor profiles updated.'),
+                              backgroundColor: Color(0xFF16A34A),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0066FF),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.swap_horiz_rounded, size: 12, color: Colors.white),
+                          SizedBox(width: 2),
+                          Text(
+                            'Remap',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ]
                 else if (isPref)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),

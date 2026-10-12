@@ -181,6 +181,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
             : InstitutionClassification.clinicCapabilities.first);
     bool isSaving = false;
     String? validationErr;
+    bool isCertifiedNotInDirectory = false;
 
     // Immediately trigger 60s cooldown lock when Edit icon is pressed
     apiService.startEditingCooldown(inst.name, user: currentUser);
@@ -396,6 +397,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                   );
                                   setDlgState(() {
                                     detectedMatches = matches;
+                                    isCertifiedNotInDirectory = false;
                                     if (selectedExistingInstitution != null &&
                                         selectedExistingInstitution!.institutionName.trim().toLowerCase() != query.toLowerCase()) {
                                       selectedExistingInstitution = null;
@@ -405,6 +407,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                   setDlgState(() {
                                     detectedMatches = [];
                                     selectedExistingInstitution = null;
+                                    isCertifiedNotInDirectory = false;
                                   });
                                 }
                               });
@@ -421,6 +424,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                         setDlgState(() {
                                           detectedMatches = [];
                                           selectedExistingInstitution = null;
+                                          isCertifiedNotInDirectory = false;
                                         });
                                       },
                                     )
@@ -513,6 +517,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                         setDlgState(() {
                                           workplaceCtrl.text = m.institution.institutionName;
                                           selectedExistingInstitution = m.institution;
+                                          isCertifiedNotInDirectory = true;
                                           selectedRegion = LocationResolver.resolveRegionName(m.institution.regionName ?? m.institution.rawRegionName);
                                           selectedProvince = LocationResolver.resolveProvinceName(m.institution.provinceName ?? m.institution.rawProvinceName);
                                           selectedCity = LocationResolver.resolveCityName(m.institution.cityMunicipality ?? m.institution.rawCityMunicipality);
@@ -567,6 +572,82 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                     ),
                                   ),
                                 ],
+                              ),
+                            ),
+                          ],
+
+                          // MANDATORY CERTIFICATION CHECKBOX (Required for new proposed facility)
+                          if (selectedExistingInstitution == null) ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isCertifiedNotInDirectory ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isCertifiedNotInDirectory ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+                                  width: isCertifiedNotInDirectory ? 1.5 : 1.0,
+                                ),
+                              ),
+                              child: InkWell(
+                                onTap: (workplaceCtrl.text.trim().length < 3 || detectedMatches.isNotEmpty)
+                                    ? null
+                                    : () {
+                                        setDlgState(() {
+                                          isCertifiedNotInDirectory = !isCertifiedNotInDirectory;
+                                        });
+                                      },
+                                borderRadius: BorderRadius.circular(6),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: 22,
+                                      height: 22,
+                                      child: Checkbox(
+                                        value: isCertifiedNotInDirectory,
+                                        activeColor: const Color(0xFF16A34A),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                        onChanged: (workplaceCtrl.text.trim().length < 3 || detectedMatches.isNotEmpty)
+                                            ? null
+                                            : (val) {
+                                                setDlgState(() {
+                                                  isCertifiedNotInDirectory = val ?? false;
+                                                });
+                                              },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'This certifies that this institution which is not in the directory is valid and accurate.',
+                                            style: TextStyle(
+                                              color: Color(0xFF0F172A),
+                                              fontSize: 11.5,
+                                              fontWeight: FontWeight.w600,
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            isCertifiedNotInDirectory
+                                                ? '✓ Certified. Location fields below are editable.'
+                                                : (detectedMatches.isNotEmpty
+                                                    ? 'Active suggestions found above. Select a facility or refine name.'
+                                                    : 'Mandatory: Check to confirm and unlock location details.'),
+                                            style: TextStyle(
+                                              color: isCertifiedNotInDirectory ? const Color(0xFF166534) : const Color(0xFF64748B),
+                                              fontSize: 10.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],
@@ -747,6 +828,11 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
                                     // Block submission if active suggestions exist in Smart Detector without user selection
                                     if (detectedMatches.isNotEmpty && selectedExistingInstitution == null) {
                                       setDlgState(() => validationErr = 'Smart Detector: Active potential duplicates detected above. Please tap an existing facility to select it or distinguish the workplace name before submitting.');
+                                      return;
+                                    }
+
+                                    if (selectedExistingInstitution == null && !isCertifiedNotInDirectory) {
+                                      setDlgState(() => validationErr = 'Please confirm the certification checkbox verifying that this institution is not in the directory and is valid and accurate.');
                                       return;
                                     }
 
