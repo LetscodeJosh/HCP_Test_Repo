@@ -1,24 +1,18 @@
 {
   "version": "v.0.7.0",
-  "build_number": 43,
-  "release_date": "October 11, 2026",
-  "portal_sha256": "3c272d740630fce097e7cc6871f800a8371cdfe10beff19208a53db282617b27",
-  "apk_sha256": "51383749c935543ad769923e31a001ace6584acd3d30a1e2551e0c1fc4645aa8",
-  "apk_size_bytes": 61902634,
-  "apk_size_mb": 59.03,
+  "build_number": 45,
+  "release_date": "October 13, 2026",
+  "apk_filename": "HCP_Profiling_V.0.7.0.apk",
+  "apk_size_bytes": 61787948,
+  "sha256": "7573594ac2e6c730eb740da5c67f9cb564ac163f8715a0c83787821eb71d18e2",
   "features": [
-    "Multi-Doctor Institution Rejection Cascade: Rejections on proposed facilities automatically propagate cause notes across all linked doctors under the MedRep in ERPNext and local cache",
-    "Batch Remapping & Facility Synchronization: Remapping or editing rejected institutions updates and resolves all connected doctor records in batch under that MedRep",
-    "Inviolable Doctor Signature Preservation: Stored consent_signature and agreements preserved byte-for-byte during institution remapping and resubmissions",
-    "Smart AI Detector & Mandatory Certification Gate: Active real-time similarity detector and mandatory attestation checkbox gating location field editing and submission",
-    "ERPNext v15 Dedicated List View Column & CSV/Excel Audit Parity: Custom field rejected_institution_tag with in_list_view: 1 and in_standard_filter: 1 for 1-click audit and export",
-    "Zero-Warning Clean Compilation: flutter analyze maintained at strictly 0 errors and 0 warnings",
-    "Grade A+ Zero Technical Debt: 100% asset parity, version synchronization, and release integrity verified"
+    "Step 2 Real-Time Doctor Name Recognizer across First Name, Middle Name, and Last Name fields",
+    "Smart HCP Masterlist Suggestion Engine querying universal HCP doctype (_allDoctors)",
+    "Interactive 'Person available in HCP' window pop-up below name fields with live match count badges",
+    "10-Tier Gemini 4 Argon-grade fuzzy match engine with medical title normalization, particle filtering, sound-alike, and typo tolerance",
+    "1-Click Auto-Fill populating full name, photo avatar, birth date, preferred specialties, workplaces, and contacts",
+    "Seamless workflow preservation: Selecting existing doctor merges automatically without managerial approval; users can continue as new with manager approval intact"
   ],
-  "verification": {
-    "simulation_tests_passed": 6,
-    "compiler_warnings": 0,
-    "compiler_errors": 0,
-    "clean_architecture": "Grade A+ Zero Technical Debt"
-  }
+  "size_bytes": 61787948,
+  "size_mb": "58.93 MB"
 }

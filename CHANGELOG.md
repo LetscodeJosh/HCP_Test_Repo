@@ -5,6 +5,38 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.7.0] - 2026-10-13
+
+### 🧠 Gemini 4 Argon-Grade Smart HCP Recognizer & Doctor Masterlist Suggestion Engine
+- **Step 2 Real-Time Doctor Name Recognizer**:
+  - Implemented an intelligent suggestion engine and detector across `First Name`, `Middle Name`, and `Last Name` fields in Step 2 (Doctor Information).
+  - Actively scans the universal `HCP` doctype masterlist (`_allDoctors`) in the background with an optimized 180ms debounce.
+  - Interactive field recognizer badge (`Icons.auto_awesome_rounded`) displays live match count pills (`1`, `2`, `3+`) directly inside text field suffix containers.
+- **"Person Available in HCP" Pop-Up Window**:
+  - Automatically renders an interactive, dismissible pop-up window directly below the name fields when existing doctor matches are detected.
+  - Prominent header banner: **`"Person available in HCP"`** with total match count pill and close/dismiss button.
+  - Informative footer note: *"Selecting an existing doctor auto-populates all records and merges automatically upon submission."* with a **`Continue as New`** option for registering brand-new doctors.
+- **10-Tier Fuzzy Match Engine (`HcpDoctorMatchEngine`)**:
+  - Medical title and honorific normalization (`Dr.`, `MD`, `FPCP`, `FPCS`, `FPOG`, `RN`, `RPh`, punctuation, apostrophes, and spacing).
+  - Stopword and particle filtering (`de`, `del`, `dela`, `san`, `los`, `las`, `van`, `von`, `jr`, `sr`).
+  - Tiered confidence scoring:
+    - Tier 1: Exact Doctor Full Name Match (100%)
+    - Tier 2: Dual First & Last Name Match (98%)
+    - Tier 3: First & Surname Correlation Prefix Match (94%)
+    - Tier 4: Full Name Prefix Match (92%)
+    - Tier 5: Surname Match (88%–94%)
+    - Tier 6: First Name Match (84%–92%)
+    - Tier 7: Surname Prefix Match (82%)
+    - Tier 8: Multi-Token Overlap & Permutation (80%–92%)
+    - Tier 9: Damerau-Levenshtein Typo Tolerance (76%–78%)
+    - Tier 10: Universal HCP Masterlist ID / Code Match (95%)
+- **1-Click Auto-Population & Seamless Workflow Preservation**:
+  - Tapping **`Auto-fill`** or any matched doctor card instantly executes `_prepopulateDoctorData`, auto-populating full names, photo avatars, birth dates, specialty affiliations (with program-specific preferences), workplaces, and contact channels.
+  - Selecting a suggestion in `New Doctor` mode automatically converts the submission to an `Existing HCP`, guaranteeing automatic merge on submission (`Submit for Processing` $\rightarrow$ `Processed`) without managerial approval bottlenecks.
+  - Users choosing to ignore or dismiss the suggestion can continue typing and submit as a `New HCP` (`Submit for Approval` $\rightarrow$ `Pending Approval`), preserving 100% of the verified approval workflow invariants.
+
+---
+
 ## [v.0.6.5] - 2026-10-11
 
 ### 🏥 Multi-Doctor Institution Rejection Cascade, Smart Attestation & Zero-Loss Remapping

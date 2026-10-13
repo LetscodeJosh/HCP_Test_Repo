@@ -50,15 +50,8 @@ ASSETS_HTML = os.path.join(BASE_DIR, 'assets', 'web', 'territory_reconfiguration
 # 🚀 SERVER ENVIRONMENT SWITCH (SINGLE-LINE TOGGLE)
 # Change to 'production' or 'development'
 # ===========================================================================
-ENVIRONMENT = os.environ.get('ENVIRONMENT', 'development').lower()
-
-DEV_SERVER_URL = 'https://dev.pmii-marketing.com'
-PROD_SERVER_URL = 'https://pmii-marketing.com'
-
-ERPNEXT_SERVER_URL = os.environ.get(
-    'ERPNEXT_URL',
-    PROD_SERVER_URL if ENVIRONMENT == 'production' else DEV_SERVER_URL
-)
+# Environment-driven ERPNext URL (strictly isolated from version control)
+ERPNEXT_SERVER_URL = os.environ.get('ERPNEXT_URL', '').rstrip('/')
 
 ACTIVE_COOKIE_JAR = http.cookiejar.CookieJar()
 ACTIVE_SSL_CTX = ssl.create_default_context()
@@ -105,10 +98,11 @@ def authenticate_erpnext_user(usr, pwd):
         login_res = json.loads(res.read().decode('utf-8'))
     except urllib.error.HTTPError as e:
         if e.code == 401:
-            return {'success': False, 'authorized': False, 'message': 'Invalid username or password. Please verify your credentials registered in https://dev.pmii-marketing.com/app/user.'}
+            return {'success': False, 'authorized': False, 'message': 'Invalid username or password. Please verify your credentials in your ERPNext account.'}
         return {'success': False, 'authorized': False, 'message': f'ERPNext authentication error (HTTP {e.code}). Please try again.'}
     except Exception as e:
-        return {'success': False, 'authorized': False, 'message': f'Cannot reach ERPNext server at {erp_url}: {str(e)}'}
+        server_host = urllib.parse.urlparse(erp_url).netloc or 'ERPNext Server'
+        return {'success': False, 'authorized': False, 'message': f'Cannot reach ERPNext authentication server ({server_host}). Please verify connectivity.'}
 
     if login_res.get('message') != 'Logged In':
         return {'success': False, 'authorized': False, 'message': 'Authentication failed on ERPNext.'}
@@ -155,7 +149,7 @@ def authenticate_erpnext_user(usr, pwd):
         return {
             'success': False,
             'authorized': False,
-            'message': f"Access Restricted: User '{usr}' does not have SFE or Administrator roles in https://dev.pmii-marketing.com/app/user."
+            'message': f"Access Restricted: User '{usr}' does not have authorized SFE or Administrator roles. Please contact your system administrator."
         }
 
     role_title = 'Administrator' if is_admin else 'SFE Lead'

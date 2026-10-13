@@ -13,6 +13,7 @@ import '../services/data_sanitizer.dart';
 import 'doctor_account_screen.dart';
 import 'components/propose_institution_dialog.dart';
 import 'components/remap_institution_dialog.dart';
+import '../services/doctor_match_engine.dart';
 
 class HcpWizardScreen extends StatefulWidget {
   final Hcp? doctor;
@@ -59,6 +60,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   final List<SubmissionContact> _contacts = [];
   String? _liveRejectionRemarks;
   String? _liveRejectedBy;
+
+  // Smart Doctor Recognizer & Suggestion Engine State
+  List<HcpDoctorMatchResult> _detectedDoctorMatches = [];
+  bool _showDoctorSuggestions = false;
+  Timer? _doctorSearchDebounce;
 
   // Step 3: Survey State
   final Map<String, String> _surveyAnswers = {};
@@ -185,6 +191,12 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     _loadLookups();
   }
 
+  @override
+  void dispose() {
+    _doctorSearchDebounce?.cancel();
+    super.dispose();
+  }
+
   void _syncFullName() {
     final fn = DataSanitizer.cleanTrimProper(_firstNameController.text);
     final mn = DataSanitizer.cleanTrimProper(_middleNameController.text);
@@ -195,6 +207,76 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       if (ln.isNotEmpty) ln,
     ];
     _hcpFullNameController.text = parts.join(' ');
+  }
+
+  void _onDoctorNameChanged() {
+    _doctorSearchDebounce?.cancel();
+    _doctorSearchDebounce = Timer(const Duration(milliseconds: 180), () {
+      if (!mounted) return;
+      final fn = _firstNameController.text.trim();
+      final mn = _middleNameController.text.trim();
+      final ln = _lastNameController.text.trim();
+
+      final combined = '$fn $mn $ln'.trim();
+      if (combined.length < 2) {
+        if (_detectedDoctorMatches.isNotEmpty || _showDoctorSuggestions) {
+          setState(() {
+            _detectedDoctorMatches = [];
+            _showDoctorSuggestions = false;
+          });
+        }
+        return;
+      }
+
+      final matches = HcpDoctorMatchEngine.searchDoctorMatches(
+        firstName: fn,
+        middleName: mn,
+        lastName: ln,
+        allDoctors: _allDoctors,
+        specializations: _specializations,
+        institutions: _institutions,
+        limit: 8,
+      );
+
+      setState(() {
+        _detectedDoctorMatches = matches;
+        _showDoctorSuggestions = matches.isNotEmpty;
+      });
+    });
+  }
+
+  void _selectSuggestedDoctor(Hcp doc) {
+    setState(() {
+      _selectedDoctor = doc;
+      _isCreatingNewDoctor = false;
+      _showDoctorSuggestions = false;
+      _detectedDoctorMatches = [];
+      _prepopulateDoctorData(doc);
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.verified_user_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Auto-populated details for Dr. ${doc.fullName} from HCP Masterlist!',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF16A34A),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+      );
+    }
   }
 
   void _setupForNewDoctor() {
@@ -215,6 +297,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _selectedSpecialties.clear();
       _selectedWorkplaces.clear();
       _contacts.clear();
+      _detectedDoctorMatches = [];
+      _showDoctorSuggestions = false;
     });
   }
 
@@ -233,6 +317,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       _selectedSpecialties.clear();
       _selectedWorkplaces.clear();
       _contacts.clear();
+      _detectedDoctorMatches = [];
+      _showDoctorSuggestions = false;
     });
   }
 
@@ -3631,6 +3717,317 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
+  Widget? _buildNameFieldRecognizerSuffix(TextEditingController controller) {
+    final hasText = controller.text.trim().isNotEmpty;
+    final hasMatches = _detectedDoctorMatches.isNotEmpty;
+    return Tooltip(
+      message: hasMatches
+          ? '${_detectedDoctorMatches.length} matching HCP record(s) found. Tap to view suggestions.'
+          : 'Smart HCP Recognizer Active (Type name to detect existing doctor)',
+      child: InkWell(
+        onTap: () {
+          if (hasMatches) {
+            setState(() {
+              _showDoctorSuggestions = true;
+            });
+          } else {
+            _onDoctorNameChanged();
+          }
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.auto_awesome_rounded,
+                size: 16,
+                color: hasMatches
+                    ? const Color(0xFF2563EB)
+                    : (hasText ? const Color(0xFF64748B) : const Color(0xFFCBD5E1)),
+              ),
+              if (hasMatches) ...[
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Text(
+                    '${_detectedDoctorMatches.length}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF1E40AF),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDoctorSuggestionPopup() {
+    if (!_showDoctorSuggestions || _detectedDoctorMatches.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 10, bottom: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFF3B82F6), width: 1.5),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x180066FF),
+            blurRadius: 12,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header Bar with "Person available in HCP"
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFFEFF6FF),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(10.5)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDBEAFE),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.psychology_rounded,
+                    color: Color(0xFF1D4ED8),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'Person available in HCP',
+                            style: TextStyle(
+                              color: Color(0xFF1E40AF),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF2563EB),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${_detectedDoctorMatches.length} Found',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Doctor exists in universal HCP masterlist. Tap to select and auto-populate profile.',
+                        style: TextStyle(
+                          color: Color(0xFF3B82F6),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFF64748B)),
+                  onPressed: () {
+                    setState(() {
+                      _showDoctorSuggestions = false;
+                    });
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  tooltip: 'Dismiss suggestions',
+                ),
+              ],
+            ),
+          ),
+
+          // Scrollable List of matching doctors
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 230),
+            child: Scrollbar(
+              thumbVisibility: true,
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                itemCount: _detectedDoctorMatches.length,
+                separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFFF1F5F9)),
+                itemBuilder: (ctx, idx) {
+                  final match = _detectedDoctorMatches[idx];
+                  final doc = match.doctor;
+                  final isSelected = _selectedDoctor?.name == doc.name;
+
+                  return InkWell(
+                    onTap: () => _selectSuggestedDoctor(doc),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      child: Row(
+                        children: [
+                          // Doctor avatar / badge
+                          CircleAvatar(
+                            radius: 18,
+                            backgroundColor: isSelected ? const Color(0xFF0066FF) : const Color(0xFFF1F5F9),
+                            backgroundImage: (doc.hcpPhoto != null && doc.hcpPhoto!.isNotEmpty)
+                                ? NetworkImage(doc.hcpPhoto!)
+                                : null,
+                            child: (doc.hcpPhoto == null || doc.hcpPhoto!.isEmpty)
+                                ? Text(
+                                    doc.firstName.isNotEmpty ? doc.firstName[0].toUpperCase() : 'D',
+                                    style: TextStyle(
+                                      color: isSelected ? Colors.white : const Color(0xFF0066FF),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          // Doctor info
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        'Dr. ${doc.fullName}',
+                                        style: const TextStyle(
+                                          color: Color(0xFF0F172A),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (doc.name != null && doc.name!.isNotEmpty) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF1F5F9),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          doc.name!,
+                                          style: const TextStyle(
+                                            color: Color(0xFF64748B),
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${match.formattedSpecialty}${match.formattedWorkplace.isNotEmpty ? ' • ${match.formattedWorkplace}' : ''}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF64748B),
+                                    fontSize: 11,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 3),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: match.isExact ? const Color(0xFFDCFCE7) : const Color(0xFFEFF6FF),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: match.isExact ? const Color(0xFF86EFAC) : const Color(0xFFBFDBFE),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        match.matchReason,
+                                        style: TextStyle(
+                                          color: match.isExact ? const Color(0xFF15803D) : const Color(0xFF1D4ED8),
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          // Select & Auto-populate Action Pill
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0066FF),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(Icons.touch_app_rounded, size: 14, color: Colors.white),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Auto-fill',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildDoctorSearchField() {
     final hasDoctor = _selectedDoctor != null;
     final doctorTitle = hasDoctor
@@ -4003,10 +4400,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _firstNameController,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      onChanged: (_) => _syncFullName(),
+                      onChanged: (_) {
+                        _syncFullName();
+                        _onDoctorNameChanged();
+                      },
                       decoration: InputDecoration(
                         labelText: 'First Name *',
                         labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        suffixIcon: _buildNameFieldRecognizerSuffix(_firstNameController),
                         filled: true,
                         fillColor: Colors.white,
                         isDense: true,
@@ -4022,10 +4423,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _middleNameController,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      onChanged: (_) => _syncFullName(),
+                      onChanged: (_) {
+                        _syncFullName();
+                        _onDoctorNameChanged();
+                      },
                       decoration: InputDecoration(
                         labelText: 'Middle Name *',
                         labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        suffixIcon: _buildNameFieldRecognizerSuffix(_middleNameController),
                         filled: true,
                         fillColor: Colors.white,
                         isDense: true,
@@ -4045,10 +4450,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _lastNameController,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      onChanged: (_) => _syncFullName(),
+                      onChanged: (_) {
+                        _syncFullName();
+                        _onDoctorNameChanged();
+                      },
                       decoration: InputDecoration(
                         labelText: 'Last Name *',
                         labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        suffixIcon: _buildNameFieldRecognizerSuffix(_lastNameController),
                         filled: true,
                         fillColor: Colors.white,
                         isDense: true,
@@ -4128,10 +4537,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _firstNameController,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
-                      onChanged: (_) => _syncFullName(),
+                      onChanged: (_) {
+                        _syncFullName();
+                        _onDoctorNameChanged();
+                      },
                       decoration: InputDecoration(
                         labelText: 'First Name *',
                         labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        suffixIcon: _buildNameFieldRecognizerSuffix(_firstNameController),
                         filled: true,
                         fillColor: Colors.white,
                         enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
@@ -4145,10 +4558,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _middleNameController,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
-                      onChanged: (_) => _syncFullName(),
+                      onChanged: (_) {
+                        _syncFullName();
+                        _onDoctorNameChanged();
+                      },
                       decoration: InputDecoration(
                         labelText: 'Middle Name *',
                         labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        suffixIcon: _buildNameFieldRecognizerSuffix(_middleNameController),
                         filled: true,
                         fillColor: Colors.white,
                         enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
@@ -4162,10 +4579,14 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _lastNameController,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
-                      onChanged: (_) => _syncFullName(),
+                      onChanged: (_) {
+                        _syncFullName();
+                        _onDoctorNameChanged();
+                      },
                       decoration: InputDecoration(
                         labelText: 'Last Name *',
                         labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        suffixIcon: _buildNameFieldRecognizerSuffix(_lastNameController),
                         filled: true,
                         fillColor: Colors.white,
                         enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
@@ -4234,6 +4655,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 ],
               ),
             ],
+            _buildDoctorSuggestionPopup(),
             const SizedBox(height: 20),
 
             const Text('SPECIALIZATION / TYPE / PRACTICE', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
