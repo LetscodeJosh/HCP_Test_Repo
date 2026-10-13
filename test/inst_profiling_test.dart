@@ -822,6 +822,66 @@ void main() {
     expect(archivedRawInst.isRejected, isTrue);
     expect(archivedRawInst.canResubmit, isFalse); // Never recycled
   });
+
+  test('Test V.0.7.0: Progressive phrase shrinking in Propose New Institution directory duplicate detection', () {
+    final facilities = [
+      Institution(
+        name: 'INST-SLMC-BGC',
+        institutionName: "St. Luke's Medical Center - Global City",
+        cityMunicipality: 'Taguig',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-SLMC-QC',
+        institutionName: "St. Luke's Medical Center - Quezon City",
+        cityMunicipality: 'Quezon City',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-CSMC',
+        institutionName: 'Cardinal Santos Medical Center',
+        cityMunicipality: 'San Juan',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-MMC',
+        institutionName: 'Metropolitan Medical Center',
+        cityMunicipality: 'City of Manila',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-EAMC',
+        institutionName: 'East Avenue Medical Center',
+        cityMunicipality: 'Quezon City',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+    ];
+
+    // 1. Broad query matches candidates
+    final broad = LocationResolver.searchDirectoryWithDuplicateDetection('St', facilities);
+    expect(broad.isNotEmpty, isTrue);
+
+    // 2. Multi-token distinctive phrase shrinks to only facilities with both words
+    final cardinalMatches = LocationResolver.searchDirectoryWithDuplicateDetection('Cardinal Santos', facilities);
+    expect(cardinalMatches.length, equals(1));
+    expect(cardinalMatches.first.institution.name, equals('INST-CSMC'));
+
+    // 3. Whole branch context shrinks down to ONLY that specific branch
+    final bgcBranch = LocationResolver.searchDirectoryWithDuplicateDetection("St. Luke's Medical Center - Global City", facilities);
+    expect(bgcBranch.length, equals(1));
+    expect(bgcBranch.first.institution.name, equals('INST-SLMC-BGC'));
+    expect(bgcBranch.first.isExactOrHighConfidenceDuplicate, isTrue);
+
+    // 4. Genuine new facility with distinctive terms ("Metro East Medical Specialists")
+    // must NOT match "East Avenue" or "Metropolitan" and must cleanly shrink to empty
+    final newFacility = LocationResolver.searchDirectoryWithDuplicateDetection('Metro East Medical Specialists', facilities);
+    expect(newFacility, isEmpty);
+  });
 }
 
 

@@ -21,13 +21,19 @@ Selecting any suggested doctor immediately auto-populates the complete profile a
 
 ## 🚀 Key Features & Architectural Enhancements
 
-### 1. Gemini 4 Argon Progressive Phrase Shrinking (Institution / Workplace)
+### 1. Propose New Institution Progressive Phrase Shrinking & Directory Duplicate Detection
+- **Gemini 4 Argon Matching Engine**: In the Propose New Institution modal, typing into the Facility / Institution Name field now applies strict multi-token phrase correlation.
+- **Irrelevant Matches Pruned**: Excludes institutions that share only common generic medical tokens (e.g. "Hospital", "Clinic", "Center") without distinctive stem/phrase correlation (e.g. typing "New Horizons" will never match "East Avenue Medical Center").
+- **Dynamic Candidate Shrinking**: As user types from broad to full context, detected matches dynamically shrink down to strictly related branches or exact facilities.
+- **Clean Submission Unblocking**: When typing a genuine brand-new facility not in the directory, detected matches cleanly drop to 0, unlocking Region, Province, City/Municipality, Barangay, and the declaration checkbox so the MedRep can submit the proposal smoothly.
+
+### 2. Gemini 4 Argon Progressive Phrase Shrinking (Institution / Workplace Selector)
 - **Dynamic Candidate Shrinking**: When typing into the workplace/institution search field, the search starts from broad candidate suggestions (maximum count) and intelligently shrinks down to only strictly co-related facilities and direct branches as the full phrase/context is entered.
 - **Unrelated Clutter Elimination**: Prohibits unrelated facilities from appearing in the dropdown if they lack distinctive phrase similarity (eliminating "dumb" matches that only match generic words like "hospital", "clinic", or "center").
 - **Smart Detector Phrase Pill**: Displays live detected phrase matching (`Smart Match: "<Institution Name>"`) with a shrinking facility counter pill right below the search field.
 - **Aggressive Relative Confidence Pruning**: Applies dynamic relative threshold pruning (`score < topScore * 0.75` on whole context queries) so the dropdown displays minimal, targeted output.
 
-### 2. Existing Doctor Record Field Locking (Clean Invariance)
+### 3. Existing Doctor Record Field Locking (Clean Invariance)
 - **Masterlist Protection**: When a suggested or existing doctor from the universal masterlist is selected, the **First Name**, **Middle Name**, **Last Name**, and **Birth Date** fields automatically switch to `readOnly: true`.
 - **Zero Clutter Guarantee**: Enforces locking seamlessly under the hood without distracting warning notices, lock banners, or lock icons, keeping the interface clean and production-focused.
 - **State Reversibility**: If the MedRep switches to "+ Add New Doctor" or clears the doctor selection, fields dynamically become editable once again.

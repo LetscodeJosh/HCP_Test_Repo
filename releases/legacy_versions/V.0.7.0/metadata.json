@@ -3,9 +3,10 @@
   "build_number": 45,
   "release_date": "October 13, 2026",
   "apk_filename": "HCP_Profiling_V.0.7.0.apk",
-  "apk_size_bytes": 61787934,
-  "sha256": "96D7849D774E946AA6F1E1E1B43D6E1BBEF237CA4983C7B1D0AE45A40399AAA1",
+  "apk_size_bytes": 61787928,
+  "sha256": "21D75FE793A533B3E80D39D00AB9F02B1F177FA7A6631DF06215319ABA8CDD5F",
   "features": [
+    "Propose New Institution Progressive Phrase Shrinking & Directory Duplicate Detection: matches behave as Gemini 4 Argon, filtering out non-related facilities, shrinking dynamically from maximum to minimal near-related branches, and cleanly reducing to zero matches for genuine new facilities so location fields unlock and proposal submission proceeds",
     "Gemini 4 Argon Progressive Phrase Shrinking in Institution / Workplace field selector: dynamically narrows candidates from maximum broad matches down to strictly co-related facilities and direct branches as full context is typed",
     "Smart Detector Phrase Bar displaying live target facility phrase and shrinking match count pill",
     "Existing Doctor Record Field Locking: Name fields (First, Middle, Last) and Birth Date automatically locked to readOnly when an existing doctor is selected from masterlist without cluttering notices, icons, or lock notes",
@@ -16,6 +17,6 @@
     "1-Click Auto-Fill populating full name, photo avatar, birth date, preferred specialties, workplaces, and contacts",
     "Seamless workflow preservation: Selecting existing doctor merges automatically without managerial approval; users can continue as new with manager approval intact"
   ],
-  "size_bytes": 61787934,
+  "size_bytes": 61787928,
   "size_mb": "58.93 MB"
 }

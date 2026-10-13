@@ -2334,7 +2334,7 @@ class LocationResolver {
   static (double, bool) _scoreInstitutionCandidate({
     required String cleanQ,
     required List<String> qTokens,
-    required List<String> coreTokens,
+    required List<String> coreWords,
     required bool isAcronymCandidate,
     required String rawInstName,
     required String normInstName,
@@ -2351,13 +2351,16 @@ class LocationResolver {
         normInstName.contains(' $cleanQ') ||
         instTokens.any((t) => t == cleanQ || t.startsWith(cleanQ));
 
-    final bool hasDirectPhrase = cleanQ.length >= 5 && normInstName.contains(cleanQ);
+    final bool hasDirectPhrase = (cleanQ.length >= 4 && normInstName.contains(cleanQ)) || normInstName.startsWith(cleanQ);
 
-    final bool hasCoreMatch = coreTokens.isNotEmpty &&
-        coreTokens.any((ct) => instTokens.any((it) =>
-            it == ct ||
-            (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))) ||
-            (_fuzzySynonyms[ct]?.contains(it) ?? false)));
+    final bool hasCoreMatch = coreWords.isNotEmpty &&
+        coreWords.any((cw) => instTokens.any((it) =>
+            it == cw ||
+            (cw.endsWith('s') && it == cw.substring(0, cw.length - 1)) ||
+            (it.endsWith('s') && cw == it.substring(0, it.length - 1)) ||
+            (it.length >= 4 && cw.length >= 4 && (it.startsWith(cw) || cw.startsWith(it))) ||
+            (cw.length >= 4 && isSoundAlikeMatch(cw, it)) ||
+            (_fuzzySynonyms[cw]?.contains(it) ?? false)));
 
     // Fast reject: eliminates unrelated entries (including short substring collisions like "industry" on "ust")
     if (!isKnownAcronym && !isDynamicAcronym && !hasWordBoundary && !hasDirectPhrase && !hasCoreMatch) {
@@ -2407,33 +2410,51 @@ class LocationResolver {
       if (cleanQ.length >= 8) isHighConfidence = true;
     }
 
-    // 9. Distinctive core token overlap
-    if (score < 80.0 && coreTokens.isNotEmpty) {
+    // 9. Distinctive core word multi-token evaluation (Gemini 4 Argon Correlation Guard)
+    if (coreWords.isNotEmpty) {
       int matchedCore = 0;
-      for (var ct in coreTokens) {
-        if (instTokens.any((it) =>
-            it == ct ||
-            (it.length >= 4 && ct.length >= 4 && (it.startsWith(ct) || ct.startsWith(it))) ||
-            (ct.length >= 4 && isSoundAlikeMatch(ct, it)) ||
-            (_fuzzySynonyms[ct]?.contains(it) ?? false))) {
+      for (final cw in coreWords) {
+        final cwStem = (cw.endsWith('s') && cw.length > 3) ? cw.substring(0, cw.length - 1) : cw;
+        if (instTokens.any((it) {
+          final itStem = (it.endsWith('s') && it.length > 3) ? it.substring(0, it.length - 1) : it;
+          return it == cw ||
+              itStem == cw ||
+              it == cwStem ||
+              itStem == cwStem ||
+              (it.length >= 4 && cw.length >= 4 && (it.startsWith(cw) || cw.startsWith(it))) ||
+              (cw.length >= 4 && isSoundAlikeMatch(cw, it)) ||
+              (_fuzzySynonyms[cw]?.contains(it) ?? false);
+        })) {
           matchedCore++;
         }
       }
 
-      if (coreTokens.length == 1) {
-        if (matchedCore == 1 && coreTokens.first.length >= 4) {
+      if (coreWords.length == 1) {
+        if (matchedCore == 1 && score < 75.0) {
           score = 75.0;
         }
-      } else if (coreTokens.length >= 2) {
-        final ratio = matchedCore / coreTokens.length;
-        if (ratio >= 0.5) {
-          final tokenScore = 70.0 + (ratio * 25.0);
-          if (tokenScore > score) {
-            score = tokenScore;
-            if (ratio == 1.0 && coreTokens.length >= 2) {
-              isHighConfidence = true;
-            }
+      } else if (coreWords.length == 2) {
+        // Multi-token query (2 distinctive words): STRICTLY REQUIRE BOTH to match!
+        // Prevents "East Avenue" from matching "Metro East", or "Metropolitan" from matching "Metro East".
+        if (matchedCore == 2) {
+          if (score < 88.0) score = 88.0;
+          if (hasDirectPhrase || qTokens.length <= 3) {
+            isHighConfidence = true;
           }
+        } else if (matchedCore < 2 && !hasDirectPhrase) {
+          // Lacks 2-word phrase correlation: strictly exclude candidate!
+          return (0.0, false);
+        }
+      } else if (coreWords.length >= 3) {
+        // Whole context query (3+ distinctive words): require at least 70% distinctive match
+        final ratio = matchedCore / coreWords.length;
+        if (ratio >= 0.70) {
+          final tokenScore = 72.0 + (ratio * 20.0);
+          if (tokenScore > score) score = tokenScore;
+          if (ratio >= 0.90) isHighConfidence = true;
+        } else if (!hasDirectPhrase) {
+          // Insufficient whole-context match: strictly exclude candidate!
+          return (0.0, false);
         }
       }
     }
@@ -2442,7 +2463,8 @@ class LocationResolver {
   }
 
   /// Smart predictive directory search with duplicate detection and PSGC location embedding.
-  /// Detects if an institution is already present in the directory (exact match, token overlap, or acronym).
+  /// Detects if an institution is already present in the directory (exact match, token overlap, or acronym)
+  /// with Gemini 4 Argon Progressive Phrase Shrinking to eliminate unrelated facilities.
   static List<InstitutionSearchResult> searchDirectoryWithDuplicateDetection(
     String rawQuery,
     Iterable<Institution> allInstitutions, {
@@ -2461,22 +2483,14 @@ class LocationResolver {
     if (qTokens.isEmpty) return [];
 
     const stopWords = {
-      'hospital', 'medical', 'center', 'clinic', 'inc', 'corporation', 'corp',
-      'phils', 'philippines', 'dr', 'san', 'sta', 'saint', 'of', 'and', 'the',
-      'care', 'health', 'foundation', 'memorial', 'general', 'community',
-      'district', 'city', 'provincial', 'lying', 'in', 'diagnostic',
+      'hospital', 'medical', 'center', 'centre', 'clinic', 'clinics', 'inc',
+      'corporation', 'corp', 'phils', 'philippines', 'dr', 'san', 'sta', 'saint',
+      'of', 'and', 'the', 'care', 'health', 'foundation', 'memorial', 'general',
+      'community', 'district', 'city', 'provincial', 'lying', 'in', 'diagnostic',
+      'baranggay', 'barangay', 'department', 'unit', 'co', 'ltd'
     };
 
-    final coreTokens = <String>[];
-    for (var t in qTokens) {
-      if (!stopWords.contains(t) && t.length > 2) {
-        coreTokens.add(t);
-        if (t.endsWith('s') && t.length > 3) {
-          coreTokens.add(t.substring(0, t.length - 1));
-        }
-      }
-    }
-
+    final coreWords = qTokens.where((t) => !stopWords.contains(t) && t.length >= 3).toList();
     final isAcronymCandidate = cleanQ.length >= 2 && cleanQ.length <= 5 && RegExp(r'^[a-z]+$').hasMatch(cleanQ);
 
     final List<InstitutionSearchResult> results = [];
@@ -2502,7 +2516,7 @@ class LocationResolver {
       final (score, isHighConfidence) = _scoreInstitutionCandidate(
         cleanQ: cleanQ,
         qTokens: qTokens,
-        coreTokens: coreTokens,
+        coreWords: coreWords,
         isAcronymCandidate: isAcronymCandidate,
         rawInstName: instName,
         normInstName: normInstName,
@@ -2547,7 +2561,7 @@ class LocationResolver {
       final (score, isHighConfidence) = _scoreInstitutionCandidate(
         cleanQ: cleanQ,
         qTokens: qTokens,
-        coreTokens: coreTokens,
+        coreWords: coreWords,
         isAcronymCandidate: isAcronymCandidate,
         rawInstName: instName,
         normInstName: normInstName,
@@ -2570,12 +2584,36 @@ class LocationResolver {
       }
     }
 
-    results.sort((a, b) => b.matchScore.compareTo(a.matchScore));
-    // Apply Gemini 4 Argon Progressive Shrinking:
-    if (results.isNotEmpty && results.first.matchScore >= 88.0 && qTokens.length >= 2) {
+    results.sort((a, b) {
+      final cmp = b.matchScore.compareTo(a.matchScore);
+      if (cmp != 0) return cmp;
+      return a.institution.institutionName.toLowerCase().compareTo(b.institution.institutionName.toLowerCase());
+    });
+
+    // GEMINI 4 ARGON PROGRESSIVE PHRASE SHRINKING:
+    // As the user types more context across the field, progressively prune weaker partial matches
+    // so the dropdown seamlessly shrinks down to only near-related and same phrase facilities.
+    if (results.isNotEmpty && qTokens.length >= 2) {
       final top = results.first.matchScore;
-      results.removeWhere((r) => r.matchScore < top * 0.75);
+      if (top >= 88.0) {
+        // High confidence match exists in directory (exact facility, prefix, or known acronym):
+        if (qTokens.length >= 3 || coreWords.length >= 2) {
+          // Whole context entered: shrink tightly to exact facility and immediate near-related branches
+          results.removeWhere((r) => r.matchScore < top * 0.85);
+        } else {
+          // 2 tokens: shrink moderately
+          results.removeWhere((r) => r.matchScore < top * 0.70);
+        }
+      } else {
+        // No high-confidence match in directory (user is proposing a distinct new facility):
+        // If 2 or more distinctive words were typed and no facility matches the full phrase,
+        // prune lower partial noise so the dropdown shrinks to empty, unlocking new proposal!
+        if (coreWords.length >= 2) {
+          results.removeWhere((r) => !r.isExactOrHighConfidenceDuplicate && r.matchScore < 88.0);
+        }
+      }
     }
+
     return results.take(limit).toList();
   }
 
