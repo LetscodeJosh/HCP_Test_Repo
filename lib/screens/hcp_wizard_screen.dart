@@ -1831,7 +1831,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
                     child: TextField(
                       controller: searchCtrl,
                       decoration: InputDecoration(
@@ -1857,7 +1857,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       ),
                       onChanged: (val) {
                         searchDebounce?.cancel();
-                        searchDebounce = Timer(const Duration(milliseconds: 180), () {
+                        searchDebounce = Timer(const Duration(milliseconds: 100), () {
                           setDlgState(() {
                             filtered = LocationResolver.fuzzySearchInstitutions(val, list);
                           });
@@ -1865,6 +1865,52 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       },
                     ),
                   ),
+                  if (searchCtrl.text.trim().isNotEmpty && filtered.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF86EFAC)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.auto_awesome_rounded, color: Color(0xFF16A34A), size: 14),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text.rich(
+                              TextSpan(
+                                children: [
+                                  const TextSpan(
+                                    text: 'Smart Match: ',
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF166534), fontSize: 11),
+                                  ),
+                                  TextSpan(
+                                    text: '"${filtered.first.institutionName}"',
+                                    style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF15803D), fontSize: 11),
+                                  ),
+                                ],
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${filtered.length} ${filtered.length == 1 ? 'facility' : 'facilities'}',
+                              style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF15803D)),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     child: SizedBox(
@@ -3718,6 +3764,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   Widget? _buildNameFieldRecognizerSuffix(TextEditingController controller) {
+    if (_selectedDoctor != null && !_isCreatingNewDoctor) return null;
     final hasText = controller.text.trim().isNotEmpty;
     final hasMatches = _detectedDoctorMatches.isNotEmpty;
     return Tooltip(
@@ -3774,7 +3821,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   }
 
   Widget _buildDoctorSuggestionPopup() {
-    if (!_showDoctorSuggestions || _detectedDoctorMatches.isEmpty) {
+    if (!_showDoctorSuggestions || _detectedDoctorMatches.isEmpty || (_selectedDoctor != null && !_isCreatingNewDoctor)) {
       return const SizedBox.shrink();
     }
 
@@ -4249,6 +4296,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   Widget _buildStep2DoctorInfo() {
     final isMobile = MediaQuery.of(context).size.width < 700;
     final bool showDetails = _selectedDoctor != null || _isCreatingNewDoctor;
+    final bool isExistingDoctor = _selectedDoctor != null && !_isCreatingNewDoctor;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -4398,22 +4446,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _firstNameController,
+                      readOnly: isExistingDoctor,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      onChanged: (_) {
-                        _syncFullName();
-                        _onDoctorNameChanged();
-                      },
+                      onChanged: isExistingDoctor
+                          ? null
+                          : (_) {
+                              _syncFullName();
+                              _onDoctorNameChanged();
+                            },
                       decoration: InputDecoration(
                         labelText: 'First Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                        suffixIcon: _buildNameFieldRecognizerSuffix(_firstNameController),
+                        labelStyle: TextStyle(
+                          color: isExistingDoctor ? const Color(0xFF64748B) : const Color(0xFFDC2626),
+                          fontSize: 12,
+                        ),
+                        suffixIcon: isExistingDoctor ? null : _buildNameFieldRecognizerSuffix(_firstNameController),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFFDC2626)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -4421,22 +4484,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _middleNameController,
+                      readOnly: isExistingDoctor,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      onChanged: (_) {
-                        _syncFullName();
-                        _onDoctorNameChanged();
-                      },
+                      onChanged: isExistingDoctor
+                          ? null
+                          : (_) {
+                              _syncFullName();
+                              _onDoctorNameChanged();
+                            },
                       decoration: InputDecoration(
                         labelText: 'Middle Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                        suffixIcon: _buildNameFieldRecognizerSuffix(_middleNameController),
+                        labelStyle: TextStyle(
+                          color: isExistingDoctor ? const Color(0xFF64748B) : const Color(0xFFDC2626),
+                          fontSize: 12,
+                        ),
+                        suffixIcon: isExistingDoctor ? null : _buildNameFieldRecognizerSuffix(_middleNameController),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFFDC2626)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -4448,22 +4526,37 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _lastNameController,
+                      readOnly: isExistingDoctor,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      onChanged: (_) {
-                        _syncFullName();
-                        _onDoctorNameChanged();
-                      },
+                      onChanged: isExistingDoctor
+                          ? null
+                          : (_) {
+                              _syncFullName();
+                              _onDoctorNameChanged();
+                            },
                       decoration: InputDecoration(
                         labelText: 'Last Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
-                        suffixIcon: _buildNameFieldRecognizerSuffix(_lastNameController),
+                        labelStyle: TextStyle(
+                          color: isExistingDoctor ? const Color(0xFF64748B) : const Color(0xFFDC2626),
+                          fontSize: 12,
+                        ),
+                        suffixIcon: isExistingDoctor ? null : _buildNameFieldRecognizerSuffix(_lastNameController),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFFDC2626)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -4473,26 +4566,28 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _birthDateController,
                       readOnly: true,
                       style: const TextStyle(color: Color(0xFF0F172A), fontSize: 13),
-                      onTap: () async {
-                        DateTime initial = DateTime(1985, 1, 1);
-                        if (_birthDateController.text.isNotEmpty) {
-                          try {
-                            initial = DateTime.parse(_birthDateController.text);
-                          } catch (_) {}
-                        }
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: initial,
-                          firstDate: DateTime(1920),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                          setState(() {
-                            _birthDateController.text = formatted;
-                          });
-                        }
-                      },
+                      onTap: isExistingDoctor
+                          ? null
+                          : () async {
+                              DateTime initial = DateTime(1985, 1, 1);
+                              if (_birthDateController.text.isNotEmpty) {
+                                try {
+                                  initial = DateTime.parse(_birthDateController.text);
+                                } catch (_) {}
+                              }
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: initial,
+                                firstDate: DateTime(1920),
+                                lastDate: DateTime.now(),
+                              );
+                              if (picked != null) {
+                                final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                                setState(() {
+                                  _birthDateController.text = formatted;
+                                });
+                              }
+                            },
                       decoration: InputDecoration(
                         labelText: 'Birth Date (Optional)',
                         labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
@@ -4501,7 +4596,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (_birthDateController.text.isNotEmpty)
+                            if (_birthDateController.text.isNotEmpty && !isExistingDoctor)
                               IconButton(
                                 icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 16),
                                 onPressed: () {
@@ -4514,16 +4609,26 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                 tooltip: 'Clear Birth Date',
                               ),
                             const SizedBox(width: 4),
-                            const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 18),
+                            Icon(
+                              Icons.calendar_month_rounded,
+                              color: isExistingDoctor ? const Color(0xFF94A3B8) : const Color(0xFF0066FF),
+                              size: 18,
+                            ),
                             const SizedBox(width: 8),
                           ],
                         ),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                         enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -4535,20 +4640,34 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _firstNameController,
+                      readOnly: isExistingDoctor,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
-                      onChanged: (_) {
-                        _syncFullName();
-                        _onDoctorNameChanged();
-                      },
+                      onChanged: isExistingDoctor
+                          ? null
+                          : (_) {
+                              _syncFullName();
+                              _onDoctorNameChanged();
+                            },
                       decoration: InputDecoration(
                         labelText: 'First Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                        suffixIcon: _buildNameFieldRecognizerSuffix(_firstNameController),
+                        labelStyle: TextStyle(
+                          color: isExistingDoctor ? const Color(0xFF64748B) : const Color(0xFFDC2626),
+                        ),
+                        suffixIcon: isExistingDoctor ? null : _buildNameFieldRecognizerSuffix(_firstNameController),
                         filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFFDC2626)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -4556,20 +4675,34 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _middleNameController,
+                      readOnly: isExistingDoctor,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
-                      onChanged: (_) {
-                        _syncFullName();
-                        _onDoctorNameChanged();
-                      },
+                      onChanged: isExistingDoctor
+                          ? null
+                          : (_) {
+                              _syncFullName();
+                              _onDoctorNameChanged();
+                            },
                       decoration: InputDecoration(
                         labelText: 'Middle Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                        suffixIcon: _buildNameFieldRecognizerSuffix(_middleNameController),
+                        labelStyle: TextStyle(
+                          color: isExistingDoctor ? const Color(0xFF64748B) : const Color(0xFFDC2626),
+                        ),
+                        suffixIcon: isExistingDoctor ? null : _buildNameFieldRecognizerSuffix(_middleNameController),
                         filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFFDC2626)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -4577,20 +4710,34 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Expanded(
                     child: TextFormField(
                       controller: _lastNameController,
+                      readOnly: isExistingDoctor,
                       textCapitalization: TextCapitalization.words,
                       style: const TextStyle(color: Color(0xFF0F172A)),
-                      onChanged: (_) {
-                        _syncFullName();
-                        _onDoctorNameChanged();
-                      },
+                      onChanged: isExistingDoctor
+                          ? null
+                          : (_) {
+                              _syncFullName();
+                              _onDoctorNameChanged();
+                            },
                       decoration: InputDecoration(
                         labelText: 'Last Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
-                        suffixIcon: _buildNameFieldRecognizerSuffix(_lastNameController),
+                        labelStyle: TextStyle(
+                          color: isExistingDoctor ? const Color(0xFF64748B) : const Color(0xFFDC2626),
+                        ),
+                        suffixIcon: isExistingDoctor ? null : _buildNameFieldRecognizerSuffix(_lastNameController),
                         filled: true,
-                        fillColor: Colors.white,
-                        enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFDC2626)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
+                        enabledBorder: OutlineInputBorder(
+                          borderSide: BorderSide(color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFFDC2626)),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),
@@ -4600,26 +4747,28 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       controller: _birthDateController,
                       readOnly: true,
                       style: const TextStyle(color: Color(0xFF0F172A)),
-                      onTap: () async {
-                        DateTime initial = DateTime(1985, 1, 1);
-                        if (_birthDateController.text.isNotEmpty) {
-                          try {
-                            initial = DateTime.parse(_birthDateController.text);
-                          } catch (_) {}
-                        }
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: initial,
-                          firstDate: DateTime(1920),
-                          lastDate: DateTime.now(),
-                        );
-                        if (picked != null) {
-                          final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-                          setState(() {
-                            _birthDateController.text = formatted;
-                          });
-                        }
-                      },
+                      onTap: isExistingDoctor
+                          ? null
+                          : () async {
+                              DateTime initial = DateTime(1985, 1, 1);
+                              if (_birthDateController.text.isNotEmpty) {
+                                try {
+                                  initial = DateTime.parse(_birthDateController.text);
+                                } catch (_) {}
+                              }
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: initial,
+                                firstDate: DateTime(1920),
+                                lastDate: DateTime.now(),
+                              );
+                              if (picked != null) {
+                                final formatted = '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
+                                setState(() {
+                                  _birthDateController.text = formatted;
+                                });
+                              }
+                            },
                       decoration: InputDecoration(
                         labelText: 'Birth Date (Optional)',
                         labelStyle: const TextStyle(color: Color(0xFF64748B)),
@@ -4628,7 +4777,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            if (_birthDateController.text.isNotEmpty)
+                            if (_birthDateController.text.isNotEmpty && !isExistingDoctor)
                               IconButton(
                                 icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8), size: 18),
                                 onPressed: () {
@@ -4641,14 +4790,24 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                 tooltip: 'Clear Birth Date',
                               ),
                             const SizedBox(width: 4),
-                            const Icon(Icons.calendar_month_rounded, color: Color(0xFF0066FF), size: 20),
+                            Icon(
+                              Icons.calendar_month_rounded,
+                              color: isExistingDoctor ? const Color(0xFF94A3B8) : const Color(0xFF0066FF),
+                              size: 20,
+                            ),
                             const SizedBox(width: 8),
                           ],
                         ),
                         filled: true,
-                        fillColor: Colors.white,
+                        fillColor: isExistingDoctor ? const Color(0xFFF8FAFC) : Colors.white,
                         enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFFCBD5E1)), borderRadius: BorderRadius.circular(8)),
-                        focusedBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF0066FF), width: 2), borderRadius: BorderRadius.circular(8)),
+                        focusedBorder: OutlineInputBorder(
+                          borderSide: BorderSide(
+                            color: isExistingDoctor ? const Color(0xFFCBD5E1) : const Color(0xFF0066FF),
+                            width: isExistingDoctor ? 1 : 2,
+                          ),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                     ),
                   ),

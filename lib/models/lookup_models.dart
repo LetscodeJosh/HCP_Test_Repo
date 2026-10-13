@@ -2571,6 +2571,11 @@ class LocationResolver {
     }
 
     results.sort((a, b) => b.matchScore.compareTo(a.matchScore));
+    // Apply Gemini 4 Argon Progressive Shrinking:
+    if (results.isNotEmpty && results.first.matchScore >= 88.0 && qTokens.length >= 2) {
+      final top = results.first.matchScore;
+      results.removeWhere((r) => r.matchScore < top * 0.75);
+    }
     return results.take(limit).toList();
   }
 
@@ -2825,6 +2830,15 @@ class LocationResolver {
       return limit != null && limit > 0 ? list.take(limit).toList() : list;
     }
 
+    // Generic medical and organizational stopwords:
+    const genericInstWords = {
+      'hospital', 'medical', 'center', 'centre', 'clinic', 'inc', 'corp', 'corporation',
+      'the', 'of', 'and', 'in', 'city', 'health', 'foundation', 'memorial', 'general',
+      'provincial', 'district', 'community', 'lying', 'diagnostic', 'baranggay', 'barangay',
+      'san', 'sta', 'saint', 'dr'
+    };
+    final distinctiveQTokens = qTokens.where((t) => !genericInstWords.contains(t) && t.length >= 3).toList();
+
     final List<_ScoredInstitutionItem> scoredList = [];
 
     for (final inst in allInstitutions) {
@@ -2862,51 +2876,42 @@ class LocationResolver {
       int tokensMatched = 0;
       int nameTokensMatched = 0;
 
-      // 1. Exact phrase matches, Prefix matching, and Sound-Alike (Highest Tier - Appears readily at top of dropdown)
+      // 1. Exact phrase matches, Prefix matching, and Sound-Alike (Highest Tier)
       if (instNameClean == cleanQ) {
-        score += 3500.0;
+        score += 4500.0;
       } else if (instNameClean.startsWith(cleanQ)) {
-        // Entire institution name starts with query (e.g. "Philippine General Hospital", "Philippine Heart Center" when searching "Philippine")
-        score += 3000.0;
+        score += 3500.0;
       } else if (nameTokens.isNotEmpty && (nameTokens[0] == cleanQ || nameTokens[0].startsWith(cleanQ))) {
-        // First word starts with query
         score += 2600.0;
       } else if (nameTokens.any((nt) => nt == cleanQ)) {
-        // A whole word in institution name matches query exactly
         score += 2000.0;
       } else if (nameTokens.any((nt) => isSoundAlikeMatch(cleanQ, nt))) {
-        // A whole word in institution name sounds like the query (e.g. "lordes" -> "lourdes", "kardinal" -> "cardinal", "makaty" -> "makati", "chines" -> "chinese")
         score += 2400.0;
       } else if (nameTokens.any((nt) => nt.startsWith(cleanQ))) {
-        // A word in institution name starts with query
         score += 1600.0;
-      } else if (instNameClean.contains(cleanQ)) {
-        // Substring anywhere in name (e.g. "Lung Center of the Philippines")
-        score += 1200.0;
+      } else if (cleanQ.length >= 5 && instNameClean.contains(cleanQ)) {
+        score += 1800.0;
       } else if (cleanQ.length >= 4 && (soundex(cleanQ).isNotEmpty && soundex(cleanQ) == soundex(instNameClean) || isSoundAlikeMatch(cleanQ, instNameClean))) {
-        // Whole query sounds like entire institution name
         score += 3200.0;
       } else if (combinedClean.contains(cleanQ)) {
-        // In location, address, or ID
         score += 800.0;
       }
 
       // 2. Acronym matching
       if (cleanQ.length >= 2 && cleanQ.length <= 6 && RegExp(r'^[a-z]+$').hasMatch(cleanQ)) {
         if (cleanQ == acronym) {
-          score += 1800.0;
+          score += 3200.0;
         } else if (acronym.startsWith(cleanQ)) {
-          score += 1200.0;
+          score += 1800.0;
         }
       }
 
-      // 3. Multi-token clue evaluation (Inclusive retention: any potential clue matches)
+      // 3. Multi-token clue evaluation
       for (final qt in qTokens) {
         bool tokenFound = false;
         bool isNameMatch = false;
         final syns = _fuzzySynonyms[qt];
         final expanded = [qt, ...?syns];
-        // Stemming: also add stripped 's' or 'es'
         if (qt.endsWith('s') && qt.length > 3) {
           expanded.add(qt.substring(0, qt.length - 1));
         }
@@ -2914,7 +2919,7 @@ class LocationResolver {
           expanded.add(qt.substring(0, qt.length - 2));
         }
 
-        // A. Match against institution name tokens (bidirectional token & prefix matching & sound-alike)
+        // A. Match against institution name tokens
         for (final nt in nameTokens) {
           final ntStem = (nt.endsWith('s') && nt.length > 3) ? nt.substring(0, nt.length - 1) : nt;
           if (expanded.any((exp) => exp == nt || exp == ntStem)) {
@@ -2923,7 +2928,6 @@ class LocationResolver {
             isNameMatch = true;
             break;
           } else if (expanded.any((exp) => isSoundAlikeMatch(exp, nt))) {
-            // Sound-alike token match (e.g. "lordes" -> "lourdes", "kardinal" -> "cardinal")
             score += 280.0;
             tokenFound = true;
             isNameMatch = true;
@@ -2948,7 +2952,7 @@ class LocationResolver {
           isNameMatch = true;
         }
 
-        // C. Match against location tokens (city, municipality, province, street)
+        // C. Match against location tokens
         if (!tokenFound) {
           for (final exp in expanded) {
             if (locTokens.contains(exp)) {
@@ -2971,7 +2975,7 @@ class LocationResolver {
           }
         }
 
-        // D. Match against Institution ID (e.g. "INST-00123" or "00123")
+        // D. Match against Institution ID
         if (!tokenFound && (qt.startsWith('inst') || RegExp(r'^\d+$').hasMatch(qt))) {
           if (inst.name.toLowerCase().contains(qt)) {
             score += 150.0;
@@ -2989,27 +2993,63 @@ class LocationResolver {
 
       // 4. Same Phrase & Multi-token synergy bonus
       if (qTokens.length > 1) {
-        // SAME PHRASE MATCH: When 100% of query tokens match institution name tokens in any order
-        // (e.g. "Doctors Manila" or "Manila Doctors", "General Chinese", "St Lukes BGC", "Lourdes Lady")
         if (nameTokensMatched == qTokens.length) {
-          score += 3200.0; // Massive Same-Phrase Priority Boost so it immediately appears readily at the top!
+          score += 3500.0;
           if (nameTokens.length == qTokens.length) {
-            score += 500.0; // Exact permutation bonus
+            score += 600.0;
           }
         } else if (tokensMatched == qTokens.length) {
-          score += 600.0; // All tokens matched across name + location
+          score += 800.0;
         } else if (tokensMatched > 0) {
           score += (tokensMatched / qTokens.length) * 250.0;
         }
       }
 
-      // Inclusion rule: any potential clue matches keeps it in the dropdown list (never filterized out)!
-      if (score > 0.0 || tokensMatched > 0) {
+      // 5. GEMINI 4 ARGON PROGRESSIVE PHRASE SHRINKING FILTER
+      // When typing medium to whole context (2+ tokens), strictly prune facilities that
+      // lack phrase correlation (e.g. only matched generic words like 'medical' or 'center').
+      int matchedDistinctiveCount = 0;
+      for (final dt in distinctiveQTokens) {
+        if (nameTokens.any((nt) =>
+                nt == dt ||
+                (nt.length >= 3 && dt.length >= 3 && (nt.startsWith(dt) || dt.startsWith(nt))) ||
+                isSoundAlikeMatch(dt, nt) ||
+                (_fuzzySynonyms[dt]?.contains(nt) ?? false)) ||
+            locTokens.any((lt) =>
+                lt == dt ||
+                (lt.length >= 3 && dt.length >= 3 && (lt.startsWith(dt) || dt.startsWith(lt))) ||
+                isSoundAlikeMatch(dt, lt))) {
+          matchedDistinctiveCount++;
+        }
+      }
+
+      final bool isDirectPhrase = instNameClean.contains(cleanQ) || cleanQ.contains(instNameClean);
+
+      // A. Distinctive keyword requirement: if distinctive words exist in query, candidate must match them
+      if (distinctiveQTokens.isNotEmpty && matchedDistinctiveCount == 0 && !isDirectPhrase) {
+        continue; // Exclude: lacks distinctive phrase correlation!
+      }
+
+      // B. Multi-token whole context shrinking:
+      // When user types 2 distinctive tokens (e.g. "Cardinal Santos"), reject facilities matching only 1
+      if (distinctiveQTokens.length == 2 && matchedDistinctiveCount < 2 && !isDirectPhrase && score < 2500.0) {
+        continue; // Exclude: lacks co-related whole phrase similarity!
+      }
+
+      // When user types 3+ distinctive tokens, require at least 70% distinctive match
+      if (distinctiveQTokens.length >= 3 && !isDirectPhrase) {
+        final requiredMatches = (distinctiveQTokens.length * 0.70).ceil();
+        if (matchedDistinctiveCount < requiredMatches && score < 2800.0) {
+          continue; // Exclude: lacks whole context similarity!
+        }
+      }
+
+      if (score >= 60.0 || (qTokens.length == 1 && (score > 0.0 || tokensMatched > 0))) {
         scoredList.add(_ScoredInstitutionItem(inst, score));
       }
     }
 
-    // 5. Fallback typo tolerance & sound-alike: if no tokens matched at all, check phonetic and subsequence
+    // Fallback typo tolerance
     if (scoredList.isEmpty && cleanQ.length >= 3) {
       for (final inst in allInstitutions) {
         final instName = inst.institutionName.isNotEmpty ? inst.institutionName : inst.name;
@@ -3022,12 +3062,26 @@ class LocationResolver {
       }
     }
 
-    // Sort descending by relevance score; on tie, sort alphabetically A-Z by institutionName
+    // Sort descending by relevance score
     scoredList.sort((a, b) {
       final cmp = b.score.compareTo(a.score);
       if (cmp != 0) return cmp;
       return a.institution.institutionName.toLowerCase().compareTo(b.institution.institutionName.toLowerCase());
     });
+
+    // PROGRESSIVE SHRINKING TO MINIMAL CO-RELATED RESULTS (Gemini 4 Argon):
+    // As user types more of the phrase / whole context, prune lower-confidence noise so the
+    // dropdown seamlessly shrinks from maximum candidates down to only the targeted facility and its branches!
+    if (scoredList.isNotEmpty && scoredList.first.score >= 2000.0 && qTokens.length >= 2) {
+      final topScore = scoredList.first.score;
+      if (qTokens.length >= 3 || distinctiveQTokens.length >= 2) {
+        // Whole context entered: shrink tightly to exact/co-related branch matches
+        scoredList.removeWhere((item) => item.score < topScore * 0.75);
+      } else {
+        // Partial phrase: shrink moderately
+        scoredList.removeWhere((item) => item.score < topScore * 0.60);
+      }
+    }
 
     final results = scoredList.map((e) => e.institution);
     return limit != null && limit > 0 ? results.take(limit).toList() : results.toList();

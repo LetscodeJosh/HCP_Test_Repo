@@ -21,12 +21,23 @@ Selecting any suggested doctor immediately auto-populates the complete profile a
 
 ## 🚀 Key Features & Architectural Enhancements
 
-### 1. Step 2 Real-Time Doctor Name Recognizer
+### 1. Gemini 4 Argon Progressive Phrase Shrinking (Institution / Workplace)
+- **Dynamic Candidate Shrinking**: When typing into the workplace/institution search field, the search starts from broad candidate suggestions (maximum count) and intelligently shrinks down to only strictly co-related facilities and direct branches as the full phrase/context is entered.
+- **Unrelated Clutter Elimination**: Prohibits unrelated facilities from appearing in the dropdown if they lack distinctive phrase similarity (eliminating "dumb" matches that only match generic words like "hospital", "clinic", or "center").
+- **Smart Detector Phrase Pill**: Displays live detected phrase matching (`Smart Match: "<Institution Name>"`) with a shrinking facility counter pill right below the search field.
+- **Aggressive Relative Confidence Pruning**: Applies dynamic relative threshold pruning (`score < topScore * 0.75` on whole context queries) so the dropdown displays minimal, targeted output.
+
+### 2. Existing Doctor Record Field Locking (Clean Invariance)
+- **Masterlist Protection**: When a suggested or existing doctor from the universal masterlist is selected, the **First Name**, **Middle Name**, **Last Name**, and **Birth Date** fields automatically switch to `readOnly: true`.
+- **Zero Clutter Guarantee**: Enforces locking seamlessly under the hood without distracting warning notices, lock banners, or lock icons, keeping the interface clean and production-focused.
+- **State Reversibility**: If the MedRep switches to "+ Add New Doctor" or clears the doctor selection, fields dynamically become editable once again.
+
+### 3. Step 2 Real-Time Doctor Name Recognizer
 - Embedded smart recognizer indicators (`Icons.auto_awesome_rounded`) inside First Name, Middle Name, and Last Name text fields.
 - Real-time match count badges (`1`, `2`, `3+`) displayed dynamically within the field suffix container when existing masterlist doctors match the typed characters.
 - Non-intrusive 180ms debounce prevents UI stuttering and unneeded CPU cycles.
 
-### 2. "Person Available in HCP" Pop-Up Suggestion Window
+### 4. "Person Available in HCP" Pop-Up Suggestion Window
 - Clean card container mounted right below the name fields and above Specialization.
 - Header includes **`"Person available in HCP"`** title, match count pill, and one-tap dismiss button.
 - Doctor cards display doctor avatar, full name, HCP ID code, match score (e.g. `98% Match` / `Exact Match`), resolved primary specialty, and resolved complete workplace location.

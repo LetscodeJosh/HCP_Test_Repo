@@ -7,6 +7,19 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [v.0.7.0] - 2026-10-13
 
+### 🏥 Gemini 4 Argon Progressive Phrase Shrinking & Doctor Field Locking
+- **Institution / Workplace Progressive Phrase Shrinking**:
+  - Engineered an intelligent progressive shrinking algorithm (`LocationResolver.fuzzySearchInstitutions` and `LocationResolver.searchDirectoryWithDuplicateDetection`):
+  - When typing into the workplace/institution field, suggestions start with broad potential matches (maximum count) and dynamically shrink down to strictly co-related facilities and direct branches as the user completes the full phrase/context.
+  - Distinctive phrase matching prunes unrelated facilities that only share generic words (like "hospital", "clinic", or "center"), completely eliminating irrelevant and cluttered dropdown results.
+  - Multi-distinctive token queries require >= 70-100% token overlap with aggressive relative confidence pruning (`score < topScore * 0.75`), focusing the dropdown strictly on the targeted facility and its branches.
+  - Added a live Smart Detector Phrase Pill (`Smart Match: "<Institution Name>"`) with a shrinking facility counter pill right below the search bar in the workplace picker dialog.
+- **Existing Doctor Record Field Locking (Clean Invariance)**:
+  - When an existing doctor from the masterlist is selected (via suggestion pop-up, auto-fill, or search), the **First Name**, **Middle Name**, **Last Name**, and **Birth Date** fields automatically switch to `readOnly: true`.
+  - In adherence to strict enterprise UI standards, fields are locked seamlessly under the hood without distracting warning notices, lock banners, or lock icons.
+  - Field recognizer badges and suggestion pop-ups are cleanly disabled when an existing doctor is active.
+  - If the MedRep switches back to "+ Add New Doctor" or clears the selection, all fields immediately regain editable status.
+
 ### 🧠 Gemini 4 Argon-Grade Smart HCP Recognizer & Doctor Masterlist Suggestion Engine
 - **Step 2 Real-Time Doctor Name Recognizer**:
   - Implemented an intelligent suggestion engine and detector across `First Name`, `Middle Name`, and `Last Name` fields in Step 2 (Doctor Information).
