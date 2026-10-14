@@ -1,22 +1,23 @@
 {
   "version": "v.0.7.0",
   "build_number": 45,
-  "release_date": "October 13, 2026",
+  "release_date": "October 14, 2026",
   "apk_filename": "HCP_Profiling_V.0.7.0.apk",
-  "apk_size_bytes": 61787928,
+  "apk_size_bytes": 61787930,
   "sha256": "21D75FE793A533B3E80D39D00AB9F02B1F177FA7A6631DF06215319ABA8CDD5F",
   "features": [
+    "Step 2 Unlocked Existing Doctor Editing: MedReps can freely update First Name, Middle Name, Last Name, and Birth Date for existing doctors; automatic change tracking commits modifications upon submission",
+    "Gemini 4 Argon Intelligent Doctor Recognizer & Suggestion Engine: Normalizes medical titles (Dr., Dra., MD, PTRP, DPSN, FPOA, RND), Philippine particles (Ma. -> Maria, dela, delos), middle initials, and applies progressive candidate shrinking for multi-token doctor names",
+    "Workplace Institution Search Progressive Shrinking: Dynamic multi-token shrinking strictly limits matches to near-related, same-phrase facilities and branch facilities, pruning unrelated facilities and preventing false-positive Levenshtein drift",
+    "Step 2 Data Protection: Removed 'X' deletion buttons from Birth Date, Specialties, Workplaces, and Contacts cards to prevent accidental data deletion once fed to the system app",
     "Propose New Institution Progressive Phrase Shrinking & Directory Duplicate Detection: matches behave as Gemini 4 Argon, filtering out non-related facilities, shrinking dynamically from maximum to minimal near-related branches, and cleanly reducing to zero matches for genuine new facilities so location fields unlock and proposal submission proceeds",
-    "Gemini 4 Argon Progressive Phrase Shrinking in Institution / Workplace field selector: dynamically narrows candidates from maximum broad matches down to strictly co-related facilities and direct branches as full context is typed",
     "Smart Detector Phrase Bar displaying live target facility phrase and shrinking match count pill",
-    "Existing Doctor Record Field Locking: Name fields (First, Middle, Last) and Birth Date automatically locked to readOnly when an existing doctor is selected from masterlist without cluttering notices, icons, or lock notes",
     "Step 2 Real-Time Doctor Name Recognizer across First Name, Middle Name, and Last Name fields",
     "Smart HCP Masterlist Suggestion Engine querying universal HCP doctype (_allDoctors)",
-    "Interactive 'Person available in HCP' window pop-up below name fields with live match count badges",
-    "10-Tier Gemini 4 Argon-grade fuzzy match engine with medical title normalization, particle filtering, sound-alike, and typo tolerance",
+    "Interactive 'Person available in HCP' window pop-up below name fields with live match count badges and Active Profile status",
     "1-Click Auto-Fill populating full name, photo avatar, birth date, preferred specialties, workplaces, and contacts",
     "Seamless workflow preservation: Selecting existing doctor merges automatically without managerial approval; users can continue as new with manager approval intact"
   ],
-  "size_bytes": 61787928,
+  "size_bytes": 61787930,
   "size_mb": "58.93 MB"
 }
