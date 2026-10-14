@@ -4,6 +4,7 @@ import 'package:hcp_profiling/models/submission.dart';
 import 'package:hcp_profiling/models/hcp.dart';
 import 'package:hcp_profiling/models/hcp_account.dart';
 import 'package:hcp_profiling/screens/components/propose_institution_dialog.dart';
+import 'package:hcp_profiling/services/doctor_match_engine.dart';
 
 void main() {
   test('Test Pending Institution can be used for profiling and shows exact approval status notes', () {
@@ -881,6 +882,156 @@ void main() {
     // must NOT match "East Avenue" or "Metropolitan" and must cleanly shrink to empty
     final newFacility = LocationResolver.searchDirectoryWithDuplicateDetection('Metro East Medical Specialists', facilities);
     expect(newFacility, isEmpty);
+  });
+
+  test('Test V.0.7.0: Step 2 Workplace fuzzySearchInstitutions progressive phrase shrinking without unrelated facilities', () {
+    final facilities = [
+      Institution(
+        name: 'INST-SLMC-BGC',
+        institutionName: "St. Luke's Medical Center - Global City",
+        cityMunicipality: 'Taguig',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-SLMC-QC',
+        institutionName: "St. Luke's Medical Center - Quezon City",
+        cityMunicipality: 'Quezon City',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-CSMC',
+        institutionName: 'Cardinal Santos Medical Center',
+        cityMunicipality: 'San Juan',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-MMC',
+        institutionName: 'Metropolitan Medical Center',
+        cityMunicipality: 'City of Manila',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-EAMC',
+        institutionName: 'East Avenue Medical Center',
+        cityMunicipality: 'Quezon City',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+    ];
+
+    // 1. Single distinctive term matches relevant candidates
+    final lukeResults = LocationResolver.fuzzySearchInstitutions('Luke', facilities);
+    expect(lukeResults.length, equals(2));
+    expect(lukeResults.every((i) => i.institutionName.contains("Luke's")), isTrue);
+
+    // 2. Progressive multi-token query shrinks down to ONLY specific facility
+    final bgcResults = LocationResolver.fuzzySearchInstitutions('Luke Global', facilities);
+    expect(bgcResults.length, equals(1));
+    expect(bgcResults.first.name, equals('INST-SLMC-BGC'));
+
+    // 3. Distinctive phrase shrinks and strictly does NOT show unrelated institutions
+    final cardinalResults = LocationResolver.fuzzySearchInstitutions('Cardinal Santos', facilities);
+    expect(cardinalResults.length, equals(1));
+    expect(cardinalResults.first.name, equals('INST-CSMC'));
+
+    // 4. Genuine non-existent institution shrinks cleanly to empty
+    final unrelatedResults = LocationResolver.fuzzySearchInstitutions('Baguio General Medical Clinic', facilities);
+    expect(unrelatedResults, isEmpty);
+  });
+
+  test('Test V.0.7.0: Gemini 4 Argon level intelligent doctor matching (titles, Philippine particles, middle initials, progressive shrinking)', () {
+    final doctors = [
+      Hcp(
+        name: 'HCP-001',
+        firstName: 'Juan',
+        middleName: 'Ponce',
+        lastName: 'dela Cruz',
+        hcpFullName: 'Dr. Juan Ponce dela Cruz',
+        hcpType: 'Medical Doctor',
+        hcpPractice: 'Prescribing',
+      ),
+      Hcp(
+        name: 'HCP-002',
+        firstName: 'Maria Theresa',
+        middleName: 'Santos',
+        lastName: 'Reyes',
+        hcpFullName: 'Dra. Maria Theresa Santos Reyes, MD',
+        hcpType: 'Medical Doctor',
+        hcpPractice: 'Prescribing',
+      ),
+      Hcp(
+        name: 'HCP-003',
+        firstName: 'Jose',
+        middleName: 'Protacio',
+        lastName: 'Rizal',
+        hcpFullName: 'Dr. Jose Rizal, MD',
+        hcpType: 'Medical Doctor',
+        hcpPractice: 'Prescribing',
+      ),
+    ];
+
+    // 1. Medical title prefix normalization ("Dr.", "MD")
+    final matchWithTitles = HcpDoctorMatchEngine.searchDoctorMatches(
+      firstName: 'Dr. Juan',
+      middleName: '',
+      lastName: 'dela Cruz, MD',
+      allDoctors: doctors,
+    );
+    expect(matchWithTitles.isNotEmpty, isTrue);
+    expect(matchWithTitles.first.doctor.name, equals('HCP-001'));
+    expect(matchWithTitles.first.score >= 90.0, isTrue);
+
+    // 2. Philippine particle normalization ("Ma." -> "Maria")
+    final matchFilipinoParticle = HcpDoctorMatchEngine.searchDoctorMatches(
+      firstName: 'Ma. Theresa',
+      middleName: '',
+      lastName: 'Reyes',
+      allDoctors: doctors,
+    );
+    expect(matchFilipinoParticle.isNotEmpty, isTrue);
+    expect(matchFilipinoParticle.first.doctor.name, equals('HCP-002'));
+
+    // 3. Middle initial correlation ("Juan P. dela Cruz")
+    final matchMiddleInitial = HcpDoctorMatchEngine.searchDoctorMatches(
+      firstName: 'Juan',
+      middleName: 'P.',
+      lastName: 'dela Cruz',
+      allDoctors: doctors,
+    );
+    expect(matchMiddleInitial.isNotEmpty, isTrue);
+    expect(matchMiddleInitial.first.doctor.name, equals('HCP-001'));
+
+    // 4. Progressive Candidate Shrinking via searchDoctorMatches
+    final singleTermMatches = HcpDoctorMatchEngine.searchDoctorMatches(
+      firstName: '',
+      middleName: '',
+      lastName: 'Reyes',
+      allDoctors: doctors,
+    );
+    expect(singleTermMatches.length, equals(1));
+    expect(singleTermMatches.first.doctor.name, equals('HCP-002'));
+
+    final multiTokenMatches = HcpDoctorMatchEngine.searchDoctorMatches(
+      firstName: 'Jose',
+      middleName: '',
+      lastName: 'Rizal',
+      allDoctors: doctors,
+    );
+    expect(multiTokenMatches.length, equals(1));
+    expect(multiTokenMatches.first.doctor.name, equals('HCP-003'));
+
+    // 5. Completely unlisted doctor cleanly shrinks to empty
+    final unlistedMatches = HcpDoctorMatchEngine.searchDoctorMatches(
+      firstName: 'Alexander',
+      middleName: '',
+      lastName: 'Fleming',
+      allDoctors: doctors,
+    );
+    expect(unlistedMatches, isEmpty);
   });
 }
 

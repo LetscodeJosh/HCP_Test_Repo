@@ -21,36 +21,33 @@ Selecting any suggested doctor immediately auto-populates the complete profile a
 
 ## 🚀 Key Features & Architectural Enhancements
 
-### 1. Propose New Institution Progressive Phrase Shrinking & Directory Duplicate Detection
+### 1. Existing Doctor Information Editing & Intelligent Suggestions
+- **Unlocked Doctor Editing**: When an existing doctor from the universal masterlist is selected, MedReps are NOT locked out from typing or editing doctor information. First Name, Middle Name, Last Name, and Birth Date remain fully editable for entering new or corrected details.
+- **Automated Profile Change Tracking**: Step 2 tracks any modifications made to existing doctor fields (`old` vs `new`) and commits them automatically upon submission (`Submit for Processing` $\rightarrow$ `Processed`).
+- **Active Suggestions for Both New & Existing HCPs**: The intelligent recognizer and suggestion pop-up remain active when typing doctor names, displaying real-time suggestion cards and an `"Active Profile"` badge for the currently selected HCP.
+
+### 2. Gemini 4 Argon-Level Progressive Phrase Shrinking (Institutions & Doctor Names)
+- **Workplace / Institution Search Shrinking**: When typing into the Workplace institution field, the directory search starts from broad candidates and progressively shrinks to strictly near-related and same-phrase facilities, completely pruning unrelated facilities.
+- **Initial Consonant & Phonetic Precision**: Fixed Levenshtein false-positive drift across disparate consonants (e.g. "Baguio" vs "Taguig"), ensuring searches cleanly shrink to empty when querying non-existent facilities.
+- **Doctor Name Matching Intelligence**: `HcpDoctorMatchEngine` normalizes medical prefixes and suffixes (`Dr.`, `Dra.`, `MD`, `PTRP`, `DPSN`, `FPOA`, `RND`), resolves Philippine particles (`Ma.` $\rightarrow$ `Maria`, `dela`, `delos`), correlates middle initials, and applies progressive candidate shrinking on multi-token queries.
+
+### 3. Step 2 Data Protection (Removal of 'X' Deletion Icons)
+- **Protected Data Integrity**: Removed the 'X' deletion / clear buttons across Step 2 fields (Birth Date clear button, and delete icons from Specialties, Workplaces, and Contacts cards) to prevent accidental data deletion once information is fed to the system app.
+- **Preserved Edit Capabilities**: In-place edit pencil icons remain fully available on all cards so MedReps can adjust preferred flags, contact types, or remapped institutions without destructive data removal.
+
+### 4. Propose New Institution Progressive Phrase Shrinking & Directory Duplicate Detection
 - **Gemini 4 Argon Matching Engine**: In the Propose New Institution modal, typing into the Facility / Institution Name field now applies strict multi-token phrase correlation.
 - **Irrelevant Matches Pruned**: Excludes institutions that share only common generic medical tokens (e.g. "Hospital", "Clinic", "Center") without distinctive stem/phrase correlation (e.g. typing "New Horizons" will never match "East Avenue Medical Center").
 - **Dynamic Candidate Shrinking**: As user types from broad to full context, detected matches dynamically shrink down to strictly related branches or exact facilities.
 - **Clean Submission Unblocking**: When typing a genuine brand-new facility not in the directory, detected matches cleanly drop to 0, unlocking Region, Province, City/Municipality, Barangay, and the declaration checkbox so the MedRep can submit the proposal smoothly.
 
-### 2. Gemini 4 Argon Progressive Phrase Shrinking (Institution / Workplace Selector)
-- **Dynamic Candidate Shrinking**: When typing into the workplace/institution search field, the search starts from broad candidate suggestions (maximum count) and intelligently shrinks down to only strictly co-related facilities and direct branches as the full phrase/context is entered.
-- **Unrelated Clutter Elimination**: Prohibits unrelated facilities from appearing in the dropdown if they lack distinctive phrase similarity (eliminating "dumb" matches that only match generic words like "hospital", "clinic", or "center").
-- **Smart Detector Phrase Pill**: Displays live detected phrase matching (`Smart Match: "<Institution Name>"`) with a shrinking facility counter pill right below the search field.
-- **Aggressive Relative Confidence Pruning**: Applies dynamic relative threshold pruning (`score < topScore * 0.75` on whole context queries) so the dropdown displays minimal, targeted output.
-
-### 3. Existing Doctor Record Field Locking (Clean Invariance)
-- **Masterlist Protection**: When a suggested or existing doctor from the universal masterlist is selected, the **First Name**, **Middle Name**, **Last Name**, and **Birth Date** fields automatically switch to `readOnly: true`.
-- **Zero Clutter Guarantee**: Enforces locking seamlessly under the hood without distracting warning notices, lock banners, or lock icons, keeping the interface clean and production-focused.
-- **State Reversibility**: If the MedRep switches to "+ Add New Doctor" or clears the doctor selection, fields dynamically become editable once again.
-
-### 3. Step 2 Real-Time Doctor Name Recognizer
+### 5. Step 2 Real-Time Doctor Name Recognizer & Suggestion Pop-up
 - Embedded smart recognizer indicators (`Icons.auto_awesome_rounded`) inside First Name, Middle Name, and Last Name text fields.
 - Real-time match count badges (`1`, `2`, `3+`) displayed dynamically within the field suffix container when existing masterlist doctors match the typed characters.
 - Non-intrusive 180ms debounce prevents UI stuttering and unneeded CPU cycles.
+- Card container mounted right below the name fields and above Specialization with header titled **`"Person available in HCP"`**, match count pill, and one-tap dismiss button.
 
-### 4. "Person Available in HCP" Pop-Up Suggestion Window
-- Clean card container mounted right below the name fields and above Specialization.
-- Header includes **`"Person available in HCP"`** title, match count pill, and one-tap dismiss button.
-- Doctor cards display doctor avatar, full name, HCP ID code, match score (e.g. `98% Match` / `Exact Match`), resolved primary specialty, and resolved complete workplace location.
-- 1-click **`Auto-fill`** pill button.
-- Footer note explains that selecting an existing doctor automatically merges upon submission, while providing a **`Continue as New`** button for registering brand-new doctors.
-
-### 3. 10-Tier Fuzzy Match Engine (`HcpDoctorMatchEngine`)
+### 6. 10-Tier Fuzzy Match Engine (`HcpDoctorMatchEngine`)
 - Comprehensive name normalization stripping medical titles (`Dr.`, `MD`, `FPCP`, `FPCS`, `FPOG`, `RN`, `RPh`), honorifics, punctuation, and diacritics.
 - Medical stopword/particle filtering (`de`, `del`, `dela`, `san`, `los`, `las`, `van`, `von`, `jr`, `sr`).
 - Multi-tier matching architecture:

@@ -25,12 +25,14 @@ class HcpDoctorMatchResult {
 class HcpDoctorMatchEngine {
   /// Normalizes medical practitioner names:
   /// - Strips honorifics/prefixes/suffixes (Dr., Doctor, MD, FPCP, etc.)
+  /// - Normalizes Philippine particles (dela, delos, ma. -> maria)
   /// - Strips punctuation, dashes, quotes, and diacritics
   /// - Trims and normalizes spacing to lower-case single-spaced tokens
   static String normalize(String raw) {
     if (raw.trim().isEmpty) return '';
     return raw
-        .replaceAll(RegExp(r'\b(dr|doctor|dra|md|m\.d\.|phd|fpcp|fpcs|fpog|rn|rph)\b', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\b(dr|doctor|dra|md|m\.d\.|phd|fpcp|fpcs|fpog|fpoa|rn|rph|ptrp|dpsn|fpcg|fpa|fics|ms|bsc|rnd|dmd|ddm|dvm)\b', caseSensitive: false), ' ')
+        .replaceAll(RegExp(r'\bma\b', caseSensitive: false), 'maria')
         .replaceAll("'", "")
         .replaceAll("’", "")
         .replaceAll(".", " ")
@@ -96,6 +98,12 @@ class HcpDoctorMatchEngine {
       String matchReason = '';
       bool isExact = false;
 
+      final bool isCompactSurnameMatch = normLn.isNotEmpty &&
+          (docLn == normLn ||
+              docLn.replaceAll(' ', '') == normLn.replaceAll(' ', '') ||
+              docLn.endsWith(' $normLn') ||
+              extractTokens(docLn).contains(normLn));
+
       // 1. TIER 1: Exact full name or combined (First + Last) match
       if (rawCombined.length >= 3 && (rawCombined == docFullName || '$normFn $normLn'.trim() == '$docFn $docLn'.trim())) {
         score = 100.0;
@@ -103,13 +111,13 @@ class HcpDoctorMatchEngine {
         matchReason = 'Exact Doctor Name Match';
       }
       // 2. TIER 2: Dual-field exact match (both First and Last name match)
-      else if (normFn.isNotEmpty && normLn.isNotEmpty && normFn == docFn && normLn == docLn) {
+      else if (normFn.isNotEmpty && normLn.isNotEmpty && normFn == docFn && isCompactSurnameMatch) {
         score = 98.0;
         isExact = true;
         matchReason = 'Exact First & Last Name Match';
       }
       // 3. TIER 3: Dual-field prefix match (e.g. typed "Jua" and "Cru" -> "Juan Cruz")
-      else if (normFn.isNotEmpty && normLn.isNotEmpty && docFn.startsWith(normFn) && docLn.startsWith(normLn)) {
+      else if (normFn.isNotEmpty && normLn.isNotEmpty && docFn.startsWith(normFn) && (docLn.startsWith(normLn) || isCompactSurnameMatch)) {
         score = 94.0;
         isExact = false;
         matchReason = 'First & Surname Correlation Match';
@@ -121,7 +129,7 @@ class HcpDoctorMatchEngine {
         matchReason = 'Full Name Prefix Match';
       }
       // 5. TIER 5: Surname exact match (Last Name field)
-      else if (normLn.isNotEmpty && normLn.length >= 2 && docLn == normLn) {
+      else if (isCompactSurnameMatch) {
         score = 88.0;
         isExact = false;
         matchReason = 'Surname Match (${doc.lastName})';
@@ -135,7 +143,7 @@ class HcpDoctorMatchEngine {
         score = 84.0;
         isExact = false;
         matchReason = 'First Name Match (${doc.firstName})';
-        if (normLn.isNotEmpty && docLn.startsWith(normLn)) {
+        if (normLn.isNotEmpty && (docLn.startsWith(normLn) || isCompactSurnameMatch)) {
           score += 8.0;
           matchReason = 'First Name & Surname Match';
         }
@@ -157,11 +165,11 @@ class HcpDoctorMatchEngine {
             for (final dTok in docTokens) {
               if (inTok == dTok) {
                 matchedTokensCount++;
-                if (dTok == docLn) hasSurnameMatch = true;
+                if (dTok == docLn || docLn.endsWith(dTok)) hasSurnameMatch = true;
                 break;
               } else if (inTok.length >= 3 && dTok.startsWith(inTok)) {
                 matchedTokensCount++;
-                if (dTok == docLn) hasSurnameMatch = true;
+                if (dTok == docLn || docLn.endsWith(dTok)) hasSurnameMatch = true;
                 break;
               } else if (LocationResolver.isSoundAlikeMatch(inTok, dTok)) {
                 matchedTokensCount++;
@@ -177,6 +185,15 @@ class HcpDoctorMatchEngine {
             score = 80.0;
             matchReason = 'Name Token Match (${inputTokens.first})';
           }
+        }
+      }
+
+      // Middle initial / Middle name synergy bonus
+      if (score >= 80.0 && normMn.isNotEmpty && docMn.isNotEmpty) {
+        if (docMn == normMn || docMn.startsWith(normMn) || normMn.startsWith(docMn)) {
+          score += 3.0;
+          if (score > 100.0) score = 100.0;
+          matchReason += ' (Middle Initial Matched)';
         }
       }
 
@@ -249,6 +266,21 @@ class HcpDoctorMatchEngine {
       if (cmp != 0) return cmp;
       return a.doctor.fullName.compareTo(b.doctor.fullName);
     });
+
+    // GEMINI 4 ARGON PROGRESSIVE PHRASE SHRINKING:
+    // As more of the doctor's name context is typed (e.g. both first and last name),
+    // prune lower-confidence single-token noise so the candidate list cleanly shrinks
+    // down to only near-related/same-person doctors!
+    if (candidates.isNotEmpty && inputTokens.length >= 2) {
+      final top = candidates.first.score;
+      if (top >= 90.0) {
+        // High confidence match on whole context: shrink tightly
+        candidates.removeWhere((c) => c.score < top * 0.85);
+      } else {
+        // Moderate match: shrink partial noise
+        candidates.removeWhere((c) => c.score < top * 0.75);
+      }
+    }
 
     return candidates.take(limit).toList();
   }

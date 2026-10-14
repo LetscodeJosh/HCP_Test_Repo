@@ -2830,9 +2830,17 @@ class LocationResolver {
     final maxLen = t1.length > t2.length ? t1.length : t2.length;
     final minLen = t1.length < t2.length ? t1.length : t2.length;
     if (minLen >= 3 && (maxLen - minLen <= 2)) {
-      final dist = levenshteinDistance(t1, t2);
-      if (dist <= 1) return true;
-      if (minLen >= 5 && dist <= 2) return true;
+      final c1 = t1[0].toLowerCase();
+      final c2 = t2[0].toLowerCase();
+      final initialMatch = c1 == c2 ||
+          ((c1 == 'c' || c1 == 'k' || c1 == 's') && (c2 == 'c' || c2 == 'k' || c2 == 's')) ||
+          ((c1 == 'v' || c1 == 'b') && (c2 == 'v' || c2 == 'b')) ||
+          ((c1 == 'z' || c1 == 's') && (c2 == 'z' || c2 == 's'));
+      if (initialMatch) {
+        final dist = levenshteinDistance(t1, t2);
+        if (dist <= 1) return true;
+        if (minLen >= 5 && dist <= 2) return true;
+      }
     }
     return false;
   }
@@ -2870,10 +2878,10 @@ class LocationResolver {
 
     // Generic medical and organizational stopwords:
     const genericInstWords = {
-      'hospital', 'medical', 'center', 'centre', 'clinic', 'inc', 'corp', 'corporation',
+      'hospital', 'medical', 'center', 'centre', 'clinic', 'clinics', 'inc', 'corp', 'corporation',
       'the', 'of', 'and', 'in', 'city', 'health', 'foundation', 'memorial', 'general',
       'provincial', 'district', 'community', 'lying', 'diagnostic', 'baranggay', 'barangay',
-      'san', 'sta', 'saint', 'dr'
+      'san', 'sta', 'saint', 'dr', 'department', 'unit', 'co', 'ltd', 'phils', 'philippines'
     };
     final distinctiveQTokens = qTokens.where((t) => !genericInstWords.contains(t) && t.length >= 3).toList();
 
@@ -3069,15 +3077,16 @@ class LocationResolver {
       }
 
       // B. Multi-token whole context shrinking:
-      // When user types 2 distinctive tokens (e.g. "Cardinal Santos"), reject facilities matching only 1
-      if (distinctiveQTokens.length == 2 && matchedDistinctiveCount < 2 && !isDirectPhrase && score < 2500.0) {
+      // When user types 2 distinctive tokens (e.g. "Cardinal Santos" or "Metro East"),
+      // strictly require matching BOTH distinctive words so unrelated facilities are eliminated!
+      if (distinctiveQTokens.length == 2 && matchedDistinctiveCount < 2 && !isDirectPhrase) {
         continue; // Exclude: lacks co-related whole phrase similarity!
       }
 
       // When user types 3+ distinctive tokens, require at least 70% distinctive match
       if (distinctiveQTokens.length >= 3 && !isDirectPhrase) {
         final requiredMatches = (distinctiveQTokens.length * 0.70).ceil();
-        if (matchedDistinctiveCount < requiredMatches && score < 2800.0) {
+        if (matchedDistinctiveCount < requiredMatches) {
           continue; // Exclude: lacks whole context similarity!
         }
       }
@@ -3087,8 +3096,8 @@ class LocationResolver {
       }
     }
 
-    // Fallback typo tolerance
-    if (scoredList.isEmpty && cleanQ.length >= 3) {
+    // Fallback typo tolerance only for single-token queries
+    if (scoredList.isEmpty && cleanQ.length >= 3 && qTokens.length == 1) {
       for (final inst in allInstitutions) {
         final instName = inst.institutionName.isNotEmpty ? inst.institutionName : inst.name;
         final instLower = instName.toLowerCase();
@@ -3110,14 +3119,20 @@ class LocationResolver {
     // PROGRESSIVE SHRINKING TO MINIMAL CO-RELATED RESULTS (Gemini 4 Argon):
     // As user types more of the phrase / whole context, prune lower-confidence noise so the
     // dropdown seamlessly shrinks from maximum candidates down to only the targeted facility and its branches!
-    if (scoredList.isNotEmpty && scoredList.first.score >= 2000.0 && qTokens.length >= 2) {
+    if (scoredList.isNotEmpty && qTokens.length >= 2) {
       final topScore = scoredList.first.score;
-      if (qTokens.length >= 3 || distinctiveQTokens.length >= 2) {
-        // Whole context entered: shrink tightly to exact/co-related branch matches
-        scoredList.removeWhere((item) => item.score < topScore * 0.75);
-      } else {
-        // Partial phrase: shrink moderately
-        scoredList.removeWhere((item) => item.score < topScore * 0.60);
+      if (topScore >= 500.0) {
+        if (qTokens.length >= 3 || distinctiveQTokens.length >= 2) {
+          // Whole context entered: shrink tightly to exact/co-related branch matches
+          scoredList.removeWhere((item) => item.score < topScore * 0.75);
+        } else {
+          // Partial phrase: shrink moderately
+          scoredList.removeWhere((item) => item.score < topScore * 0.60);
+        }
+      } else if (distinctiveQTokens.length >= 2) {
+        // Query has multiple distinctive words with no strong match in directory:
+        // Prune weak partial noise so list cleanly shrinks to empty
+        scoredList.removeWhere((item) => item.score < 500.0);
       }
     }
 
