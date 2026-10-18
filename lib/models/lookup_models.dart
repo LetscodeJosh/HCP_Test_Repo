@@ -99,6 +99,8 @@ class Institution {
   final String? editingUser; // User currently editing the institution
   final bool requiresDsmApproval; // True if submitted along with a New HCP
   final String? linkedDoctorName; // Link to doctor if proposed during doctor profiling
+  final bool isCertified; // Certified accurate and active for coverage by MedRep
+  final String? certificationNote; // Formal certification note recorded for ERPNext XLSX export
   final List<InstitutionAuditLogEntry> auditTrail; // Read-only history of submissions & reviews
 
   Institution({
@@ -129,6 +131,8 @@ class Institution {
     this.editingUser,
     this.requiresDsmApproval = false,
     this.linkedDoctorName,
+    this.isCertified = false,
+    this.certificationNote,
     this.auditTrail = const [],
   });
 
@@ -223,12 +227,15 @@ class Institution {
   /// Dynamic note per ERPNext HCP Account standard:
   /// - Rejected: "[REJECTED INSTITUTION: <Reason>]" or "[REJECTED INSTITUTION]"
   /// - Pending / Unapproved: "this institution is not yet approved"
+  /// - Certified Pending: "this institution is not yet approved (Certified accurate and active for coverage)"
   /// - Approved: "this institution is now approved"
   String get approvalStatusNote {
     if (isRejected) return rejectionDisplayLabel;
-    return isApproved
-        ? 'this institution is now approved'
-        : 'this institution is not yet approved';
+    if (isApproved) return 'this institution is now approved';
+    if (isCertified || (certificationNote != null && certificationNote!.trim().isNotEmpty)) {
+      return 'this institution is not yet approved (Certified accurate and active for coverage)';
+    }
+    return 'this institution is not yet approved';
   }
 
   Institution copyWith({
@@ -259,6 +266,8 @@ class Institution {
     String? editingUser,
     bool? requiresDsmApproval,
     String? linkedDoctorName,
+    bool? isCertified,
+    String? certificationNote,
     List<InstitutionAuditLogEntry>? auditTrail,
   }) {
     return Institution(
@@ -289,6 +298,8 @@ class Institution {
       editingUser: editingUser ?? this.editingUser,
       requiresDsmApproval: requiresDsmApproval ?? this.requiresDsmApproval,
       linkedDoctorName: linkedDoctorName ?? this.linkedDoctorName,
+      isCertified: isCertified ?? this.isCertified,
+      certificationNote: certificationNote ?? this.certificationNote,
       auditTrail: auditTrail ?? this.auditTrail,
     );
   }
@@ -346,6 +357,8 @@ class Institution {
       editingUser: json['editing_user']?.toString(),
       requiresDsmApproval: json['requires_dsm_approval'] == 1 || json['requires_dsm_approval'] == true || json['requires_dsm_approval'] == '1',
       linkedDoctorName: json['linked_doctor_name']?.toString(),
+      isCertified: json['is_certified'] == 1 || json['is_certified'] == true || json['is_certified'] == '1' || (json['certification_note'] != null && json['certification_note'].toString().trim().isNotEmpty),
+      certificationNote: (json['certification_note'] ?? json['remarks'] ?? json['custom_remarks'] ?? json['certification_remarks'])?.toString(),
       auditTrail: parsedAuditTrail,
     );
   }
@@ -376,6 +389,8 @@ class Institution {
       if (editingUser != null) 'editing_user': editingUser,
       'requires_dsm_approval': requiresDsmApproval ? 1 : 0,
       if (linkedDoctorName != null) 'linked_doctor_name': linkedDoctorName,
+      if (isCertified) 'is_certified': 1,
+      if (certificationNote != null) 'certification_note': certificationNote,
       if (auditTrail.isNotEmpty) 'audit_trail': auditTrail.map((e) => e.toJson()).toList(),
     };
   }
@@ -2215,9 +2230,23 @@ class LocationResolver {
       return '[REJECTED INSTITUTION]';
     }
     final isApproved = isApprovedInstitution(raw, dynamicInsts);
-    return isApproved
-        ? 'this institution is now approved'
-        : 'this institution is not yet approved';
+    if (isApproved) {
+      return 'this institution is now approved';
+    }
+
+    if (dynamicInsts != null && dynamicInsts.isNotEmpty && raw != null) {
+      final trimmed = raw.trim().toLowerCase();
+      final found = dynamicInsts.firstWhere(
+        (i) => i.name.toLowerCase() == trimmed || i.institutionName.toLowerCase() == trimmed,
+        orElse: () => Institution(name: '', institutionName: ''),
+      );
+      if (found.name.isNotEmpty &&
+          (found.isCertified || (found.certificationNote != null && found.certificationNote!.trim().isNotEmpty))) {
+        return 'this institution is not yet approved (Certified accurate and active for coverage)';
+      }
+    }
+
+    return 'this institution is not yet approved';
   }
 
   /// Known Philippine healthcare institution acronyms and common abbreviations

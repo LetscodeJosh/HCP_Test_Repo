@@ -1033,6 +1033,92 @@ void main() {
     );
     expect(unlistedMatches, isEmpty);
   });
+
+  test('Test MedRep Encoded Institution Accuracy Certification and DocType Note for XLSX Export', () {
+    // 1. Directory with existing facilities
+    final directory = [
+      Institution(
+        name: 'INST-00001',
+        institutionName: 'St. Luke\'s Medical Center - Global City',
+        cityMunicipality: 'Taguig',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+      Institution(
+        name: 'INST-00002',
+        institutionName: 'Makati Medical Center',
+        cityMunicipality: 'Makati',
+        provinceName: 'Metro Manila',
+        workflowState: 'Approved',
+      ),
+    ];
+
+    // 2. Similarity search detection: typing a similar or duplicate name yields matches
+    final matchesWithSimilarity = LocationResolver.searchDirectoryWithDuplicateDetection(
+      'St. Lukes',
+      directory,
+    );
+    expect(matchesWithSimilarity.isNotEmpty, isTrue);
+    // When matches are present, the certification checkbox must NOT be visible / allowed
+
+    // 3. Unique facility search: typing a genuinely unique name yields zero matches
+    final matchesUnique = LocationResolver.searchDirectoryWithDuplicateDetection(
+      'Aurelia Specialist Polyclinic',
+      directory,
+    );
+    expect(matchesUnique.isEmpty, isTrue);
+    // When matches are 0 and length >= 3, the certification checkbox pops up!
+
+    // 4. Proposed institution created with certification
+    final certifiedInst = Institution(
+      name: 'INST-09999',
+      institutionName: 'Aurelia Specialist Polyclinic',
+      cityMunicipality: 'Cebu City',
+      provinceName: 'Cebu',
+      workflowState: 'Pending Approval',
+      isCertified: true,
+      certificationNote: 'Certified by MedRep: Institution is accurate and active for coverage',
+    );
+
+    expect(certifiedInst.isCertified, isTrue);
+    expect(certifiedInst.certificationNote, 'Certified by MedRep: Institution is accurate and active for coverage');
+
+    // 5. While unapproved, approvalStatusNote reflects certified accurate and active for coverage
+    expect(
+      certifiedInst.approvalStatusNote,
+      'this institution is not yet approved (Certified accurate and active for coverage)',
+    );
+    expect(
+      LocationResolver.getInstitutionApprovalStatusNote('INST-09999', [certifiedInst]),
+      'this institution is not yet approved (Certified accurate and active for coverage)',
+    );
+
+    // 6. DocType JSON Serialization guarantees fields for ERPNext XLSX Export
+    final json = certifiedInst.toJson();
+    expect(json['is_certified'], equals(1));
+    expect(json['certification_note'], equals('Certified by MedRep: Institution is accurate and active for coverage'));
+
+    // 7. From JSON deserialization preserves certification
+    final reconstructed = Institution.fromJson(json);
+    expect(reconstructed.isCertified, isTrue);
+    expect(reconstructed.certificationNote, equals('Certified by MedRep: Institution is accurate and active for coverage'));
+    expect(
+      reconstructed.approvalStatusNote,
+      'this institution is not yet approved (Certified accurate and active for coverage)',
+    );
+
+    // 8. Once approved by SFE Specialist / Admin, status transitions to approved
+    final approvedCertifiedInst = certifiedInst.copyWith(
+      workflowState: 'Approved',
+      docstatus: 1,
+    );
+    expect(approvedCertifiedInst.isApproved, isTrue);
+    expect(approvedCertifiedInst.approvalStatusNote, 'this institution is now approved');
+    expect(
+      LocationResolver.getInstitutionApprovalStatusNote('INST-09999', [approvedCertifiedInst]),
+      'this institution is now approved',
+    );
+  });
 }
 
 

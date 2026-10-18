@@ -95,6 +95,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
   List<InstitutionSearchResult> _detectedMatches = [];
   bool _showDropdown = false;
   Institution? _selectedExistingInstitution;
+  bool _isSearching = false;
   bool _isCertifiedNotInDirectory = false;
   bool _isSaving = false;
   String? _validationErr;
@@ -121,14 +122,24 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
 
   bool get _isWorkplaceNameValid => _workplaceCtrl.text.trim().length >= 3;
 
+  /// The certification checkbox ONLY displays below the search field if:
+  /// 1. Workplace name is encoded (>= 3 chars)
+  /// 2. Not currently selected from directory
+  /// 3. Search debounce is complete
+  /// 4. ZERO duplicate or similarity matches exist in the directory
+  bool get _isCertifiedCheckboxVisible =>
+      _selectedExistingInstitution == null &&
+      _workplaceCtrl.text.trim().length >= 3 &&
+      !_isSearching &&
+      _detectedMatches.isEmpty;
+
   /// Location details are fillable ONLY when classification is selected, workplace name is fulfilled (>= 3 chars),
   /// NO matching suggestions exist in the dropdown, no existing institution is currently selected,
   /// AND the mandatory certification checkbox is ticked confirming the facility is not in directory.
   bool get _isLocationUnlocked =>
       _isClassificationFulfilled &&
       _isWorkplaceNameValid &&
-      _detectedMatches.isEmpty &&
-      _selectedExistingInstitution == null &&
+      _isCertifiedCheckboxVisible &&
       _isCertifiedNotInDirectory;
 
   /// Submission policy:
@@ -141,6 +152,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
     if (_detectedMatches.isNotEmpty) return false; // Blocked while suggestions exist!
     if (!_isClassificationFulfilled) return false;
     if (!_isWorkplaceNameValid) return false;
+    if (!_isCertifiedCheckboxVisible) return false; // Must be verified unique!
     if (!_isCertifiedNotInDirectory) return false; // Mandatory certification checkbox must be checked!
     if (_selectedProvince == null || _selectedProvince!.trim().isEmpty) return false;
     if (_selectedCity == null || _selectedCity!.trim().isEmpty) return false;
@@ -167,8 +179,9 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
       });
     }
 
-    if (text.length < 2) {
+    if (text.length < 3) {
       setState(() {
+        _isSearching = false;
         _detectedMatches = [];
         _showDropdown = false;
         _isCertifiedNotInDirectory = false;
@@ -176,6 +189,11 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
       });
       return;
     }
+
+    setState(() {
+      _isSearching = true;
+      _isCertifiedNotInDirectory = false;
+    });
 
     // Debounce to eliminate keystroke lag while typing
     _debounceTimer = Timer(const Duration(milliseconds: 200), () {
@@ -186,6 +204,7 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
         limit: 50,
       );
       setState(() {
+        _isSearching = false;
         _detectedMatches = matches;
         _showDropdown = matches.isNotEmpty;
         _isCertifiedNotInDirectory = false; // Require re-certification when name changes
@@ -298,6 +317,8 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
         requiresDsmApproval: widget.requiresDsmApproval,
         linkedDoctorName: widget.linkedDoctorName,
         streetAddress: street.isNotEmpty ? street : null,
+        isCertified: _isCertifiedNotInDirectory,
+        certificationNote: 'Certified by MedRep: Institution is accurate and active for coverage',
       );
       if (mounted) {
         Navigator.pop(context, res);
@@ -572,23 +593,34 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                             : 'Select Ownership & Type first...',
                         hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12.5),
                         prefixIcon: const Icon(Icons.search_rounded, color: Color(0xFF0B192C), size: 18),
-                        suffixIcon: _workplaceCtrl.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 16, color: Color(0xFF94A3B8)),
-                                onPressed: () {
-                                  _workplaceCtrl.clear();
-                                  setState(() {
-                                    _detectedMatches = [];
-                                    _showDropdown = false;
-                                    _selectedRegion = null;
-                                    _selectedProvince = null;
-                                    _selectedCity = null;
-                                    _addressCtrl.clear();
-                                    _selectedExistingInstitution = null;
-                                  });
-                                },
+                        suffixIcon: _isSearching
+                            ? const Padding(
+                                padding: EdgeInsets.all(12),
+                                child: SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0066FF)),
+                                ),
                               )
-                            : null,
+                            : (_workplaceCtrl.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 16, color: Color(0xFF94A3B8)),
+                                    onPressed: () {
+                                      _workplaceCtrl.clear();
+                                      setState(() {
+                                        _isSearching = false;
+                                        _detectedMatches = [];
+                                        _showDropdown = false;
+                                        _isCertifiedNotInDirectory = false;
+                                        _selectedRegion = null;
+                                        _selectedProvince = null;
+                                        _selectedCity = null;
+                                        _addressCtrl.clear();
+                                        _selectedExistingInstitution = null;
+                                      });
+                                    },
+                                  )
+                                : null),
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         filled: true,
                         fillColor: _isClassificationFulfilled ? const Color(0xFFF8FAFC) : const Color(0xFFF1F5F9),
@@ -786,10 +818,14 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                           ],
                         ),
                       ),
-                    ] else if (_workplaceCtrl.text.trim().length >= 3 && _detectedMatches.isEmpty && _selectedExistingInstitution == null) ...[
-                      const SizedBox(height: 6),
+                    ],
+                    // MANDATORY CERTIFICATION CHECKBOX: ONLY pops up if the encoded institution
+                    // has been verified to be completely UNIQUE with ZERO duplicates or similarities in directory!
+                    if (_isCertifiedCheckboxVisible) ...[
+                      const SizedBox(height: 8),
+                      // 1. Unique Facility Verification Banner
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
                           color: const Color(0xFFF0FDF4),
                           borderRadius: BorderRadius.circular(6),
@@ -797,84 +833,97 @@ class _ProposeInstitutionDialogState extends State<ProposeInstitutionDialog> {
                         ),
                         child: const Row(
                           children: [
-                            Icon(Icons.check_circle_outline_rounded, size: 14, color: Color(0xFF16A34A)),
-                            SizedBox(width: 6),
+                            Icon(Icons.verified_outlined, size: 15, color: Color(0xFF16A34A)),
+                            SizedBox(width: 7),
                             Expanded(
                               child: Text(
-                                '✓ Facility name verified. No matching duplicates found in directory. Check certification below to unlock location fields.',
-                                style: TextStyle(color: Color(0xFF166534), fontSize: 11),
+                                '✓ Unique Facility Name Verified. No matching duplicates or similarities found in directory.',
+                                style: TextStyle(color: Color(0xFF166534), fontSize: 11, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
+                      const SizedBox(height: 8),
 
-                    // MANDATORY CERTIFICATION CHECKBOX (Required before unlocking location)
-                    if (_selectedExistingInstitution == null) ...[
-                      const SizedBox(height: 10),
+                      // 2. Certification Checkbox Pop-Up
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
                           color: _isCertifiedNotInDirectory ? const Color(0xFFF0FDF4) : const Color(0xFFF8FAFC),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                            color: _isCertifiedNotInDirectory ? const Color(0xFF86EFAC) : const Color(0xFFCBD5E1),
+                            color: _isCertifiedNotInDirectory ? const Color(0xFF22C55E) : const Color(0xFFCBD5E1),
                             width: _isCertifiedNotInDirectory ? 1.5 : 1.0,
                           ),
+                          boxShadow: _isCertifiedNotInDirectory
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF22C55E).withOpacity(0.12),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
+                              : null,
                         ),
                         child: InkWell(
-                          onTap: (!_isClassificationFulfilled || !_isWorkplaceNameValid || _detectedMatches.isNotEmpty)
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _isCertifiedNotInDirectory = !_isCertifiedNotInDirectory;
-                                  });
-                                },
+                          onTap: () {
+                            setState(() {
+                              _isCertifiedNotInDirectory = !_isCertifiedNotInDirectory;
+                            });
+                          },
                           borderRadius: BorderRadius.circular(6),
                           child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: Checkbox(
-                                  value: _isCertifiedNotInDirectory,
-                                  activeColor: const Color(0xFF16A34A),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                  onChanged: (!_isClassificationFulfilled || !_isWorkplaceNameValid || _detectedMatches.isNotEmpty)
-                                      ? null
-                                      : (val) {
-                                          setState(() {
-                                            _isCertifiedNotInDirectory = val ?? false;
-                                          });
-                                        },
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: Checkbox(
+                                    value: _isCertifiedNotInDirectory,
+                                    activeColor: const Color(0xFF16A34A),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _isCertifiedNotInDirectory = val ?? false;
+                                      });
+                                    },
+                                  ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     const Text(
-                                      'This certifies that this institution which is not in the directory is valid and accurate.',
+                                      'Certify Encoded Institution Accuracy',
                                       style: TextStyle(
                                         color: Color(0xFF0F172A),
-                                        fontSize: 11.5,
-                                        fontWeight: FontWeight.w600,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    const Text(
+                                      'This certifies that this institution which is not in the directory is accurate and active for coverage.',
+                                      style: TextStyle(
+                                        color: Color(0xFF334155),
+                                        fontSize: 11,
                                         height: 1.3,
                                       ),
                                     ),
-                                    const SizedBox(height: 2),
+                                    const SizedBox(height: 4),
                                     Text(
                                       _isCertifiedNotInDirectory
-                                          ? '✓ Certified. Location fields below are now unlocked for encoding.'
-                                          : (_detectedMatches.isNotEmpty
-                                              ? 'Active directory suggestions found above. Select a facility or refine name.'
-                                              : 'Mandatory: Check to confirm and unlock Region, Province, and City.'),
+                                          ? '✓ Certified accurate & active for coverage. Location fields unlocked for encoding.'
+                                          : 'Mandatory: Check this box to certify accuracy and unlock Region, Province, and City.',
                                       style: TextStyle(
-                                        color: _isCertifiedNotInDirectory ? const Color(0xFF166534) : const Color(0xFF64748B),
+                                        color: _isCertifiedNotInDirectory ? const Color(0xFF15803D) : const Color(0xFF64748B),
                                         fontSize: 10.5,
+                                        fontWeight: _isCertifiedNotInDirectory ? FontWeight.w600 : FontWeight.normal,
                                       ),
                                     ),
                                   ],

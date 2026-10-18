@@ -1418,6 +1418,8 @@ class ApiService extends ChangeNotifier {
     bool requiresDsmApproval = false,
     String? linkedDoctorName,
     String? streetAddress,
+    bool isCertified = false,
+    String? certificationNote,
   }) async {
     final cleanWp = workplaceName.trim();
     final resolvedCity = LocationResolver.resolveCityName(city);
@@ -1435,6 +1437,9 @@ class ApiService extends ChangeNotifier {
     }
     final resolvedReg = LocationResolver.resolveRegionName(regId.isNotEmpty ? regId : region);
     final now = DateTime.now();
+    final note = isCertified
+        ? (certificationNote ?? 'Certified by MedRep: Institution is accurate and active for coverage')
+        : null;
 
     if (_isOffline) {
       final localInst = Institution(
@@ -1457,6 +1462,8 @@ class ApiService extends ChangeNotifier {
         lastSubmittedAt: now,
         requiresDsmApproval: requiresDsmApproval,
         linkedDoctorName: linkedDoctorName,
+        isCertified: isCertified,
+        certificationNote: note,
       );
       _cachedInstitutions.insert(0, localInst);
       notifyListeners();
@@ -1482,6 +1489,10 @@ class ApiService extends ChangeNotifier {
       'requires_dsm_approval': requiresDsmApproval ? 1 : 0,
       if (linkedDoctorName != null) 'linked_doctor_name': linkedDoctorName,
       'last_submitted_at': now.toIso8601String(),
+      if (isCertified) 'is_certified': 1,
+      if (note != null) 'certification_note': note,
+      if (note != null) 'remarks': note,
+      if (note != null) 'custom_remarks': note,
     };
 
     final url = Uri.parse('$baseUrl/api/resource/Institution');
@@ -1532,19 +1543,56 @@ class ApiService extends ChangeNotifier {
         print('Apply Submit for Approval workflow error: $wfErr');
       }
 
+      // If certified, log a Frappe Comment and align custom note on ERPNext DocType so Administrator can view & export to XLSX
+      if (isCertified && note != null && assignedId.isNotEmpty) {
+        try {
+          final commentUrl = Uri.parse('$baseUrl/api/resource/Comment');
+          await http.post(
+            commentUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'comment_type': 'Comment',
+              'reference_doctype': 'Institution',
+              'reference_name': assignedId,
+              'content': note,
+            }),
+          );
+        } catch (_) {}
+
+        // Attempt direct field persistence on ERPNext DocType for Excel export
+        try {
+          final setValUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
+          await http.post(
+            setValUrl,
+            headers: _headers,
+            body: jsonEncode({
+              'doctype': 'Institution',
+              'name': assignedId,
+              'fieldname': {
+                'certification_note': note,
+                'remarks': note,
+                'is_certified': 1,
+              },
+            }),
+          );
+        } catch (_) {}
+      }
+
       final initialAudit = [
         InstitutionAuditLogEntry(
           timestamp: now,
           user: loggedInFullName ?? loggedInEmail ?? 'MedRep',
           role: isManager ? 'DSM' : (isSfe ? 'SFE Specialist' : 'MedRep'),
-          action: 'Initial Proposal',
-          details: 'Proposed new $institutionType ($ownership) with capability: $serviceCapability at $resolvedCity, $resolvedProv',
+          action: isCertified ? 'Initial Proposal (Certified)' : 'Initial Proposal',
+          details: 'Proposed new $institutionType ($ownership) with capability: $serviceCapability at $resolvedCity, $resolvedProv${isCertified ? '. $note' : ''}',
           snapshot: {
             'institution_name': cleanWp,
             'ownership': ownership,
             'institution_type': institutionType,
             'service_capability': serviceCapability,
             'location': '$resolvedCity, $resolvedProv',
+            if (isCertified) 'is_certified': 1,
+            if (note != null) 'certification_note': note,
           },
         ),
       ];
@@ -1568,6 +1616,8 @@ class ApiService extends ChangeNotifier {
         lastSubmittedAt: now,
         requiresDsmApproval: requiresDsmApproval,
         linkedDoctorName: linkedDoctorName,
+        isCertified: isCertified,
+        certificationNote: note,
         auditTrail: initialAudit,
       );
       _cachedInstitutions.removeWhere((i) => i.name == newInst.name);
@@ -5951,7 +6001,7 @@ class ApiService extends ChangeNotifier {
       final primarySpecId = cleanSpecs.isNotEmpty ? cleanSpecs.first['hcp_specialty'] : null;
       final primarySubSpecId = cleanSpecs.isNotEmpty ? cleanSpecs.first['sub_specialty'] : null;
       final primaryWpId = cleanWps.isNotEmpty ? cleanWps.first['hcp_workplace'] : null;
-      final wpApprovalNote = LocationResolver.getInstitutionApprovalStatusNote(primaryWpId);
+      final wpApprovalNote = LocationResolver.getInstitutionApprovalStatusNote(primaryWpId, _cachedInstitutions);
       final primaryContactNum = cleanContacts.isNotEmpty ? cleanContacts.first['contact_number'] : null;
       final primaryEmail = cleanContacts.isNotEmpty ? cleanContacts.first['email_address'] : null;
 

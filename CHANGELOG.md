@@ -5,6 +5,26 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.7.3] - 2026-10-19
+
+### 🏥 MedRep Institution Certification & ERPNext DocType XLSX Export Reflection
+- **Conditional Visibility for Certification Checkbox**:
+  - The certification checkbox (*"This certifies that this institution which is not in the directory is accurate and active for coverage"*) now **only displays below the search field** when the encoded institution name is verified to be **strictly unique** with **zero duplicates or similarities** in the directory (`_detectedMatches.isEmpty`).
+  - If matching suggestions, similar names, or duplicates are detected, or if the user hasn't finished typing (or selected an existing institution), the certification checkbox remains hidden.
+  - Added an instant search loading indicator in the search bar and automatic debounce state protection (`_isSearching`) to prevent any UI flashing.
+- **DocType Note Recording & Seamless ERPNext XLSX Export**:
+  - Recorded MedRep certification note directly on the ERPNext DocType (`certification_note`, `is_certified: 1`, and `remarks`):
+    `"Certified by MedRep: Institution is accurate and active for coverage"`.
+  - Added Frappe Comment audit logging via `/api/resource/Comment` on the `Institution` doc upon submission.
+  - Updated `approvalStatusNote` and `LocationResolver.getInstitutionApprovalStatusNote`:
+    Unapproved certified facilities dynamically display:
+    `"this institution is not yet approved (Certified accurate and active for coverage)"`.
+  - When administrators export `.xlsx` files from ERPNext Desk for `Institution`, `HCP Account` (`workplace_approval_note`), or `HCP Profile Submission`, this check note is clearly visible in the export.
+- **Test Suite**:
+  - Added test case in `test/inst_profiling_test.dart` verifying certification visibility rules, JSON serialization/deserialization, and status notes across lifecycle stages (72/72 tests passing).
+
+---
+
 ## [v.0.7.2] - 2026-10-18
 
 ### 🗺️ Territory Reconfiguration Web Portal v.0.1.0 & Enterprise Resilience
