@@ -1,0 +1,23 @@
+{
+  "version": "v.0.7.2",
+  "build_number": 47,
+  "release_date": "October 18, 2026",
+  "apk_filename": "HCP_Profiling_V.0.7.2.apk",
+  "apk_size_bytes": 61824520,
+  "sha256": "7F4C387B53C90C1D8A40B541E353128C011C284FBFC9982C3AC774A20E26EFB3",
+  "features": [
+    "Table Grid View: Removed territory code prefix from Assigned MedRep column, displaying clean representative name",
+    "Table Grid View: Replaced UNCHANGED/CHANGED with operational status badges (Active, Inactive, Vacant)",
+    "Table Grid View: Added Area / District column with Column Visibility toggle and filter support",
+    "Territory Tree View: Pruned Delete button in compliance with zero-deletion rule; streamlined actions to Edit, Transfer Doctor, Rename, Active/Inactive",
+    "Territory Tree View: Active/Inactive operational toggle changes territory status smoothly without deleting data",
+    "Territory Tree View: Aligned leaf nodes with format: territoryCode (areaDistrictTag) - medRepName",
+    "Territory Tree View: Program dropdown filters root branches to exclusively view the selected program",
+    "Header Controls: Removed redundant Refresh Live Sync button",
+    "Doctor Count Modal: Humanized No Doctors Found messaging and integrated area code and district details",
+    "Doctor Transfer Modal: Added 3-way status button toggle (Active, Inactive, Vacant), fixed Move Selected buttons to prevent gray-out, and added multiline free-typing audit notes",
+    "Authentication Security: Client and server-side SecurityIntrusionGuard with SQL/script/command injection detection, 15-minute freeze, 5-attempt rate-limiting, and slow-network resilience"
+  ],
+  "size_bytes": 61824520,
+  "size_mb": "58.96 MB"
+}

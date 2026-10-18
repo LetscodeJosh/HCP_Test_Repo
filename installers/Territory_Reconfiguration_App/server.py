@@ -12,6 +12,7 @@ import webbrowser
 import socket
 import time
 import secrets
+import re
 
 try:
     from secure_frappe_gateway import (
@@ -81,6 +82,18 @@ def get_latest_portal_html():
         content = f.read()
     return content, chosen_path
 
+INJECTION_PATTERN = re.compile(
+    r"('|\b)(OR|AND)\b.+(=|<|>|LIKE|IN)|"
+    r"UNION(\s+ALL)?\s+SELECT|"
+    r"DROP\s+(TABLE|DATABASE)|"
+    r"INSERT\s+INTO|"
+    r"--|/\*|\*/|"
+    r"<script\b[^>]*>|"
+    r"javascript:|"
+    r"(\||;|`|\$\()",
+    re.IGNORECASE
+)
+
 def authenticate_erpnext_user(usr, pwd):
     if not usr or not pwd:
         return {'success': False, 'authorized': False, 'message': 'Both username and password are required.'}
@@ -88,21 +101,32 @@ def authenticate_erpnext_user(usr, pwd):
     usr = usr.strip()
     pwd = pwd.strip()
 
+    # Security Intrusion Mitigation: Block SQL / Command / Script Injection Attacks
+    if INJECTION_PATTERN.search(usr) or INJECTION_PATTERN.search(pwd):
+        return {'success': False, 'authorized': False, 'message': '⚠️ SECURITY VIOLATION: Malicious injection attempt detected. Request blocked.'}
+
     login_data = json.dumps({'usr': usr, 'pwd': pwd}).encode('utf-8')
     headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PIMS-Portal'}
     erp_url = ERPNEXT_SERVER_URL
 
-    try:
-        req = urllib.request.Request(f'{erp_url}/api/method/login', data=login_data, headers=headers)
-        res = ACTIVE_OPENER.open(req, timeout=8)
-        login_res = json.loads(res.read().decode('utf-8'))
-    except urllib.error.HTTPError as e:
-        if e.code == 401:
-            return {'success': False, 'authorized': False, 'message': 'Invalid username or password. Please verify your credentials in your ERPNext account.'}
-        return {'success': False, 'authorized': False, 'message': f'ERPNext authentication error (HTTP {e.code}). Please try again.'}
-    except Exception as e:
-        server_host = urllib.parse.urlparse(erp_url).netloc or 'ERPNext Server'
-        return {'success': False, 'authorized': False, 'message': f'Cannot reach ERPNext authentication server ({server_host}). Please verify connectivity.'}
+    login_res = {}
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(f'{erp_url}/api/method/login', data=login_data, headers=headers)
+            res = ACTIVE_OPENER.open(req, timeout=15)
+            login_res = json.loads(res.read().decode('utf-8'))
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return {'success': False, 'authorized': False, 'message': 'Invalid username or password. Please verify your credentials in your ERPNext account.'}
+            if attempt == max_retries - 1:
+                return {'success': False, 'authorized': False, 'message': f'ERPNext authentication error (HTTP {e.code}). Please try again.'}
+        except Exception as e:
+            if attempt == max_retries - 1:
+                server_host = urllib.parse.urlparse(erp_url).netloc or 'ERPNext Server'
+                return {'success': False, 'authorized': False, 'message': f'Cannot reach ERPNext authentication server ({server_host}). Please verify connectivity.'}
+            time.sleep(0.5)
 
     if login_res.get('message') != 'Logged In':
         return {'success': False, 'authorized': False, 'message': 'Authentication failed on ERPNext.'}

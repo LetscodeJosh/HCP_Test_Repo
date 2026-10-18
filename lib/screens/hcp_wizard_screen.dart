@@ -2265,7 +2265,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     Navigator.pop(ctx);
                   }
                 },
-                child: const Text('Add Row', style: TextStyle(color: Colors.white)),
+                child: const Text('Add Specialization', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ],
           );
@@ -2472,7 +2472,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     Navigator.pop(ctx);
                   }
                 },
-                child: const Text('Add Row', style: TextStyle(color: Colors.white)),
+                child: const Text('Add Institution', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
               ),
             ],
           );
@@ -2558,7 +2558,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                   Navigator.pop(ctx);
                 }
               },
-              child: const Text('Add Row', style: TextStyle(color: Colors.white)),
+              child: const Text('Add Contact/Email', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -3060,12 +3060,153 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
+  bool _isStep1Accomplished() {
+    return _consentGiven &&
+        (_signaturePoints.value.isNotEmpty ||
+            _consentPhotoBytes != null ||
+            _consentPhotoFile != null ||
+            widget.isResubmission ||
+            (widget.existingSubmission?.consentSignature?.isNotEmpty ?? false) ||
+            (widget.existingSubmission?.consentPhoto?.isNotEmpty ?? false));
+  }
+
+  bool _isStep2Accomplished() {
+    final bool hasDoc = _selectedDoctor != null || _isCreatingNewDoctor;
+    final bool hasName = _firstNameController.text.trim().isNotEmpty && _lastNameController.text.trim().isNotEmpty;
+    final bool hasSpec = _selectedSpecialties.isNotEmpty;
+    final bool hasWp = _selectedWorkplaces.isNotEmpty;
+    final bool hasType = _selectedHcpType != null && _selectedHcpType!.isNotEmpty;
+    final bool hasPractice = _selectedPractice.isNotEmpty;
+    final bool hasNoRejected = !_hasUnapprovedWorkplaces();
+    return hasDoc && hasName && hasSpec && hasWp && hasType && hasPractice && hasNoRejected;
+  }
+
+  bool _isStep2Complete() => _isStep2Accomplished();
+
+  bool _isStepActive(int idx) {
+    if (idx == 0) return true;
+    if (idx == 1) return _isStep1Accomplished();
+    if (idx == 2) return _isStep1Accomplished() && _isStep2Accomplished();
+    if (idx == 3) return _isStep1Accomplished() && _isStep2Accomplished();
+    return false;
+  }
+
+  Map<String, String> _getConsentCompanyDetails() {
+    final apiService = Provider.of<ApiService>(context, listen: false);
+    final prog = (_selectedProgram.isNotEmpty && _selectedProgram != 'All')
+        ? _selectedProgram
+        : (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All'
+            ? apiService.selectedProgram
+            : '');
+    final lower = prog.trim().toLowerCase();
+
+    String fullName;
+    String shortName;
+    const privacyUrl = 'http://pims-marketing.com/privacy';
+
+    if (lower.contains('abbott') || lower.contains('adc')) {
+      fullName = 'PMII Abbott Diabetic Care (ADC)';
+      shortName = 'PMII Abbott Diabetic Care (ADC)';
+    } else if (lower.contains('bayer')) {
+      fullName = 'PMII Bayer';
+      shortName = 'PMII Bayer';
+    } else if (lower.contains('fonterra') || lower.contains('fon')) {
+      fullName = 'PMI Fonterra';
+      shortName = 'PMI Fonterra';
+    } else if (lower.contains('galderma')) {
+      fullName = 'PMII Galderma';
+      shortName = 'PMII Galderma';
+    } else if (lower.contains('ritemed') || lower.contains('rtmd')) {
+      fullName = 'PMII RiteMed';
+      shortName = 'PMII RiteMed';
+    } else if (lower.contains('taisho')) {
+      fullName = 'PMII Taisho';
+      shortName = 'PMII Taisho';
+    } else if (lower.contains('corenergy')) {
+      fullName = 'PMII COREnergy';
+      shortName = 'PMII COREnergy';
+    } else if (lower.contains('pascual')) {
+      fullName = 'PMII Pascual';
+      shortName = 'PMII Pascual';
+    } else if (lower.contains('biomerieux')) {
+      fullName = 'PMII BioMérieux';
+      shortName = 'PMII BioMérieux';
+    } else if (lower.contains('gsk')) {
+      fullName = 'PMII GSK';
+      shortName = 'PMII GSK';
+    } else if (lower.contains('exeltis')) {
+      fullName = 'PMII Exeltis';
+      shortName = 'PMII Exeltis';
+    } else if (lower.contains('vivaro')) {
+      fullName = 'PMII Vivaro';
+      shortName = 'PMII Vivaro';
+    } else if (prog.isNotEmpty) {
+      if (prog.toUpperCase().startsWith('PMI ') || prog.toUpperCase().startsWith('PMII ')) {
+        fullName = prog.trim();
+        shortName = prog.trim();
+      } else {
+        fullName = 'PMII ${prog.trim()}';
+        shortName = 'PMII ${prog.trim()}';
+      }
+    } else {
+      fullName = 'PROFESSIONAL INSIGHTS MARKETING SERVICES (PIMS)';
+      shortName = 'PIMS';
+    }
+
+    return {
+      'fullName': fullName,
+      'shortName': shortName,
+      'privacyUrl': privacyUrl,
+    };
+  }
+
+  void _confirmResetDoctor() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: const [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 24),
+            SizedBox(width: 8),
+            Text('Cancel Doctor Selection?', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          _isCreatingNewDoctor
+              ? 'Are you sure you want to cancel registering this new doctor and return to search? All entered details will be cleared.'
+              : 'Are you sure you want to cancel the selected doctor (${_selectedDoctor?.firstName ?? ""} ${_selectedDoctor?.lastName ?? ""})? All edits will be cleared.',
+          style: const TextStyle(color: Color(0xFF475569), fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Keep Current Doctor', style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _resetToSearch();
+            },
+            child: const Text('Yes, Cancel Doctor', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<String> _getTabTitles() {
     return [
       'Step 1',
-      if (_consentGiven) 'Step 2',
-      if (_consentGiven) 'Step 3',
-      if (_consentGiven) 'Changes',
+      'Step 2',
+      'Step 3',
+      'Changes',
     ];
   }
 
@@ -3083,26 +3224,78 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         child: Row(
           children: List.generate(titles.length, (idx) {
             final isSelected = _currentStep == idx;
+            final isActive = _isStepActive(idx);
+            final isCompleted = (idx == 0 && _isStep1Accomplished()) ||
+                (idx == 1 && _isStep2Accomplished()) ||
+                (idx == 2 && _surveyAnswers.isNotEmpty);
+
             return GestureDetector(
               onTap: () {
-                setState(() {
-                  _currentStep = idx;
-                });
+                if (isActive) {
+                  setState(() {
+                    _currentStep = idx;
+                  });
+                } else {
+                  String reason;
+                  if (idx >= 1 && !_isStep1Accomplished()) {
+                    reason = 'Step 1 is incomplete. Please check the consent box and provide doctor signature or photo.';
+                  } else if (idx >= 2 && !_isStep2Accomplished()) {
+                    reason = 'Step 2 is incomplete. Please complete all mandatory doctor information first.';
+                  } else {
+                    reason = 'Please complete prior profiling steps before accessing this section.';
+                  }
+                  ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: const Color(0xFFDC2626),
+                      content: Row(
+                        children: [
+                          const Icon(Icons.lock_rounded, color: Colors.white, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(reason, style: const TextStyle(fontSize: 12.5))),
+                        ],
+                      ),
+                      duration: const Duration(seconds: 3),
+                    ),
+                  );
+                }
               },
-              child: Container(
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.only(right: 12),
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFF0B192C) : const Color(0xFFF1F5F9),
+                  color: isSelected
+                      ? const Color(0xFF0B192C)
+                      : (isActive ? const Color(0xFFF1F5F9) : const Color(0xFFF8FAFC)),
                   borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  titles[idx],
-                  style: TextStyle(
-                    color: isSelected ? Colors.white : const Color(0xFF64748B),
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                    fontSize: 13,
+                  border: Border.all(
+                    color: isSelected
+                        ? const Color(0xFF0B192C)
+                        : (isActive ? const Color(0xFFCBD5E1) : const Color(0xFFE2E8F0)),
                   ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!isActive) ...[
+                      const Icon(Icons.lock_outline_rounded, size: 13, color: Color(0xFF94A3B8)),
+                      const SizedBox(width: 5),
+                    ] else if (isCompleted && !isSelected) ...[
+                      const Icon(Icons.check_circle_rounded, size: 13, color: Color(0xFF16A34A)),
+                      const SizedBox(width: 5),
+                    ],
+                    Text(
+                      titles[idx],
+                      style: TextStyle(
+                        color: isSelected
+                            ? Colors.white
+                            : (isActive ? const Color(0xFF475569) : const Color(0xFF94A3B8)),
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -3150,11 +3343,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       case 0:
         return _buildStep1Consent();
       case 1:
-        return _consentGiven ? _buildStep2DoctorInfo() : const SizedBox();
+        return _isStep1Accomplished() ? _buildStep2DoctorInfo() : _buildStep1Consent();
       case 2:
-        return _consentGiven ? _buildStep3Survey() : const SizedBox();
+        return (_isStep1Accomplished() && _isStep2Accomplished()) ? _buildStep3Survey() : _buildStep2DoctorInfo();
       case 3:
-        return _consentGiven ? _buildChangesStep() : const SizedBox();
+        return (_isStep1Accomplished() && _isStep2Accomplished()) ? _buildChangesStep() : _buildStep2DoctorInfo();
       default:
         return const SizedBox();
     }
@@ -3162,6 +3355,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
 
   // --- STEP 1: PRIVACY NOTICE AND CONSENT ---
   Widget _buildStep1Consent() {
+    final company = _getConsentCompanyDetails();
+    final fullName = company['fullName']!;
+    final shortName = company['shortName']!;
+    final privacyUrl = company['privacyUrl']!;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -3185,20 +3383,20 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 BoxShadow(color: Color(0x08000000), blurRadius: 6, offset: Offset(0, 2)),
               ],
             ),
-            child: const Text(
-              'I agree that PROFESSIONAL INSIGHTS MARKETING SERVICES (PIMS), including its contracted third parties to contact me through the Contact Details that I provided to PIMS and/or its authorized representative(s) and to collect, store, process and share with PIMS contracted third parties, my Contact Details and my Professional Details for any of the following purposes:\n\n'
-              'a. to communicate with me in the manner preferred by PIMS, including through PIMS PROFESSIONAL HEALTH SPECIALISTS REPRESENTATIVES, websites, email, call centers, postal mail, webcasts, and other channels\n\n'
-              'b. to provide me with information that I have requested, including scientific data, promotional and marketing communications and/or other information about PIMS products, services and activities\n\n'
-              'c. to plan and implement PIMS promotional activities directed to me, including identifying topics and activities that may be of interest to me\n\n'
-              'd. to respond to my requests or queries or to seek my views, on PIMS products, services, and activities\n\n'
-              'e. to improve PIMS level of service and the content of its communications\n\n'
-              'f. for PIMS own administrative and quality assurance purposes\n\n'
+            child: Text(
+              'I agree that $fullName, including its contracted third parties to contact me through the Contact Details that I provided to $shortName and/or its authorized representative(s) and to collect, store, process and share with $shortName contracted third parties, my Contact Details and my Professional Details for any of the following purposes, for as long as reasonably necessary for the fulfillment of the said purposes:\n\n'
+              'a. to communicate with me in the manner preferred by $shortName, including through $shortName PROFESSIONAL HEALTH SPECIALISTS REPRESENTATIVES, websites, email, call centers, postal mail, webcasts, and other channels\n\n'
+              'b. to provide me with information that I have requested, including scientific data, promotional and marketing communications and/or other information about $shortName products, services and activities\n\n'
+              'c. to plan and implement $shortName promotional activities directed to me, including identifying topics and activities that may be of interest to me\n\n'
+              'd. to respond to my requests or queries or to seek my views, on $shortName products, services, and activities\n\n'
+              'e. to improve $shortName level of service and the content of its communications\n\n'
+              'f. for $shortName own administrative and quality assurance purposes\n\n'
               'g. any other purpose that is related to the above list of purposes.\n\n'
-              'I further acknowledge that I may obtain more information on the processing by PIMS of my Contact Details and Professional Details by accessing PIMS Privacy Statement at http://pims-marketing.com/privacy\n\n'
+              'I further acknowledge that I may obtain more information on the processing by $shortName of my Contact Details and Professional Details by accessing $shortName Privacy Statement at $privacyUrl\n\n'
               '1. Contact Details: my name, contact number, email address, office address, and office number\n'
               '2. Professional Details: such as my PRC number, professional associations, and medical specialties\n\n'
-              'Note: PIMS is registered with the National Privacy Commission. All Data and Personal Details voluntarily provided by data subject are protected under the Data Privacy Act.',
-              style: TextStyle(color: Color(0xFF334155), fontSize: 12, height: 1.5),
+              'Note: $shortName is registered with the National Privacy Commission. All Data and Personal Details voluntarily provided by data subject are protected under the Data Privacy Act.',
+              style: const TextStyle(color: Color(0xFF334155), fontSize: 12, height: 1.5),
             ),
           ),
           const SizedBox(height: 16),
@@ -3228,11 +3426,11 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ),
             ],
           ),
-          const Padding(
-            padding: EdgeInsets.only(left: 12.0, top: 4.0),
+          Padding(
+            padding: const EdgeInsets.only(left: 12.0, top: 4.0),
             child: Text(
-              'I have read and understood the Privacy Policy and this Privacy Notice and Consent Form, and I consent to the processing of my personal data to receive personalized commercial and medical communications from PIMS, as described in the Privacy Policy.',
-              style: TextStyle(color: Color(0xFF475569), fontSize: 12, height: 1.4),
+              'I have read and understood the Privacy Policy and this Privacy Notice and Consent Form, and I consent to the processing of my personal data to receive personalized commercial and medical communications from $shortName, as described in the Privacy Policy.',
+              style: const TextStyle(color: Color(0xFF475569), fontSize: 12, height: 1.4),
             ),
           ),
           const SizedBox(height: 20),
@@ -3241,9 +3439,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           if (_consentGiven) ...[
             const Text('LEGAL NOTICE', style: TextStyle(color: Color(0xFF0F172A), fontSize: 14, fontWeight: FontWeight.bold)),
             const SizedBox(height: 6),
-            const Text(
-              'By signing or taking a photo, you accept and agree to Company\'s Terms of Use and Privacy Policy. Specifically, you provide your clear consent to: (i) Company\'s collection, use, transfer, and/or processing of any of your personal information provided hereunder, for the purposes of this and/or future engagement(s) with the Professional Healthcare Specialist Representative of PMI; (ii) Company\'s recording of coverage, including its perpetual right to store, transmit and use such recordings for any internal or external purpose(s). You agree to be contacted, including via phone, email messages and text messages, by Company, its affiliates, contractors/sub-contractors in relation to the marketing of Company\'s products and/or services.',
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 12, height: 1.4),
+            Text(
+              'By signing or taking a photo, you accept and agree to Company\'s Terms of Use and Privacy Policy. Specifically, you provide your clear consent to: (i) Company\'s collection, use, transfer, and/or processing of any of your personal information provided hereunder, for the purposes of this and/or future engagement(s) with the Professional Healthcare Specialist Representative of $shortName; (ii) Company\'s recording of coverage, including its perpetual right to store, transmit and use such recordings for any internal or external purpose(s). You agree to be contacted, including via phone, email messages and text messages, by Company, its affiliates, contractors/sub-contractors in relation to the marketing of Company\'s products and/or services.',
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 20),
 
@@ -3553,29 +3751,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                     ),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Row(
-                    children: [
-                      const Text(
-                        'Doctor not in masterlist?',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                      ),
-                      const SizedBox(width: 8),
-                      InkWell(
-                        onTap: () {
-                          Navigator.pop(ctx);
-                          _setupForNewDoctor();
-                        },
-                        child: const Text(
-                          '+ Add as New Doctor',
-                          style: TextStyle(color: Color(0xFF0066FF), fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Expanded(
                   child: filtered.isEmpty
                       ? Center(
@@ -3602,25 +3778,21 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                                 ),
                                 const SizedBox(height: 6),
                                 const Text(
-                                  'This doctor does not exist in the HCP masterlist yet. You can register them directly as a New Doctor.',
+                                  'This doctor does not exist in the HCP masterlist yet. To register a new doctor, close this search modal and tap "+ Add New Doctor" in Step 2.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(color: Color(0xFF64748B), fontSize: 12, height: 1.4),
                                 ),
-                                const SizedBox(height: 16),
-                                ElevatedButton.icon(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: const Color(0xFF0B192C),
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                const SizedBox(height: 14),
+                                OutlinedButton.icon(
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: const Color(0xFF0F172A),
+                                    side: const BorderSide(color: Color(0xFFCBD5E1)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    elevation: 0,
                                   ),
-                                  icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
-                                  label: const Text('Add as New Doctor', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                  onPressed: () {
-                                    Navigator.pop(ctx);
-                                    _setupForNewDoctor();
-                                  },
+                                  icon: const Icon(Icons.close_rounded, size: 16),
+                                  label: const Text('Close Search', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  onPressed: () => Navigator.pop(ctx),
                                 ),
                               ],
                             ),
@@ -4178,17 +4350,27 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: InkWell(
-              onTap: _resetToSearch,
-              child: const Text(
-                'Cancel & Search Existing Doctor',
-                style: TextStyle(color: Color(0xFF0066FF), fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+          if (_isStep2Complete()) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0066FF),
+                  side: const BorderSide(color: Color(0xFF0066FF), width: 1.2),
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.swap_horiz_rounded, size: 16, color: Color(0xFF0066FF)),
+                label: const Text(
+                  'Cancel & Search Existing Doctor',
+                  style: TextStyle(color: Color(0xFF0066FF), fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                onPressed: _confirmResetDoctor,
               ),
             ),
-          ),
+          ],
         ],
       );
     } else if (_selectedDoctor != null) {
@@ -4243,17 +4425,27 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: InkWell(
-              onTap: _resetToSearch,
-              child: const Text(
-                'Clear / Select Another Doctor',
-                style: TextStyle(color: Color(0xFFDC2626), fontSize: 11, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+          if (_isStep2Complete()) ...[
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFDC2626),
+                  side: const BorderSide(color: Color(0xFFDC2626), width: 1.2),
+                  backgroundColor: const Color(0xFFFEF2F2),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                icon: const Icon(Icons.cancel_outlined, size: 16, color: Color(0xFFDC2626)),
+                label: const Text(
+                  'Cancel / Select Another Doctor',
+                  style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold, fontSize: 12),
+                ),
+                onPressed: _confirmResetDoctor,
               ),
             ),
-          ),
+          ],
         ],
       );
     } else {
@@ -4288,7 +4480,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
   Widget _buildStep2DoctorInfo() {
     final isMobile = MediaQuery.of(context).size.width < 700;
     final bool showDetails = _selectedDoctor != null || _isCreatingNewDoctor;
-    final bool isExistingDoctor = _selectedDoctor != null && !_isCreatingNewDoctor;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -4426,8 +4617,9 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             const Text(
               '* indicates information that are mandatory',
               style: TextStyle(
-                color: Color(0xFF64748B),
+                color: Color(0xFFDC2626),
                 fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 12),
@@ -4446,8 +4638,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         _onDoctorNameChanged();
                       },
                       decoration: InputDecoration(
-                        labelText: 'First Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        label: const Text.rich(
+                          TextSpan(
+                            text: 'First Name ',
+                            style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                            children: [
+                              TextSpan(text: '*', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                         suffixIcon: _buildNameFieldRecognizerSuffix(_firstNameController),
                         filled: true,
                         fillColor: Colors.white,
@@ -4476,8 +4675,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         _onDoctorNameChanged();
                       },
                       decoration: InputDecoration(
-                        labelText: 'Middle Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        label: const Text.rich(
+                          TextSpan(
+                            text: 'Middle Name ',
+                            style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                            children: [
+                              TextSpan(text: '*', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                         suffixIcon: _buildNameFieldRecognizerSuffix(_middleNameController),
                         filled: true,
                         fillColor: Colors.white,
@@ -4510,8 +4716,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         _onDoctorNameChanged();
                       },
                       decoration: InputDecoration(
-                        labelText: 'Last Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626), fontSize: 12),
+                        label: const Text.rich(
+                          TextSpan(
+                            text: 'Last Name ',
+                            style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                            children: [
+                              TextSpan(text: '*', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                         suffixIcon: _buildNameFieldRecognizerSuffix(_lastNameController),
                         filled: true,
                         fillColor: Colors.white,
@@ -4555,10 +4768,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         }
                       },
                       decoration: InputDecoration(
-                        labelText: 'Birth Date (Optional)',
+                        labelText: 'Birth Date',
                         labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
-                        helperText: 'Optional per DPA of 2012',
-                        helperStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10),
                         suffixIcon: const Padding(
                           padding: EdgeInsets.only(right: 10),
                           child: Icon(
@@ -4595,8 +4806,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         _onDoctorNameChanged();
                       },
                       decoration: InputDecoration(
-                        labelText: 'First Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        label: const Text.rich(
+                          TextSpan(
+                            text: 'First Name ',
+                            style: TextStyle(color: Color(0xFF64748B)),
+                            children: [
+                              TextSpan(text: '*', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                         suffixIcon: _buildNameFieldRecognizerSuffix(_firstNameController),
                         filled: true,
                         fillColor: Colors.white,
@@ -4623,8 +4841,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         _onDoctorNameChanged();
                       },
                       decoration: InputDecoration(
-                        labelText: 'Middle Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        label: const Text.rich(
+                          TextSpan(
+                            text: 'Middle Name ',
+                            style: TextStyle(color: Color(0xFF64748B)),
+                            children: [
+                              TextSpan(text: '*', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                         suffixIcon: _buildNameFieldRecognizerSuffix(_middleNameController),
                         filled: true,
                         fillColor: Colors.white,
@@ -4651,8 +4876,15 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         _onDoctorNameChanged();
                       },
                       decoration: InputDecoration(
-                        labelText: 'Last Name *',
-                        labelStyle: const TextStyle(color: Color(0xFFDC2626)),
+                        label: const Text.rich(
+                          TextSpan(
+                            text: 'Last Name ',
+                            style: TextStyle(color: Color(0xFF64748B)),
+                            children: [
+                              TextSpan(text: '*', style: TextStyle(color: Color(0xFFDC2626), fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
                         suffixIcon: _buildNameFieldRecognizerSuffix(_lastNameController),
                         filled: true,
                         fillColor: Colors.white,
@@ -4694,10 +4926,8 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                         }
                       },
                       decoration: InputDecoration(
-                        labelText: 'Birth Date (Optional)',
+                        labelText: 'Birth Date',
                         labelStyle: const TextStyle(color: Color(0xFF64748B)),
-                        helperText: 'Optional per DPA of 2012',
-                        helperStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                         suffixIcon: const Padding(
                           padding: EdgeInsets.only(right: 12),
                           child: Icon(
@@ -4832,7 +5062,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        label: const Text('+ Add Specialization', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         onPressed: _showAddSpecialtySelector,
                       ),
                     ),
@@ -5207,7 +5437,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                           ),
                           icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                          label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          label: const Text('+ Add Institution', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                           onPressed: _showAddWorkplaceSelector,
                         ),
                         const SizedBox(width: 8),
@@ -5377,7 +5607,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         icon: const Icon(Icons.add, size: 14, color: Colors.white),
-                        label: const Text('+ Add Row', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        label: const Text('+ Add Contact/Email', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         onPressed: _showAddContactSelector,
                       ),
                     ),
@@ -5772,37 +6002,6 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         contactAdded.isNotEmpty ||
         contactRemoved.isNotEmpty;
 
-    final changesMap = {
-      'submission': currentDoctor?.name ?? '',
-      'hcp': currentDoctor?.name ?? '',
-      'generated_on': DateTime.now().toString().split('.').first,
-      'generated_by': apiService.loggedInEmail ?? 'jptan@profinsights.biz',
-      'version': 1,
-      'changes': {
-        'basic_information': basicChanges.map((c) => {
-          'field': c['field'],
-          'label': c['label'],
-          'operation': 'modified',
-          'old': c['old'],
-          'new': c['new'],
-        }).toList(),
-        'specializations': {
-          'added': specAdded,
-          'removed': specRemoved,
-        },
-        'workplaces': {
-          'added': wpAdded,
-          'removed': wpRemoved,
-        },
-        'contact_information': {
-          'added': contactAdded,
-          'removed': contactRemoved,
-        },
-      },
-    };
-
-    final jsonPrettyStr = const JsonEncoder.withIndent('  ').convert(changesMap);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -6059,26 +6258,78 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
             const SizedBox(height: 14),
           ],
 
-          const SizedBox(height: 10),
-          const Text('Changes JSON', style: TextStyle(color: Color(0xFF475569), fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFF1E293B)),
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Text(
-                jsonPrettyStr,
-                style: const TextStyle(color: Color(0xFF38BDF8), fontFamily: 'monospace', fontSize: 11),
+          if (_surveyAnswers.isNotEmpty) ...[
+            const Text('Survey & Detailing Assessment', style: TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _surveyAnswers.entries.map((entry) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.quiz_outlined, size: 14, color: Color(0xFF0066FF)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12.5),
+                              children: [
+                                TextSpan(text: '${entry.key}: ', style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF334155))),
+                                TextSpan(text: entry.value, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0066FF))),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
             ),
+            const SizedBox(height: 14),
+          ],
+
+          const Text('Submission & Audit Summary', style: TextStyle(color: Color(0xFF0F172A), fontSize: 15, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: const [
+                BoxShadow(color: Color(0x06000000), blurRadius: 4, offset: Offset(0, 1)),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSummaryDetailRow('Doctor Target', currentDoctor?.name != null && currentDoctor!.name!.isNotEmpty ? '${currentDoctor.name} ($fullDoctorName)' : fullDoctorName),
+                _buildSummaryDetailRow('Workflow Action', isExistingDoctor ? 'Submit for Processing (Direct Auto-Merge)' : 'Submit for Approval (Requires SFE Approval)'),
+                _buildSummaryDetailRow('Active Program', _selectedProgram.isNotEmpty ? _selectedProgram : (apiService.selectedProgram.isNotEmpty ? apiService.selectedProgram : 'General')),
+                _buildSummaryDetailRow('Profiling MedRep', apiService.loggedInEmail ?? 'Current Active User'),
+                _buildSummaryDetailRow('Specializations', '${_selectedSpecialties.length} specialty affiliation(s) encoded'),
+                _buildSummaryDetailRow('Workplaces', '${_selectedWorkplaces.length} institution affiliation(s) encoded'),
+                _buildSummaryDetailRow('Contacts', '${_contacts.length} communication channel(s) registered'),
+                _buildSummaryDetailRow('Consent Status', _consentGiven ? 'Verified & Acknowledged' : 'Pending Confirmation'),
+                if (_surveyAnswers.isNotEmpty)
+                  _buildSummaryDetailRow('Survey Responses', '${_surveyAnswers.length} question(s) answered in Step 3'),
+                _buildSummaryDetailRow('Timestamp', DateTime.now().toString().split('.').first),
+              ],
+            ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
           DropdownButtonFormField<String>(
             value: _applicationStatus,
@@ -6107,10 +6358,34 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
     );
   }
 
+  Widget _buildSummaryDetailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 130,
+            child: Text(
+              label,
+              style: const TextStyle(color: Color(0xFF64748B), fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(color: Color(0xFF0F172A), fontSize: 12.5, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomBar() {
     final titles = _getTabTitles();
     final isLast = _currentStep == titles.length - 1;
-    final bool isStep2Ready = _currentStep != 1 || (_selectedDoctor != null || _isCreatingNewDoctor);
 
     return Container(
       color: Colors.white,
@@ -6152,7 +6427,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                       'Resubmit for Approval',
                       style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                     ),
-                    onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                    onPressed: (_isLoading || !_isStep1Accomplished() || !_isStep2Accomplished())
                         ? null
                         : () {
                             _submitForm(workflowAction: 'Submit for Approval');
@@ -6173,7 +6448,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           'Submit for Processing',
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                         ),
-                        onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                        onPressed: (_isLoading || !_isStep1Accomplished() || !_isStep2Accomplished())
                             ? null
                             : () {
                                 _submitForm(workflowAction: 'Submit for Processing');
@@ -6191,7 +6466,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                           'Submit for Approval',
                           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                         ),
-                        onPressed: (_isLoading || ((_currentStep == 0 && !_consentGiven) || !isStep2Ready))
+                        onPressed: (_isLoading || !_isStep1Accomplished() || !_isStep2Accomplished())
                             ? null
                             : () {
                                 _submitForm(workflowAction: 'Submit for Approval');
@@ -6207,31 +6482,82 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: ((_currentStep == 0 && !_consentGiven) || !isStep2Ready)
-                  ? null
-                  : () {
-                      if (_currentStep == 1) {
-                        if (_isCreatingNewDoctor && (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty)) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              backgroundColor: Color(0xFFDC2626),
-                              content: Text('Please enter the doctor\'s First Name and Last Name.'),
-                            ),
-                          );
-                          return;
-                        }
-                        if (_hasUnapprovedWorkplaces()) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: const Color(0xFFDC2626),
-                              content: Text('Cannot proceed: "${_unapprovedWorkplaceNames()}" was rejected by SFE. Please choose an active or pending institution.'),
-                            ),
-                          );
-                          return;
-                        }
-                      }
-                      setState(() => _currentStep++);
-                    },
+              onPressed: () {
+                if (_currentStep == 0) {
+                  if (!_isStep1Accomplished()) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFFDC2626),
+                        content: Text('Please check the consent confirmation box and affix signature or photo to proceed.'),
+                      ),
+                    );
+                    return;
+                  }
+                } else if (_currentStep == 1) {
+                  if (_firstNameController.text.trim().isEmpty || _lastNameController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFFDC2626),
+                        content: Text('Please enter the doctor\'s First Name and Last Name.'),
+                      ),
+                    );
+                    return;
+                  }
+                  if (_selectedSpecialties.isEmpty) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFFDC2626),
+                        content: Text('Please add at least one Specialization for the doctor.'),
+                      ),
+                    );
+                    return;
+                  }
+                  if (_selectedWorkplaces.isEmpty) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFFDC2626),
+                        content: Text('Please add at least one Workplace/Institution for the doctor.'),
+                      ),
+                    );
+                    return;
+                  }
+                  if (_selectedHcpType == null || _selectedHcpType!.isEmpty) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFFDC2626),
+                        content: Text('Please select an HCP Type (e.g., Consultant, Resident, Fellow).'),
+                      ),
+                    );
+                    return;
+                  }
+                  if (_selectedPractice.isEmpty) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        backgroundColor: Color(0xFFDC2626),
+                        content: Text('Please select an HCP Practice (e.g., Private, Government).'),
+                      ),
+                    );
+                    return;
+                  }
+                  if (_hasUnapprovedWorkplaces()) {
+                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        backgroundColor: const Color(0xFFDC2626),
+                        content: Text('Cannot proceed: "${_unapprovedWorkplaceNames()}" was rejected by SFE. Please choose an active or pending institution.'),
+                      ),
+                    );
+                    return;
+                  }
+                }
+                setState(() => _currentStep++);
+              },
               child: const Text('Next', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],

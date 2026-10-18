@@ -1,0 +1,19 @@
+{
+  "version": "v.0.7.1",
+  "build_number": 46,
+  "release_date": "October 18, 2026",
+  "apk_filename": "HCP_Profiling_V.0.7.1.apk",
+  "apk_size_bytes": 61820852,
+  "sha256": "C03271BEAF585E2A32A4DCB498BFCB1882998E06221329BBBAECC64743C3D302",
+  "features": [
+    "Pruned redundant Add New Doctor button from inside the doctor search modal; search modal strictly queries existing HCP masterlist",
+    "Dynamic multi-program consent agreement dynamically adapting to active program (PMII Bayer, PMI Fonterra, PMII Abbott Diabetic Care (ADC), PMII Galderma, etc.) replacing static PIMS references",
+    "Intuitive and prominent Cancel Doctor interactive button with confirmation dialog, appearing only when all mandatory fields of Step 2 are completed",
+    "Step progression and tab security guardrails: Step 2 locked until Step 1 accomplished; Step 3 and Changes locked until Step 2 complete; lock styling and prerequisite snackbar feedback",
+    "Human-readable executive summary of changes eliminating raw JSON monospace code, formatting profile details, specializations, workplaces, contacts, survey detailing, and audit metadata",
+    "Task-specific Add Row button labels: + Add Specialization, + Add Institution, and + Add Contact/Email across cards and dialogs",
+    "Mandatory field styling: red mandatory text indicator (* indicates information that are mandatory), neutral slate input borders with red asterisk labels, and removal of (Optional) tag from birth date"
+  ],
+  "size_bytes": 61820852,
+  "size_mb": "58.96 MB"
+}

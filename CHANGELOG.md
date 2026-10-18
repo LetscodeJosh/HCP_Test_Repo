@@ -5,6 +5,68 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.7.2] - 2026-10-18
+
+### 🗺️ Territory Reconfiguration Web Portal Enterprise Alignment & Security Hardening
+- **Table Grid View Refinements**:
+  - Removed territory code prefix (`AD0101 - `) from the Assigned MedRep column; displays clean representative name with formatted User ID and Record ID below.
+  - Replaced `UNCHANGED`/`CHANGED` in the Status column with operational status badges: **`Active`** (emerald), **`Inactive`** (slate), or **`Vacant`** (amber).
+  - Added new **`Area / District`** column displaying coverage tag (`GMA/NLZ`, `GMA/SLZ`, etc.) and parent district with Column Visibility toggle (`colToggle_area`) and Filter By support.
+- **Zero-Deletion Standard & Active / Inactive Operational Toggles in Territory Tree**:
+  - Completely removed `Delete` option from the Territory Tree view and web app (no data deletion permitted).
+  - Streamlined tree node action buttons to strictly: **`(Edit, Transfer Doctor, Rename, Active/Inactive)`**.
+  - Tapping **`Active`** / **`Inactive`** operational toggle smoothly changes territory operational status without deleting any data.
+- **Tree Node Alignment & Area Tag Precision**:
+  - Standardized territory leaf node display alignment: `${territoryCode} (${areaDistrictTag}) - ${medRepName}` (e.g. `AD0106 (GMA/NLZ) - JONEL APSAY`).
+  - Added extensible `TERRITORY_AREA_MAPPINGS` dictionary and automatic district tag resolution (`resolveTerritoryArea`) ready for full area code file integration.
+- **Program Dropdown Filtering in Territory Tree**:
+  - Filtered Territory Tree root hierarchy by active selected program: selecting `Abbott Diabetes Care` exclusively displays Abbott branches, hiding other programs (`Bayer`, `RiteMed`, `Vivaro`) from view.
+- **Header Controls Streamlining**:
+  - Removed redundant `[Refresh Live Sync]` button; Territory Tree operates as the live, authoritative interactive reconfiguration canvas.
+- **Doctor Count Modal Humanization & Area Tagging**:
+  - Replaced verbose/inappropriate explanations with clean, professional statements for zero doctors and search queries.
+  - Included the MedRep's **Area Code / District** directly in the modal header and subheader.
+- **Doctor Transfer Modal Upgrades**:
+  - Added a 3-way status button toggle: **`Active (Working)`**, **`Inactive (Resigned)`**, and **`Vacant`**.
+  - Fixed Move Selected buttons to ensure all 3 transfer action buttons are permanently active, vibrant, and never grayed out.
+  - Replaced single-line audit input with a spacious multiline `<textarea>` for free typing of comprehensive transfer notes.
+- **Authentication Security Intrusion Mitigation & Network Resilience**:
+  - Implemented `SecurityIntrusionGuard` (client and server-side) with regex-based SQL injection, script injection, and command injection pattern detection.
+  - Automated intrusion blocking, 15-minute progressive freeze, and 5-attempt rate-limiting safeguards.
+  - Extended network timeout to 15-25s with 2-stage gentle retry for field users on slow/unstable mobile networks.
+
+---
+
+## [v.0.7.1] - 2026-10-18
+
+### 🔒 Enterprise Form Security, Dynamic Multi-Program Consent & Humanized Executive Summaries
+- **Doctor Search Redundancy Elimination**:
+  - Removed the "+ Add as New Doctor" button and link from inside the doctor search modal (`_showHcpSelectorModal()`).
+  - Search HCP now strictly focuses on masterlist lookups for existing doctors, with new doctor registrations exclusively initiated from the dedicated "+ Add New Doctor" card in Step 2.
+- **Dynamic Multi-Program Consent Formulation**:
+  - Step 1 consent agreement dynamically adapts based on the logged-in program (e.g. `PMII Abbott Diabetic Care (ADC)`, `PMII Bayer`, `PMI Fonterra`, `PMII Galderma`, etc.).
+  - Replaces all static `PROFESSIONAL INSIGHTS MARKETING SERVICES (PIMS)` references with program-tailored corporate entity names (`$fullName` and `$shortName`).
+  - Privacy policy URLs and disclaimer notes dynamically reflect the respective corporate privacy statement.
+- **Enhanced Cancel Doctor Action & Visibility Guarding**:
+  - Upgraded the small text link into an intuitive, high-visibility outlined interactive button with icon (`Icons.close_rounded`) and styled container.
+  - Button visibility is cleanly guarded: it only appears when all mandatory fields of Step 2 (First Name, Last Name, Specialization, Workplace, Workplace Type, Practice) are completely fulfilled, avoiding screen clutter and cognitive overload.
+  - Integrated confirmation dialog (`_confirmResetDoctor`) to prevent accidental form resets.
+- **Step Progression & Tab Security Guardrails**:
+  - Step 2 tab is locked until Step 1 is fully accomplished (doctor consent checkbox confirmed + doctor signature or photo captured).
+  - Step 3 and Changes tabs are locked until Step 2 is fully completed.
+  - Inactive tabs display lock styling with clear feedback SnackBars indicating the missing prerequisite step.
+- **Human-Readable Executive Summary of Changes (Elimination of Raw JSON)**:
+  - Replaced the developer monospace raw JSON preview card with a human-readable, executive change summary card.
+  - Summarizes Doctor Profile modifications, Added/Removed Specializations, Workplaces, Contact details, Survey Detailing responses, and Submission Audit details in an intuitive, polished format.
+- **Task-Specific "Add Row" Button Labels**:
+  - Renamed generic "Add Row" buttons across cards and dialogs to descriptive, task-oriented action labels: `+ Add Specialization`, `+ Add Institution`, and `+ Add Contact/Email`.
+- **Mandatory Field Styling & Birth Date Cleanup**:
+  - Mandatory disclaimer `* indicates information that are mandatory` styled in prominent crimson red (`#DC2626`).
+  - First, Middle, and Last Name labels use `Text.rich` displaying neutral slate text with a red asterisk `*` without red input borders.
+  - Cleaned up Birth Date input by removing the `(Optional)` tag and helper text.
+
+---
+
 ## [v.0.7.0] - 2026-10-13
 
 ### 🏥 Gemini 4 Argon Progressive Phrase Shrinking & Doctor Field Locking
