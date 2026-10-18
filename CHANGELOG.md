@@ -7,7 +7,22 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ## [v.0.7.2] - 2026-10-18
 
-### 🗺️ Territory Reconfiguration Web Portal Enterprise Alignment & Security Hardening
+### 🗺️ Territory Reconfiguration Web Portal v.0.1.0 & Enterprise Resilience
+- **Dedicated Web App Versioning (`v.0.1.0`)**:
+  - Separated the Territory Reconfiguration Web Portal version tracking from the mobile HCP app (`v.0.7.2`), branding the web portal as **`v.0.1.0`**.
+- **Realignment Tab Clutter Elimination**:
+  - Removed "Active District Groups & Realignment Distribution" card grid from Tab 2, retaining strictly the **Archived & Inactive Territories Directory Vault** for zero data loss.
+- **Top-Tier Summary Report & Audit Trail UI/UX**:
+  - Unified KPI Summary Card number colors across all 5 metrics (`Total Records`, `Unchanged`, `Changed/Renamed`, `Rep Transfers`, `Archived Nodes`) to match the primary Total Records brand blue (`#0066FF`).
+  - Upgraded Master Audit Trail to a dedicated scrollable viewport (`max-height: 520px; overflow-y: auto;`) with sticky table headers (`position: sticky; top: 0; background: #0B192C;`) and sleek modern scrollbars.
+- **Strict No-Deletion Policy & Inactive/Vacant Territory Flow**:
+  - Completely removed the `Delete` action from the Table Grid View action popover (`gridRowActionsMenu`).
+  - Added **`Tag Inactive / Vacant`** action with confirmation modal (`#inactiveModalOverlay`): decommissions resigned MedReps, preserves territory codes in ERPNext as Vacant for future program cycles, archives records to the Archive Directory, and ensures zero doctor data loss.
+- **First-Time User Walkthrough & Interactive Guidance Engine**:
+  - Added automatic detection for first-time login sessions to display the interactive **Territory Reconfiguration Portal Guide** walkthrough modal (`#userGuideModalOverlay`).
+  - Enabled button guidance subtext under all action menu items (e.g. *Edit territory properties & manager*, *Create child territory under this node*, *Rename territory name in tree & ERPNext*, *Set territory inactive & vacant in ERPNext*, *Reassign rep & transfer doctors*, *View change history & logs*).
+  - Added dedicated **`User Guide (ℹ)`** icon in top header navigation allowing returning users to re-open the guide, review instructions, and toggle button hints at any time.
+
 - **Table Grid View Refinements**:
   - Removed territory code prefix (`AD0101 - `) from the Assigned MedRep column; displays clean representative name with formatted User ID and Record ID below.
   - Replaced `UNCHANGED`/`CHANGED` in the Status column with operational status badges: **`Active`** (emerald), **`Inactive`** (slate), or **`Vacant`** (amber).
