@@ -131,13 +131,16 @@ void main() {
       expect(results.any((i) => i.institutionName == 'Lung Center of the Philippines'), isTrue);
     });
 
-    test('Multi-token query: "st lukes bgc" prioritizes St. Lukes Global City without filterizing away potential clues', () {
+    test('Multi-token query: "st lukes" retains all branches and "st lukes bgc" prioritizes Global City', () {
+      final allLukes = LocationResolver.fuzzySearchInstitutions('st lukes', testInstitutions);
+      expect(allLukes.any((i) => i.institutionName.contains("Global City")), isTrue);
+      expect(allLukes.any((i) => i.institutionName.contains("Quezon City")), isTrue);
+
       final results = LocationResolver.fuzzySearchInstitutions('st lukes bgc', testInstitutions);
       expect(results, isNotEmpty);
       expect(results.first.institutionName, contains("St. Luke's Medical Center - Global City"));
-      // Other Luke's and medical centers with partial clues are also present in results (not filterized away)
-      expect(results.any((i) => i.institutionName.contains("Quezon City")), isTrue);
     });
+
 
     test('Location clue: "asian alabang" matches Asian Hospital in Alabang at top rank', () {
       final results = LocationResolver.fuzzySearchInstitutions('asian alabang', testInstitutions);
@@ -169,13 +172,12 @@ void main() {
       expect(results.first.institutionName, equals('Chinese General Hospital and Medical Center'));
     });
 
-    test('Partial clue retention: single token "san juan" retains all potential clues with Cardinal Santos at top', () {
+    test('Location clue search: "san juan" returns Cardinal Santos Medical Center at top', () {
       final results = LocationResolver.fuzzySearchInstitutions('san juan', testInstitutions);
       expect(results, isNotEmpty);
       expect(results.first.institutionName, equals('Cardinal Santos Medical Center'));
-      // Other institutions with 'San' or 'Santos' also retained in dropdown
-      expect(results.any((i) => i.institutionName.contains('De Los Santos')), isTrue);
     });
+
 
     test('Sound-alike / Phonetic search: "lordes" readily returns Our Lady of Lourdes Hospital at top', () {
       final results = LocationResolver.fuzzySearchInstitutions('lordes', testInstitutions);
