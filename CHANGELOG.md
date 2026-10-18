@@ -33,7 +33,16 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 - **Authentication Security Intrusion Mitigation & Network Resilience**:
   - Implemented `SecurityIntrusionGuard` (client and server-side) with regex-based SQL injection, script injection, and command injection pattern detection.
   - Automated intrusion blocking, 15-minute progressive freeze, and 5-attempt rate-limiting safeguards.
-  - Extended network timeout to 15-25s with 2-stage gentle retry for field users on slow/unstable mobile networks.
+- **Territory Tree Light Theme Alignment**:
+  - Matched territory tree container, rows, node labels, and action toolbars to the executive light color theme of the Table Grid View (clean white `#FFFFFF` surface, `#E2E8F0` borders, and subtle elevation).
+  - Styled leaf territory codes in vibrant cyan-blue (`#0284C7`, font-weight: 700) matching the Active Code table column.
+  - Styled assigned representative full names in crisp, high-contrast dark slate (`#0F172A`, font-weight: 600) for effortless legibility.
+  - Aligned Area coverage badges with soft cyan-blue (`#F0F9FF`, border: `#BAE6FD`, text: `#0369A1`).
+  - Updated folder icons, leaf bullets, row hover (`#F8FAFC`), and row selection (`#EFF6FF` with blue accent).
+- **Auto-Login Security Vulnerability Elimination**:
+  - Purged automatic login on Streamlit server updates, git commits, and tab restarts by removing `sfe_session` URL query parameter sharing and scrubbing persistent `localStorage` user caches.
+  - Enforced an explicit, secure Login screen upon all redeployments and fresh browser sessions to eliminate unauthorized account exposure.
+
 
 ---
 
