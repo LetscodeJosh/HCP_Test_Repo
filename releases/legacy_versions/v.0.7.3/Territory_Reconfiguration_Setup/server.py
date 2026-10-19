@@ -90,9 +90,41 @@ INJECTION_PATTERN = re.compile(
     r"--|/\*|\*/|"
     r"<script\b[^>]*>|"
     r"javascript:|"
-    r"(\||;|`|\$\()",
+    r"(\||;|&|`|\$\(|\${|\bexec\b|\bsystem\b|\bpassthru\b|\bxp_cmdshell\b)",
     re.IGNORECASE
 )
+
+def request_erpnext_password_reset(user_email):
+    """Dispatches password reset request directly to ERPNext."""
+    if not user_email or not isinstance(user_email, str):
+        return {'success': False, 'message': 'ERPNext username or email address is required.'}
+    clean_user = user_email.strip()
+    if INJECTION_PATTERN.search(clean_user):
+        return {'success': False, 'message': '⚠️ SECURITY VIOLATION: Suspicious characters or command injection pattern detected in email.'}
+    try:
+        reset_url = f"{ERPNEXT_SERVER_URL}/api/method/frappe.core.doctype.user.user.reset_password"
+        payload = urllib.parse.urlencode({'user': clean_user}).encode('utf-8')
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Accept': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PIMS-Portal'
+        }
+        req = urllib.request.Request(reset_url, data=payload, headers=headers)
+        with ACTIVE_OPENER.open(req, timeout=12) as res:
+            return {
+                'success': True,
+                'message': f'Password reset instructions have been dispatched by ERPNext to {clean_user}. Please check your inbox.'
+            }
+    except urllib.error.HTTPError as he:
+        try:
+            err_data = json.loads(he.read().decode('utf-8'))
+            msg = err_data.get('message') or f'ERPNext server error (HTTP {he.code})'
+        except Exception:
+            msg = f'ERPNext server returned HTTP {he.code}'
+        return {'success': False, 'message': f'ERPNext Password Reset Error: {msg}'}
+    except Exception as e:
+        return {'success': False, 'message': f'Could not reach ERPNext server: {str(e)}'}
+
 
 def authenticate_erpnext_user(usr, pwd):
     if not usr or not pwd:
@@ -417,6 +449,25 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(json.dumps({'success': True, 'message': 'Logged out successfully.'}).encode('utf-8'))
             return
+
+        if parsed.path == '/api/reset-password':
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            try:
+                data = json.loads(post_data.decode('utf-8'))
+                target_user = (data.get('user') or data.get('usr') or '').strip()
+                result = request_erpnext_password_reset(target_user)
+                self.send_response(200 if result.get('success') else 400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode('utf-8'))
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'success': False, 'message': str(e)}).encode('utf-8'))
+            return
+
 
         if parsed.path == '/api/sync':
             self.send_response(200)
