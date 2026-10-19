@@ -122,3 +122,12 @@
    * **Local Desktop Environment (`server.py`)**: Must always support direct `/api/login` authentication and persistent session cookies.
 3. **Mandatory Automated Auth Regression Check**:
    * Any change touching `territory_reconfiguration_portal.html` or `app.py` must explicitly verify that `applyAuthenticatedUser`, `checkAuthSession`, `handlePortalLogin`, and `streamlit:render` remain completely intact, syntactically correct, and free of undefined references before pushing or publishing builds.
+
+## 🚫 Strict Prohibition on Live ERPNext Password Reset Dispatches
+1. **Never Dispatch Password Resets to Live User Credentials**:
+   * Automated agents and scripts must **NEVER** programmatically trigger, dispatch, or test password reset API calls (`frappe.core.doctype.user.user.reset_password` or similar endpoints) targeting real employee, user, or administrative credentials on live ERPNext instances.
+   * Under no circumstances may automated test scripts, background routines, or scratch tools send password reset emails to active team members or administrators.
+2. **Strict Test Isolation & Mocking**:
+   * Any validation of password reset functionality must strictly use simulated/mock responses or safe sandbox dummy handles (e.g., `test-mock@example.invalid`).
+   * No scratch scripts initiating credential modification or live reset dispatches may be retained or committed to the repository.
+
