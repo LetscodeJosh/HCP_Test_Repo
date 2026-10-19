@@ -646,6 +646,8 @@ class ApiService extends ChangeNotifier {
     final headers = {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      'X-PIMS-Client-Platform': 'Flutter-Mobile',
+      'X-PIMS-Timestamp': DateTime.now().millisecondsSinceEpoch.toString(),
     };
     if (_sessionCookie != null) {
       headers['Cookie'] = _sessionCookie!;

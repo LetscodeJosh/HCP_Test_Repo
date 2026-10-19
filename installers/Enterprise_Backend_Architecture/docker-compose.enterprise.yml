@@ -1,0 +1,226 @@
+version: '3.8'
+
+# ==============================================================================
+# PIMS HCP PROFILING APP - ENTERPRISE HIGH-AVAILABILITY CLUSTER
+# Complete Multi-Tier Architecture: Load Balancer, CyberSec Gateway, Caching & DB
+# ==============================================================================
+
+networks:
+  hcp_frontend_net:
+    driver: bridge
+  hcp_backend_net:
+    driver: bridge
+  hcp_db_net:
+    internal: true  # Completely isolated database network (Zero External Exposure)
+
+volumes:
+  mariadb_primary_data:
+  mariadb_replica1_data:
+  mariadb_replica2_data:
+  redis_cache_data:
+  frappe_shared_sites:
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. LOAD BALANCER & REVERSE PROXY TIER (NGINX L7)
+  # ----------------------------------------------------------------------------
+  nginx_load_balancer:
+    image: nginx:1.25-alpine
+    container_name: pims_nginx_lb
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx_load_balancer.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - hcp_frontend_net
+      - hcp_backend_net
+    depends_on:
+      - security_gateway
+      - frappe_app_1
+      - frappe_app_2
+      - frappe_app_3
+
+  # ----------------------------------------------------------------------------
+  # 2. 3.8 FLASH CYBER-GRADE SECURITY GATEWAY TIER
+  # ----------------------------------------------------------------------------
+  security_gateway:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim
+        WORKDIR /app
+        COPY cyber_security_gateway.py .
+        CMD ["python", "cyber_security_gateway.py"]
+    container_name: pims_security_gateway
+    restart: always
+    environment:
+      - HMAC_SECRET_KEY=PIMS_ENTERPRISE_3.8_FLASH_CYBER_GRADE_SHARED_SECRET_2026
+      - BACKEND_APP_CLUSTER=http://frappe_app_cluster:8000
+    networks:
+      - hcp_backend_net
+    depends_on:
+      - frappe_app_1
+      - frappe_app_2
+      - frappe_app_3
+
+  # ----------------------------------------------------------------------------
+  # 3. HORIZONTALLY SCALED FRAPPE/ERPNEXT APPLICATION WORKERS
+  # ----------------------------------------------------------------------------
+  frappe_app_1:
+    image: frappe/erpnext:v15.0.0
+    container_name: pims_frappe_app_1
+    restart: always
+    environment:
+      - DB_HOST=proxysql
+      - DB_PORT=3306
+      - REDIS_CACHE=redis://redis_cluster:6379/0
+      - REDIS_QUEUE=redis://redis_cluster:6379/1
+    volumes:
+      - frappe_shared_sites:/home/frappe/frappe-bench/sites
+      - ./redis_cache_engine.py:/home/frappe/frappe-bench/apps/pms/pms/redis_cache_engine.py:ro
+    networks:
+      - hcp_backend_net
+      - hcp_db_net
+    depends_on:
+      - redis_cluster
+      - proxysql
+
+  frappe_app_2:
+    image: frappe/erpnext:v15.0.0
+    container_name: pims_frappe_app_2
+    restart: always
+    environment:
+      - DB_HOST=proxysql
+      - DB_PORT=3306
+      - REDIS_CACHE=redis://redis_cluster:6379/0
+      - REDIS_QUEUE=redis://redis_cluster:6379/1
+    volumes:
+      - frappe_shared_sites:/home/frappe/frappe-bench/sites
+      - ./redis_cache_engine.py:/home/frappe/frappe-bench/apps/pms/pms/redis_cache_engine.py:ro
+    networks:
+      - hcp_backend_net
+      - hcp_db_net
+    depends_on:
+      - redis_cluster
+      - proxysql
+
+  frappe_app_3:
+    image: frappe/erpnext:v15.0.0
+    container_name: pims_frappe_app_3
+    restart: always
+    environment:
+      - DB_HOST=proxysql
+      - DB_PORT=3306
+      - REDIS_CACHE=redis://redis_cluster:6379/0
+      - REDIS_QUEUE=redis://redis_cluster:6379/1
+    volumes:
+      - frappe_shared_sites:/home/frappe/frappe-bench/sites
+      - ./redis_cache_engine.py:/home/frappe/frappe-bench/apps/pms/pms/redis_cache_engine.py:ro
+    networks:
+      - hcp_backend_net
+      - hcp_db_net
+    depends_on:
+      - redis_cluster
+      - proxysql
+
+  # ----------------------------------------------------------------------------
+  # 4. DISTRIBUTED IN-MEMORY REDIS CACHE (MITIGATES READ BOTTLENECK)
+  # ----------------------------------------------------------------------------
+  redis_cluster:
+    image: redis:7.2-alpine
+    container_name: pims_redis_cache
+    restart: always
+    command: >
+      redis-server
+      --maxmemory 4gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --tcp-keepalive 60
+    volumes:
+      - redis_cache_data:/data
+    networks:
+      - hcp_backend_net
+
+  # ----------------------------------------------------------------------------
+  # 5. PROXYSQL READ/WRITE SPLITTER & CONNECTION POOLER
+  # ----------------------------------------------------------------------------
+  proxysql:
+    image: proxysql/proxysql:2.5.5
+    container_name: pims_proxysql
+    restart: always
+    volumes:
+      - ./proxysql_read_write_split.cnf:/etc/proxysql.cnf:ro
+    networks:
+      - hcp_backend_net
+      - hcp_db_net
+    depends_on:
+      - mariadb_primary
+      - mariadb_replica_1
+      - mariadb_replica_2
+
+  # ----------------------------------------------------------------------------
+  # 6. DATABASE TIER (MARIADB PRIMARY MASTER & READ REPLICAS)
+  # ----------------------------------------------------------------------------
+  mariadb_primary:
+    image: mariadb:10.11
+    container_name: pims_mariadb_primary
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=Root_Secure_Password_2026
+      - MYSQL_DATABASE=_pms_erpn_db
+      - MYSQL_USER=frappe_user
+      - MYSQL_PASSWORD=Frappe_DB_Cluster_Pass_2026
+    command: >
+      mysqld
+      --server-id=1
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --max-connections=1000
+      --innodb-buffer-pool-size=8G
+      --innodb-log-file-size=1G
+    volumes:
+      - mariadb_primary_data:/var/lib/mysql
+    networks:
+      - hcp_db_net
+
+  mariadb_replica_1:
+    image: mariadb:10.11
+    container_name: pims_mariadb_replica_1
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=Root_Secure_Password_2026
+    command: >
+      mysqld
+      --server-id=2
+      --read-only=1
+      --max-connections=1000
+      --innodb-buffer-pool-size=8G
+    volumes:
+      - mariadb_replica1_data:/var/lib/mysql
+    networks:
+      - hcp_db_net
+    depends_on:
+      - mariadb_primary
+
+  mariadb_replica_2:
+    image: mariadb:10.11
+    container_name: pims_mariadb_replica_2
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=Root_Secure_Password_2026
+    command: >
+      mysqld
+      --server-id=3
+      --read-only=1
+      --max-connections=1000
+      --innodb-buffer-pool-size=8G
+    volumes:
+      - mariadb_replica2_data:/var/lib/mysql
+    networks:
+      - hcp_db_net
+    depends_on:
+      - mariadb_primary
