@@ -5,13 +5,19 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [v.0.7.3] - 2026-10-19
+## [v.0.7.0] - 2026-10-19
+
+### 🔄 Live ERPNext HCP DocType Synchronization & Cache Resilience
+- **Authoritative Network Synchronization**:
+  - Resolved an issue in `fetchDoctors()`, `fetchHcpAccounts()`, and `fetchSubmissions()` where empty dataset responses (`{"data": []}`) were conflated with network failures due to `if (dataList.isNotEmpty)`.
+  - Every network tier now treats an `HTTP 200 OK` response from ERPNext as authoritative, immediately updating in-memory cache and overwriting local disk cache (`doctors_cache.json`, `hcp_accounts_cache.json`, `submissions_cache.json`) with the live record set.
+  - Offline cache fallback is strictly gated to execute only when live network requests genuinely fail (timeout, DNS failure, 5xx server errors, or true offline mode).
 
 ### 🏥 MedRep Institution Certification & ERPNext DocType XLSX Export Reflection
 - **Conditional Visibility for Certification Checkbox**:
   - The certification checkbox (*"This certifies that this institution which is not in the directory is accurate and active for coverage"*) now **only displays below the search field** when the encoded institution name is verified to be **strictly unique** with **zero duplicates or similarities** in the directory (`_detectedMatches.isEmpty`).
-  - If matching suggestions, similar names, or duplicates are detected, or if the user hasn't finished typing (or selected an existing institution), the certification checkbox remains hidden.
-  - Added an instant search loading indicator in the search bar and automatic debounce state protection (`_isSearching`) to prevent any UI flashing.
+  - If matching suggestions, similar names, or duplicates are detected, or while the representative is actively typing, the certification checkbox remains completely hidden to prevent premature or duplicate submissions.
+  - Added an instant search loading indicator in the search bar and automatic debounce state protection (`_isSearching`) to eliminate UI flashing.
 - **DocType Note Recording & Seamless ERPNext XLSX Export**:
   - Recorded MedRep certification note directly on the ERPNext DocType (`certification_note`, `is_certified: 1`, and `remarks`):
     `"Certified by MedRep: Institution is accurate and active for coverage"`.
@@ -19,140 +25,67 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   - Updated `approvalStatusNote` and `LocationResolver.getInstitutionApprovalStatusNote`:
     Unapproved certified facilities dynamically display:
     `"this institution is not yet approved (Certified accurate and active for coverage)"`.
+    Approved facilities transition to:
+    `"this institution is now approved"`.
   - When administrators export `.xlsx` files from ERPNext Desk for `Institution`, `HCP Account` (`workplace_approval_note`), or `HCP Profile Submission`, this check note is clearly visible in the export.
-- **Test Suite**:
-  - Added test case in `test/inst_profiling_test.dart` verifying certification visibility rules, JSON serialization/deserialization, and status notes across lifecycle stages (72/72 tests passing).
 
----
+### 🔒 Enterprise Form Security, Dynamic Multi-Program Consent & Progression Guardrails
+- **Doctor Search Redundancy Elimination**:
+  - Removed the redundant "+ Add as New Doctor" button from inside the doctor search modal (`_showHcpSelectorModal()`).
+  - Search HCP strictly queries and selects existing doctors from the universal HCP masterlist; new doctor registrations are exclusively initiated through the dedicated "+ Add New Doctor" card in Step 2.
+- **Dynamic Multi-Program Corporate Consent System**:
+  - Step 1 consent agreement clause and privacy notices dynamically adapt based on the active logged-in program (e.g. `PMII Abbott Diabetic Care (ADC)`, `PMII Bayer`, `PMI Fonterra`, `PMII Galderma`, etc.), replacing static generic references with authentic corporate identity clauses.
+- **Guarded & Interactive Cancel Doctor Action**:
+  - Upgraded the inline text link into a prominent, outlined interactive button with icon (`Icons.close_rounded`) and confirmation alert dialog (`_confirmResetDoctor`).
+  - Button visibility is cleanly guarded: it only appears when all mandatory fields of Step 2 (First Name, Last Name, Specialization, Workplace, Workplace Type, Practice) are completely fulfilled, avoiding screen clutter.
+- **Step Progression & Tab Security Guardrails**:
+  - Sequential unlocking enforced: Step 2 requires Step 1 completion (consent + signature/photo); Step 3 and Changes tabs require Step 2 completion.
+  - Tapping locked tabs displays feedback SnackBars detailing the missing prerequisite.
+- **Human-Centric Changes Summary Card**:
+  - Eliminated the developer-style raw JSON monospace terminal card.
+  - Implemented an executive, structured summary card grouping Basic Information changes, Specializations, Workplaces, Contact Channels, Survey Detailing, and Submission Audit Metadata.
+- **Context-Specific Action Labels & Styling**:
+  - Renamed generic "Add Row" buttons to descriptive action labels: `+ Add Specialization`, `+ Add Institution`, and `+ Add Contact/Email`.
+  - Mandatory disclaimer `* indicates information that are mandatory` styled in crisp red (`#DC2626`).
+  - First, Middle, and Last Name labels use `Text.rich` displaying neutral slate text with a red asterisk `*` without red input borders.
+  - Removed `(Optional)` tag and helper text from Birth Date.
 
-## [v.0.7.2] - 2026-10-18
+### 🧠 Gemini 4 Argon-Grade Smart HCP Recognizer & Progressive Phrase Shrinking
+- **Institution / Workplace Progressive Phrase Shrinking**:
+  - Dynamic multi-token shrinking algorithm in `LocationResolver.fuzzySearchInstitutions` and `searchDirectoryWithDuplicateDetection` starts with broad potential matches and dynamically narrows to strictly co-related facilities and direct branches as the user completes the full phrase.
+  - Prunes unrelated facilities sharing only generic words (e.g. "hospital", "clinic", "center"), preventing false-positive Levenshtein drift.
+  - Added live Smart Detector Phrase Bar with dynamic shrinking match count pill.
+- **Step 2 Real-Time Doctor Name Recognizer**:
+  - Real-time recognizer across First, Middle, and Last Name fields scanning universal `HCP` doctype masterlist (`_allDoctors`) with 180ms debounce.
+  - Interactive field recognizer badge (`Icons.auto_awesome_rounded`) displays live match count pills.
+  - Interactive "Person available in HCP" window pop-up below name fields with 1-click auto-fill, auto-populating full names, photo avatars, birth dates, specialty affiliations, workplaces, and contact channels.
+  - Selecting an existing doctor merges automatically without managerial approval; continuing as new preserves full approval workflow.
 
-### 🗺️ Territory Reconfiguration Web Portal v.0.1.0 & Enterprise Resilience
+### 🗺️ Territory Reconfiguration Web Portal & Enterprise Resilience
 - **Dedicated Web App Versioning (`v.0.1.0`)**:
-  - Separated the Territory Reconfiguration Web Portal version tracking from the mobile HCP app (`v.0.7.2`), branding the web portal as **`v.0.1.0`**.
-- **Realignment Tab Clutter Elimination**:
-  - Removed "Active District Groups & Realignment Distribution" card grid from Tab 2, retaining strictly the **Archived & Inactive Territories Directory Vault** for zero data loss.
-- **Top-Tier Summary Report & Audit Trail UI/UX**:
-  - Unified KPI Summary Card number colors across all 5 metrics (`Total Records`, `Unchanged`, `Changed/Renamed`, `Rep Transfers`, `Archived Nodes`) to match the primary Total Records brand blue (`#0066FF`).
-  - Upgraded Master Audit Trail to a dedicated scrollable viewport (`max-height: 520px; overflow-y: auto;`) with sticky table headers (`position: sticky; top: 0; background: #0B192C;`) and sleek modern scrollbars.
-- **Strict No-Deletion Policy & Inactive/Vacant Territory Flow**:
-  - Completely removed the `Delete` action from the Table Grid View action popover (`gridRowActionsMenu`).
-  - Added **`Tag Inactive / Vacant`** action with confirmation modal (`#inactiveModalOverlay`): decommissions resigned MedReps, preserves territory codes in ERPNext as Vacant for future program cycles, archives records to the Archive Directory, and ensures zero doctor data loss.
-- **First-Time User Walkthrough & Interactive Guidance Engine**:
-  - Added automatic detection for first-time login sessions to display the interactive **Territory Reconfiguration Portal Guide** walkthrough modal (`#userGuideModalOverlay`).
-  - Enabled button guidance subtext under all action menu items (e.g. *Edit territory properties & manager*, *Create child territory under this node*, *Rename territory name in tree & ERPNext*, *Set territory inactive & vacant in ERPNext*, *Reassign rep & transfer doctors*, *View change history & logs*).
-  - Added dedicated **`User Guide (ℹ)`** icon in top header navigation allowing returning users to re-open the guide, review instructions, and toggle button hints at any time.
-
+  - Separated the Territory Reconfiguration Web Portal version tracking from the mobile HCP app, branding the web portal as **`v.0.1.0`**.
 - **Table Grid View Refinements**:
-  - Removed territory code prefix (`AD0101 - `) from the Assigned MedRep column; displays clean representative name with formatted User ID and Record ID below.
-  - Replaced `UNCHANGED`/`CHANGED` in the Status column with operational status badges: **`Active`** (emerald), **`Inactive`** (slate), or **`Vacant`** (amber).
-  - Added new **`Area / District`** column displaying coverage tag (`GMA/NLZ`, `GMA/SLZ`, etc.) and parent district with Column Visibility toggle (`colToggle_area`) and Filter By support.
-- **Zero-Deletion Standard & Active / Inactive Operational Toggles in Territory Tree**:
-  - Completely removed `Delete` option from the Territory Tree view and web app (no data deletion permitted).
-  - Streamlined tree node action buttons to strictly: **`(Edit, Transfer Doctor, Rename, Active/Inactive)`**.
-  - Tapping **`Active`** / **`Inactive`** operational toggle smoothly changes territory operational status without deleting any data.
+  - Cleaned up Assigned MedRep column by removing redundant territory code prefixes (`AD0101 - `).
+  - Replaced development state labels with operational status badges: **`Active`** (emerald), **`Inactive`** (slate), or **`Vacant`** (amber).
+  - Added **`Area / District`** column displaying coverage tag (`GMA/NLZ`, `GMA/SLZ`, etc.) and parent district with Column Visibility toggle (`colToggle_area`) and Filter By support.
+- **Zero-Deletion Standard & Active / Inactive Operational Toggles**:
+  - Completely pruned `Delete` action across Territory Tree and web app (strict zero-deletion policy).
+  - Streamlined tree node action buttons strictly to: **`(Edit, Transfer Doctor, Rename, Active/Inactive)`**.
+  - Added **`Tag Inactive / Vacant`** action with confirmation modal: decommissions resigned reps, preserves territory codes in ERPNext as Vacant for future cycles, and ensures zero doctor data loss.
 - **Tree Node Alignment & Area Tag Precision**:
-  - Standardized territory leaf node display alignment: `${territoryCode} (${areaDistrictTag}) - ${medRepName}` (e.g. `AD0106 (GMA/NLZ) - JONEL APSAY`).
-  - Added extensible `TERRITORY_AREA_MAPPINGS` dictionary and automatic district tag resolution (`resolveTerritoryArea`) ready for full area code file integration.
+  - Standardized territory leaf node display: `${territoryCode} (${areaDistrictTag}) - ${medRepName}` (e.g. `AD0106 (GMA/NLZ) - JONEL APSAY`).
+  - Added extensible `TERRITORY_AREA_MAPPINGS` dictionary and automatic district tag resolution (`resolveTerritoryArea`).
 - **Program Dropdown Filtering in Territory Tree**:
-  - Filtered Territory Tree root hierarchy by active selected program: selecting `Abbott Diabetes Care` exclusively displays Abbott branches, hiding other programs (`Bayer`, `RiteMed`, `Vivaro`) from view.
-- **Header Controls Streamlining**:
-  - Removed redundant `[Refresh Live Sync]` button; Territory Tree operates as the live, authoritative interactive reconfiguration canvas.
-- **Doctor Count Modal Humanization & Area Tagging**:
-  - Replaced verbose/inappropriate explanations with clean, professional statements for zero doctors and search queries.
-  - Included the MedRep's **Area Code / District** directly in the modal header and subheader.
-- **Doctor Transfer Modal Upgrades**:
-  - Added a 3-way status button toggle: **`Active (Working)`**, **`Inactive (Resigned)`**, and **`Vacant`**.
-  - Fixed Move Selected buttons to ensure all 3 transfer action buttons are permanently active, vibrant, and never grayed out.
-  - Replaced single-line audit input with a spacious multiline `<textarea>` for free typing of comprehensive transfer notes.
+  - Territory Tree root hierarchy strictly isolates branches by active selected program (`Abbott Diabetes Care`, `Bayer`, `RiteMed`, `Vivaro`).
+- **Doctor Count Modal & Transfer Modal Upgrades**:
+  - Clean, professional messaging for zero doctors and search queries; displays MedRep area code and district in header.
+  - 3-way status button toggle: **`Active (Working)`**, **`Inactive (Resigned)`**, and **`Vacant`**.
+  - Vibrant blue transfer action buttons with spacious multiline `<textarea>` for comprehensive transfer notes.
 - **Authentication Security Intrusion Mitigation & Network Resilience**:
   - Implemented `SecurityIntrusionGuard` (client and server-side) with regex-based SQL injection, script injection, and command injection pattern detection.
   - Automated intrusion blocking, 15-minute progressive freeze, and 5-attempt rate-limiting safeguards.
-- **Territory Tree Light Theme Alignment**:
-  - Matched territory tree container, rows, node labels, and action toolbars to the executive light color theme of the Table Grid View (clean white `#FFFFFF` surface, `#E2E8F0` borders, and subtle elevation).
-  - Styled leaf territory codes in vibrant cyan-blue (`#0284C7`, font-weight: 700) matching the Active Code table column.
-  - Styled assigned representative full names in crisp, high-contrast dark slate (`#0F172A`, font-weight: 600) for effortless legibility.
-  - Aligned Area coverage badges with soft cyan-blue (`#F0F9FF`, border: `#BAE6FD`, text: `#0369A1`).
-  - Updated folder icons, leaf bullets, row hover (`#F8FAFC`), and row selection (`#EFF6FF` with blue accent).
-- **Auto-Login Security Vulnerability Elimination**:
-  - Purged automatic login on Streamlit server updates, git commits, and tab restarts by removing `sfe_session` URL query parameter sharing and scrubbing persistent `localStorage` user caches.
   - Enforced an explicit, secure Login screen upon all redeployments and fresh browser sessions to eliminate unauthorized account exposure.
-
-
----
-
-## [v.0.7.1] - 2026-10-18
-
-### 🔒 Enterprise Form Security, Dynamic Multi-Program Consent & Humanized Executive Summaries
-- **Doctor Search Redundancy Elimination**:
-  - Removed the "+ Add as New Doctor" button and link from inside the doctor search modal (`_showHcpSelectorModal()`).
-  - Search HCP now strictly focuses on masterlist lookups for existing doctors, with new doctor registrations exclusively initiated from the dedicated "+ Add New Doctor" card in Step 2.
-- **Dynamic Multi-Program Consent Formulation**:
-  - Step 1 consent agreement dynamically adapts based on the logged-in program (e.g. `PMII Abbott Diabetic Care (ADC)`, `PMII Bayer`, `PMI Fonterra`, `PMII Galderma`, etc.).
-  - Replaces all static `PROFESSIONAL INSIGHTS MARKETING SERVICES (PIMS)` references with program-tailored corporate entity names (`$fullName` and `$shortName`).
-  - Privacy policy URLs and disclaimer notes dynamically reflect the respective corporate privacy statement.
-- **Enhanced Cancel Doctor Action & Visibility Guarding**:
-  - Upgraded the small text link into an intuitive, high-visibility outlined interactive button with icon (`Icons.close_rounded`) and styled container.
-  - Button visibility is cleanly guarded: it only appears when all mandatory fields of Step 2 (First Name, Last Name, Specialization, Workplace, Workplace Type, Practice) are completely fulfilled, avoiding screen clutter and cognitive overload.
-  - Integrated confirmation dialog (`_confirmResetDoctor`) to prevent accidental form resets.
-- **Step Progression & Tab Security Guardrails**:
-  - Step 2 tab is locked until Step 1 is fully accomplished (doctor consent checkbox confirmed + doctor signature or photo captured).
-  - Step 3 and Changes tabs are locked until Step 2 is fully completed.
-  - Inactive tabs display lock styling with clear feedback SnackBars indicating the missing prerequisite step.
-- **Human-Readable Executive Summary of Changes (Elimination of Raw JSON)**:
-  - Replaced the developer monospace raw JSON preview card with a human-readable, executive change summary card.
-  - Summarizes Doctor Profile modifications, Added/Removed Specializations, Workplaces, Contact details, Survey Detailing responses, and Submission Audit details in an intuitive, polished format.
-- **Task-Specific "Add Row" Button Labels**:
-  - Renamed generic "Add Row" buttons across cards and dialogs to descriptive, task-oriented action labels: `+ Add Specialization`, `+ Add Institution`, and `+ Add Contact/Email`.
-- **Mandatory Field Styling & Birth Date Cleanup**:
-  - Mandatory disclaimer `* indicates information that are mandatory` styled in prominent crimson red (`#DC2626`).
-  - First, Middle, and Last Name labels use `Text.rich` displaying neutral slate text with a red asterisk `*` without red input borders.
-  - Cleaned up Birth Date input by removing the `(Optional)` tag and helper text.
-
----
-
-## [v.0.7.0] - 2026-10-13
-
-### 🏥 Gemini 4 Argon Progressive Phrase Shrinking & Doctor Field Locking
-- **Institution / Workplace Progressive Phrase Shrinking**:
-  - Engineered an intelligent progressive shrinking algorithm (`LocationResolver.fuzzySearchInstitutions` and `LocationResolver.searchDirectoryWithDuplicateDetection`):
-  - When typing into the workplace/institution field, suggestions start with broad potential matches (maximum count) and dynamically shrink down to strictly co-related facilities and direct branches as the user completes the full phrase/context.
-  - Distinctive phrase matching prunes unrelated facilities that only share generic words (like "hospital", "clinic", or "center"), completely eliminating irrelevant and cluttered dropdown results.
-  - Multi-distinctive token queries require >= 70-100% token overlap with aggressive relative confidence pruning (`score < topScore * 0.75`), focusing the dropdown strictly on the targeted facility and its branches.
-  - Added a live Smart Detector Phrase Pill (`Smart Match: "<Institution Name>"`) with a shrinking facility counter pill right below the search bar in the workplace picker dialog.
-- **Existing Doctor Record Field Locking (Clean Invariance)**:
-  - When an existing doctor from the masterlist is selected (via suggestion pop-up, auto-fill, or search), the **First Name**, **Middle Name**, **Last Name**, and **Birth Date** fields automatically switch to `readOnly: true`.
-  - In adherence to strict enterprise UI standards, fields are locked seamlessly under the hood without distracting warning notices, lock banners, or lock icons.
-  - Field recognizer badges and suggestion pop-ups are cleanly disabled when an existing doctor is active.
-  - If the MedRep switches back to "+ Add New Doctor" or clears the selection, all fields immediately regain editable status.
-
-### 🧠 Gemini 4 Argon-Grade Smart HCP Recognizer & Doctor Masterlist Suggestion Engine
-- **Step 2 Real-Time Doctor Name Recognizer**:
-  - Implemented an intelligent suggestion engine and detector across `First Name`, `Middle Name`, and `Last Name` fields in Step 2 (Doctor Information).
-  - Actively scans the universal `HCP` doctype masterlist (`_allDoctors`) in the background with an optimized 180ms debounce.
-  - Interactive field recognizer badge (`Icons.auto_awesome_rounded`) displays live match count pills (`1`, `2`, `3+`) directly inside text field suffix containers.
-- **"Person Available in HCP" Pop-Up Window**:
-  - Automatically renders an interactive, dismissible pop-up window directly below the name fields when existing doctor matches are detected.
-  - Prominent header banner: **`"Person available in HCP"`** with total match count pill and close/dismiss button.
-  - Informative footer note: *"Selecting an existing doctor auto-populates all records and merges automatically upon submission."* with a **`Continue as New`** option for registering brand-new doctors.
-- **10-Tier Fuzzy Match Engine (`HcpDoctorMatchEngine`)**:
-  - Medical title and honorific normalization (`Dr.`, `MD`, `FPCP`, `FPCS`, `FPOG`, `RN`, `RPh`, punctuation, apostrophes, and spacing).
-  - Stopword and particle filtering (`de`, `del`, `dela`, `san`, `los`, `las`, `van`, `von`, `jr`, `sr`).
-  - Tiered confidence scoring:
-    - Tier 1: Exact Doctor Full Name Match (100%)
-    - Tier 2: Dual First & Last Name Match (98%)
-    - Tier 3: First & Surname Correlation Prefix Match (94%)
-    - Tier 4: Full Name Prefix Match (92%)
-    - Tier 5: Surname Match (88%–94%)
-    - Tier 6: First Name Match (84%–92%)
-    - Tier 7: Surname Prefix Match (82%)
-    - Tier 8: Multi-Token Overlap & Permutation (80%–92%)
-    - Tier 9: Damerau-Levenshtein Typo Tolerance (76%–78%)
-    - Tier 10: Universal HCP Masterlist ID / Code Match (95%)
-- **1-Click Auto-Population & Seamless Workflow Preservation**:
-  - Tapping **`Auto-fill`** or any matched doctor card instantly executes `_prepopulateDoctorData`, auto-populating full names, photo avatars, birth dates, specialty affiliations (with program-specific preferences), workplaces, and contact channels.
-  - Selecting a suggestion in `New Doctor` mode automatically converts the submission to an `Existing HCP`, guaranteeing automatic merge on submission (`Submit for Processing` $\rightarrow$ `Processed`) without managerial approval bottlenecks.
-  - Users choosing to ignore or dismiss the suggestion can continue typing and submit as a `New HCP` (`Submit for Approval` $\rightarrow$ `Pending Approval`), preserving 100% of the verified approval workflow invariants.
+  - Extended network timeout to 15-25s with 2-stage gentle retry for field users on slow/unstable mobile networks.
 
 ---
 

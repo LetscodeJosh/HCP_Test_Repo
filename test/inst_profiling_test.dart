@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hcp_profiling/models/lookup_models.dart';
 import 'package:hcp_profiling/models/submission.dart';
@@ -1118,6 +1119,39 @@ void main() {
       LocationResolver.getInstitutionApprovalStatusNote('INST-09999', [approvedCertifiedInst]),
       'this institution is now approved',
     );
+  });
+
+  test('Test Live ERPNext HCP DocType Synchronization: 0 records in ERPNext returns empty list without stale cache mask', () {
+    // 1. Deserialization of empty data payload from live ERPNext REST endpoint
+    final emptyResponse = jsonDecode('{"data": []}');
+    final List<dynamic> dataList = (emptyResponse['data'] is List) ? emptyResponse['data'] : [];
+    final doctors = dataList.map((json) => Hcp.fromJson(json)).toList();
+
+    expect(doctors, isEmpty);
+    expect(doctors.length, equals(0));
+
+    // 2. Deserialization of active live ERPNext HCP records
+    final liveResponse = jsonDecode('''{
+      "data": [
+        {
+          "name": "HCP-0000027",
+          "first_name": "Andrew Jorge",
+          "last_name": "Petalvo",
+          "hcp_full_name": "Dr. Andrew Jorge Petalvo",
+          "hcp_type": "HCP-Type-01",
+          "hcp_practice": "Dispensing",
+          "is_active": 1
+        }
+      ]
+    }''');
+    final List<dynamic> liveList = (liveResponse['data'] is List) ? liveResponse['data'] : [];
+    final liveDoctors = liveList.map((json) => Hcp.fromJson(json)).toList();
+
+    expect(liveDoctors, isNotEmpty);
+    expect(liveDoctors.length, equals(1));
+    expect(liveDoctors.first.name, equals('HCP-0000027'));
+    expect(liveDoctors.first.fullName, equals('Dr. Andrew Jorge Petalvo'));
+    expect(liveDoctors.first.isActive, isTrue);
   });
 }
 

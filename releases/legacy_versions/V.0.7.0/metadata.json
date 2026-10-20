@@ -1,23 +1,22 @@
 {
   "version": "v.0.7.0",
-  "build_number": 45,
-  "release_date": "October 14, 2026",
+  "build_number": 48,
+  "release_date": "October 19, 2026",
   "apk_filename": "HCP_Profiling_V.0.7.0.apk",
-  "apk_size_bytes": 61787930,
-  "sha256": "21D75FE793A533B3E80D39D00AB9F02B1F177FA7A6631DF06215319ABA8CDD5F",
+  "apk_size_bytes": 61829704,
+  "size_bytes": 61829704,
+  "size_mb": "58.97 MB",
+  "sha256": "c62692548097e28c0afe2515579d7b3b780ba4448517b4ff4897a214403619b0",
   "features": [
-    "Step 2 Unlocked Existing Doctor Editing: MedReps can freely update First Name, Middle Name, Last Name, and Birth Date for existing doctors; automatic change tracking commits modifications upon submission",
-    "Gemini 4 Argon Intelligent Doctor Recognizer & Suggestion Engine: Normalizes medical titles (Dr., Dra., MD, PTRP, DPSN, FPOA, RND), Philippine particles (Ma. -> Maria, dela, delos), middle initials, and applies progressive candidate shrinking for multi-token doctor names",
-    "Workplace Institution Search Progressive Shrinking: Dynamic multi-token shrinking strictly limits matches to near-related, same-phrase facilities and branch facilities, pruning unrelated facilities and preventing false-positive Levenshtein drift",
-    "Step 2 Data Protection: Removed 'X' deletion buttons from Birth Date, Specialties, Workplaces, and Contacts cards to prevent accidental data deletion once fed to the system app",
-    "Propose New Institution Progressive Phrase Shrinking & Directory Duplicate Detection: matches behave as Gemini 4 Argon, filtering out non-related facilities, shrinking dynamically from maximum to minimal near-related branches, and cleanly reducing to zero matches for genuine new facilities so location fields unlock and proposal submission proceeds",
-    "Smart Detector Phrase Bar displaying live target facility phrase and shrinking match count pill",
-    "Step 2 Real-Time Doctor Name Recognizer across First Name, Middle Name, and Last Name fields",
-    "Smart HCP Masterlist Suggestion Engine querying universal HCP doctype (_allDoctors)",
-    "Interactive 'Person available in HCP' window pop-up below name fields with live match count badges and Active Profile status",
-    "1-Click Auto-Fill populating full name, photo avatar, birth date, preferred specialties, workplaces, and contacts",
-    "Seamless workflow preservation: Selecting existing doctor merges automatically without managerial approval; users can continue as new with manager approval intact"
-  ],
-  "size_bytes": 61787930,
-  "size_mb": "58.93 MB"
+    "Live ERPNext HCP DocType Synchronization: eliminates stale local cache masking when DocType has 0 records; treats HTTP 200 OK as authoritative and immediately refreshes cache",
+    "Conditional MedRep Institution Accuracy Certification: checkbox only displays when facility has zero duplicates or similarities (_detectedMatches.isEmpty)",
+    "ERPNext DocType Certification Note & XLSX Export: records certification note and Frappe Comment audit trail visible in exported Excel files",
+    "Enterprise Form Security & Tab Progression: Step 2 gated until Step 1 consent+signature complete; Step 3 and Changes gated until Step 2 complete",
+    "Guarded Interactive Cancel Doctor Action: prominent outlined button appearing strictly when Step 2 mandatory fields are fulfilled (_isStep2Complete)",
+    "Dynamic Multi-Program Corporate Consent: resolves authentic corporate legal entity based on active program (ADC, Bayer, Fonterra, Galderma, etc.)",
+    "Human-Centric Changes Summary Card: replaced raw JSON monospace terminal block with structured executive summary card",
+    "Gemini 4 Argon Progressive Phrase Shrinking: intelligent candidate narrowing for workplace search and Propose New Institution duplicate detection",
+    "Step 2 Real-Time Doctor Name Recognizer & Suggestion Pop-up: background scan across allDoctors with 180ms debounce and 1-click auto-fill",
+    "Territory Reconfiguration Web Portal v.0.1.0: Area/District column, zero-deletion standard, Active/Inactive operational toggles, program isolation, and SecurityIntrusionGuard"
+  ]
 }

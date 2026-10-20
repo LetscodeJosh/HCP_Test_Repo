@@ -3423,16 +3423,14 @@ class ApiService extends ChangeNotifier {
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final List<dynamic> dataList = body['data'] ?? [];
-        if (dataList.isNotEmpty) {
-          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
-          _cachedDoctors = list;
-          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
-          return list;
-        }
+        final List<dynamic> dataList = (body['data'] is List) ? body['data'] : [];
+        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        _cachedDoctors = list;
+        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        return list;
       }
     } catch (e) {
-      print('Tier 1 fetch doctors error: $e');
+      AppLogger.w('ApiService', 'Tier 1 fetch doctors error: $e');
     }
 
     // Tier 2: Whitelisted client method with fields=["*"] strictly from HCP DocType
@@ -3443,16 +3441,16 @@ class ApiService extends ChangeNotifier {
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
         final body = jsonDecode(clientResp.body);
-        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
-        if (dataList.isNotEmpty) {
-          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
-          _cachedDoctors = list;
-          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
-          return list;
-        }
+        final List<dynamic> dataList = (body['message'] is List)
+            ? body['message']
+            : (body['data'] is List ? body['data'] : []);
+        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        _cachedDoctors = list;
+        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        return list;
       }
     } catch (e) {
-      print('Tier 2 client method fetch doctors error: $e');
+      AppLogger.w('ApiService', 'Tier 2 client method fetch doctors error: $e');
     }
 
     // Tier 3: Query HCP doctype with explicit public fields (permlevel 0 safe for MedRep)
@@ -3463,16 +3461,14 @@ class ApiService extends ChangeNotifier {
       final response = await http.get(urlPublic, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final List<dynamic> dataList = body['data'] ?? [];
-        if (dataList.isNotEmpty) {
-          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
-          _cachedDoctors = list;
-          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
-          return list;
-        }
+        final List<dynamic> dataList = (body['data'] is List) ? body['data'] : [];
+        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        _cachedDoctors = list;
+        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        return list;
       }
     } catch (e) {
-      print('Tier 3 fetch doctors error: $e');
+      AppLogger.w('ApiService', 'Tier 3 fetch doctors error: $e');
     }
 
     // Tier 4: Whitelisted client method with explicit fields strictly from HCP DocType
@@ -3483,19 +3479,19 @@ class ApiService extends ChangeNotifier {
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
         final body = jsonDecode(clientResp.body);
-        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
-        if (dataList.isNotEmpty) {
-          final list = dataList.map((json) => Hcp.fromJson(json)).toList();
-          _cachedDoctors = list;
-          await _writeToCache('doctors_cache.json', jsonEncode(dataList));
-          return list;
-        }
+        final List<dynamic> dataList = (body['message'] is List)
+            ? body['message']
+            : (body['data'] is List ? body['data'] : []);
+        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        _cachedDoctors = list;
+        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        return list;
       }
     } catch (e) {
-      print('Tier 4 fetch doctors error: $e');
+      AppLogger.w('ApiService', 'Tier 4 fetch doctors error: $e');
     }
 
-    // Tier 5: Cache fallback from previous successful HCP DocType fetches
+    // Tier 5: Cache fallback from previous successful HCP DocType fetches (ONLY WHEN NETWORK / ALL TIERS FAILED)
     final cache = await _readFromCache('doctors_cache.json');
     if (cache != null) {
       try {
@@ -4354,16 +4350,16 @@ class ApiService extends ChangeNotifier {
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
         final body = jsonDecode(clientResp.body);
-        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
-        if (dataList.isNotEmpty) {
-          final raw = dataList.map((json) => HcpAccount.fromJson(json)).toList();
-          final deduplicated = _deduplicateHcpAccounts(raw);
-          final enriched = _enrichAccountsWithMasterDoctors(deduplicated);
-          final processed = enableAutoRollover ? applyMonthlyAutoRollover(enriched, referenceDate: referenceDate) : enriched;
-          _cachedHcpAccounts = processed;
-          await _writeToCache('hcp_accounts_cache.json', jsonEncode(deduplicated.map((a) => a.toJson()).toList()));
-          return processed;
-        }
+        final List<dynamic> dataList = (body['message'] is List)
+            ? body['message']
+            : (body['data'] is List ? body['data'] : []);
+        final raw = dataList.map((json) => HcpAccount.fromJson(json)).toList();
+        final deduplicated = _deduplicateHcpAccounts(raw);
+        final enriched = _enrichAccountsWithMasterDoctors(deduplicated);
+        final processed = enableAutoRollover ? applyMonthlyAutoRollover(enriched, referenceDate: referenceDate) : enriched;
+        _cachedHcpAccounts = processed;
+        await _writeToCache('hcp_accounts_cache.json', jsonEncode(deduplicated.map((a) => a.toJson()).toList()));
+        return processed;
       }
     } catch (e) {
       print('Fetch HCP Accounts fallback error: $e');
@@ -4584,13 +4580,13 @@ class ApiService extends ChangeNotifier {
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
         final body = jsonDecode(clientResp.body);
-        final List<dynamic> dataList = body['message'] ?? body['data'] ?? [];
-        if (dataList.isNotEmpty) {
-          await _writeToCache('submissions_cache.json', jsonEncode(dataList));
-          final list = dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
-          _cachedSubmissions = list;
-          return list;
-        }
+        final List<dynamic> dataList = (body['message'] is List)
+            ? body['message']
+            : (body['data'] is List ? body['data'] : []);
+        await _writeToCache('submissions_cache.json', jsonEncode(dataList));
+        final list = dataList.map((json) => HcpProfileSubmission.fromJson(json)).toList();
+        _cachedSubmissions = list;
+        return list;
       }
     } catch (e) {
       print('Fetch submissions fallback error: $e');
