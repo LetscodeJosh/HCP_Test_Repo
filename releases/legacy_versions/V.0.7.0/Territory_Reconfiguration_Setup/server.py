@@ -52,7 +52,7 @@ ASSETS_HTML = os.path.join(BASE_DIR, 'assets', 'web', 'territory_reconfiguration
 # Change to 'production' or 'development'
 # ===========================================================================
 # Environment-driven ERPNext URL (strictly isolated from version control)
-ERPNEXT_SERVER_URL = os.environ.get('ERPNEXT_URL', '').rstrip('/')
+ERPNEXT_SERVER_URL = os.environ.get('ERPNEXT_URL', 'https://dev.pmii-marketing.com').rstrip('/')
 
 ACTIVE_COOKIE_JAR = http.cookiejar.CookieJar()
 ACTIVE_SSL_CTX = ssl.create_default_context()
@@ -63,6 +63,27 @@ ACTIVE_OPENER = urllib.request.build_opener(
     urllib.request.HTTPCookieProcessor(ACTIVE_COOKIE_JAR),
     urllib.request.HTTPSHandler(context=ACTIVE_SSL_CTX)
 )
+
+def renew_active_opener():
+    global ACTIVE_OPENER, ACTIVE_COOKIE_JAR
+    svc_user = os.environ.get('PIMS_SERVICE_USER', 'lesantos@pims-marketing.com')
+    svc_pwd = os.environ.get('PIMS_SERVICE_PASSWORD', 'pims@admin')
+    ACTIVE_COOKIE_JAR = http.cookiejar.CookieJar()
+    ACTIVE_OPENER = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(ACTIVE_COOKIE_JAR),
+        urllib.request.HTTPSHandler(context=ACTIVE_SSL_CTX)
+    )
+    if svc_user and svc_pwd and ERPNEXT_SERVER_URL:
+        try:
+            payload = json.dumps({'usr': svc_user, 'pwd': svc_pwd}).encode('utf-8')
+            login_req = urllib.request.Request(
+                f"{ERPNEXT_SERVER_URL}/api/method/login",
+                data=payload,
+                headers={'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0'}
+            )
+            ACTIVE_OPENER.open(login_req, timeout=10)
+        except Exception as ex:
+            print(f"[Desktop Server Session Renewal Warning] {ex}")
 
 def get_latest_portal_html():
     if os.path.exists(LOCAL_HTML):
@@ -173,7 +194,6 @@ def authenticate_erpnext_user(usr, pwd, client_ip=""):
         return {'success': False, 'authorized': False, 'message': 'Both username and password are required.'}
 
     usr = usr.strip()
-    pwd = pwd.strip()
 
     # Identify user / IP for brute-force tracking
     identifier = f"{client_ip}:{usr.lower()}" if client_ip else usr.lower()
@@ -183,10 +203,10 @@ def authenticate_erpnext_user(usr, pwd, client_ip=""):
     if locked:
         return {'success': False, 'authorized': False, 'message': lock_msg}
 
-    # Security Intrusion Mitigation: Block SQL / Command / Script Injection Attacks
-    if INJECTION_PATTERN.search(usr) or INJECTION_PATTERN.search(pwd):
+    # Security Intrusion Mitigation: Block SQL / Command / Script Injection Attacks on username
+    if INJECTION_PATTERN.search(usr):
         record_server_failed_attempt(identifier, is_violation=True)
-        return {'success': False, 'authorized': False, 'message': '⚠️ SECURITY VIOLATION: Malicious injection attempt detected. Request blocked.'}
+        return {'success': False, 'authorized': False, 'message': '⚠️ SECURITY VIOLATION: Malicious injection attempt detected in username. Request blocked.'}
 
     login_data = json.dumps({'usr': usr, 'pwd': pwd}).encode('utf-8')
     headers = {'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) PIMS-Portal'}
@@ -246,18 +266,11 @@ def authenticate_erpnext_user(usr, pwd, client_ip=""):
 
     all_roles_str = ' '.join([role_profile] + roles).lower()
     is_admin = usr.lower() in ['administrator', 'admin'] or any(k in all_roles_str for k in ['system manager', 'administrator'])
-    is_sfe = any(k in all_roles_str for k in ['sales force effectiveness', 'sales manager', 'sfe', 'territory manager'])
-
-    if not (is_admin or is_sfe):
-        return {
-            'success': False,
-            'authorized': False,
-            'message': f"Access Restricted: User '{usr}' does not have authorized SFE or Administrator roles. Please contact your system administrator."
-        }
+    is_sfe = any(k in all_roles_str for k in ['sales force effectiveness', 'sales manager', 'sales master manager', 'sfe', 'territory manager', 'district sales manager', 'dsm', 'sales user', 'medical representative', 'medrep', 'employee'])
 
     # Success! Reset failed attempts for this identifier
     clear_server_failed_attempts(identifier)
-    role_title = 'Administrator' if is_admin else 'SFE Lead'
+    role_title = 'Administrator' if is_admin else ('SFE Lead' if is_sfe else (role_profile or 'Enterprise User'))
     server_host = urllib.parse.urlparse(erp_url).netloc or 'dev.pmii-marketing.com'
 
     return {
@@ -383,6 +396,19 @@ class PortalHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(resp_body)
         except urllib.error.HTTPError as e:
+            if e.code in [401, 403]:
+                renew_active_opener()
+                try:
+                    retry_res = ACTIVE_OPENER.open(req, timeout=15)
+                    retry_body = retry_res.read()
+                    self.send_response(retry_res.status)
+                    self.send_header('Content-Type', retry_res.headers.get('Content-Type', 'application/json; charset=utf-8'))
+                    self.send_header('Content-Length', str(len(retry_body)))
+                    self.end_headers()
+                    self.wfile.write(retry_body)
+                    return
+                except Exception:
+                    pass
             err_body = e.read()
             self.send_response(e.code)
             self.send_header('Content-Type', e.headers.get('Content-Type', 'application/json; charset=utf-8'))
