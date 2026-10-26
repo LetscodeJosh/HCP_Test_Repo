@@ -1,9 +1,9 @@
 {
   "version": "v.0.7.0",
   "build_number": 48,
-  "release_date": "October 19, 2026",
+  "release_date": "October 26, 2026",
   "apk_filename": "HCP_Profiling_V.0.7.0.apk",
-  "apk_size_bytes": 61829704,
+  "apk_size_bytes": 61831288,
   "size_bytes": 61829704,
   "size_mb": "58.97 MB",
   "sha256": "c62692548097e28c0afe2515579d7b3b780ba4448517b4ff4897a214403619b0",
@@ -18,5 +18,7 @@
     "Gemini 4 Argon Progressive Phrase Shrinking: intelligent candidate narrowing for workplace search and Propose New Institution duplicate detection",
     "Step 2 Real-Time Doctor Name Recognizer & Suggestion Pop-up: background scan across allDoctors with 180ms debounce and 1-click auto-fill",
     "Territory Reconfiguration Web Portal v.0.1.0: Area/District column, zero-deletion standard, Active/Inactive operational toggles, program isolation, and SecurityIntrusionGuard"
-  ]
+  ],
+  "apk_sha256": "e9d407d029c48c09130d158a734ec2127f959da3bd83ccb9e781f52e2ad44540",
+  "status": "Active Official Release"
 }
