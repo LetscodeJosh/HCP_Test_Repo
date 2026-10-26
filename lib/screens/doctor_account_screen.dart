@@ -2112,7 +2112,7 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
                                     ),
                                     Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
                                     SizedBox(
-                                      width: 55,
+                                      width: 80,
                                       child: Builder(
                                         builder: (_) {
                                           final total = _getProgramTotalCount(apiService);

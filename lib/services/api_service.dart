@@ -1353,7 +1353,7 @@ class ApiService extends ChangeNotifier {
       }
     }
     final url = Uri.parse(
-      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address","workflow_state","rejection_reason","is_resubmission","owner","creation","modified","docstatus","ownership","institution_type","service_capability","requires_dsm_approval","linked_doctor_name"]&order_by=name%20desc&limit_page_length=5000&limit=5000',
+      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address","workflow_state","rejection_reason","is_resubmission","owner","creation","modified","docstatus","ownership","institution_type","service_capability","requires_dsm_approval","linked_doctor_name"]&order_by=name%20desc&limit_page_length=0',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -3417,16 +3417,42 @@ class ApiService extends ChangeNotifier {
       return _cachedDoctors;
     }
 
-    // Tier 1: Query HCP doctype with fields=["*"] via REST Resource API
+    // Tier 1: Query HCP doctype with fields=["*"] via REST Resource API (limit_page_length=0 fetches ALL records)
     try {
-      final url = Uri.parse('$baseUrl/api/resource/HCP?fields=["*"]&limit_page_length=5000&limit=5000');
+      final List<dynamic> allFetched = [];
+      final url = Uri.parse('$baseUrl/api/resource/HCP?fields=["*"]&limit_page_length=0');
       final response = await http.get(url, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = (body['data'] is List) ? body['data'] : [];
-        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        allFetched.addAll(dataList);
+
+        // Resilient auto-paginator: if Frappe server caps single-query response at >= 5000, fetch remaining pages
+        if (dataList.length >= 5000) {
+          int offset = dataList.length;
+          bool hasMore = true;
+          while (hasMore) {
+            final pageUrl = Uri.parse('$baseUrl/api/resource/HCP?fields=["*"]&limit_start=$offset&limit_page_length=5000');
+            final pageResp = await http.get(pageUrl, headers: _headers);
+            if (pageResp.statusCode == 200) {
+              final pageBody = jsonDecode(pageResp.body);
+              final List<dynamic> pageList = (pageBody['data'] is List) ? pageBody['data'] : [];
+              if (pageList.isEmpty) {
+                hasMore = false;
+              } else {
+                allFetched.addAll(pageList);
+                offset += pageList.length;
+                if (pageList.length < 5000) hasMore = false;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+        }
+
+        final list = allFetched.map((json) => Hcp.fromJson(json)).toList();
         _cachedDoctors = list;
-        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        await _writeToCache('doctors_cache.json', jsonEncode(allFetched));
         return list;
       }
     } catch (e) {
@@ -3435,8 +3461,9 @@ class ApiService extends ChangeNotifier {
 
     // Tier 2: Whitelisted client method with fields=["*"] strictly from HCP DocType
     try {
+      final List<dynamic> allFetched = [];
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["*"]&limit_page_length=5000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["*"]&limit_page_length=0',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -3444,9 +3471,37 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = (body['message'] is List)
             ? body['message']
             : (body['data'] is List ? body['data'] : []);
-        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        allFetched.addAll(dataList);
+
+        if (dataList.length >= 5000) {
+          int offset = dataList.length;
+          bool hasMore = true;
+          while (hasMore) {
+            final pageUrl = Uri.parse(
+              '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["*"]&limit_start=$offset&limit_page_length=5000',
+            );
+            final pageResp = await http.get(pageUrl, headers: _headers);
+            if (pageResp.statusCode == 200) {
+              final pageBody = jsonDecode(pageResp.body);
+              final List<dynamic> pageList = (pageBody['message'] is List)
+                  ? pageBody['message']
+                  : (pageBody['data'] is List ? pageBody['data'] : []);
+              if (pageList.isEmpty) {
+                hasMore = false;
+              } else {
+                allFetched.addAll(pageList);
+                offset += pageList.length;
+                if (pageList.length < 5000) hasMore = false;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+        }
+
+        final list = allFetched.map((json) => Hcp.fromJson(json)).toList();
         _cachedDoctors = list;
-        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        await _writeToCache('doctors_cache.json', jsonEncode(allFetched));
         return list;
       }
     } catch (e) {
@@ -3455,16 +3510,43 @@ class ApiService extends ChangeNotifier {
 
     // Tier 3: Query HCP doctype with explicit public fields (permlevel 0 safe for MedRep)
     try {
+      final List<dynamic> allFetched = [];
       final urlPublic = Uri.parse(
-        '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit_page_length=5000&limit=5000',
+        '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit_page_length=0',
       );
       final response = await http.get(urlPublic, headers: _headers);
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
         final List<dynamic> dataList = (body['data'] is List) ? body['data'] : [];
-        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        allFetched.addAll(dataList);
+
+        if (dataList.length >= 5000) {
+          int offset = dataList.length;
+          bool hasMore = true;
+          while (hasMore) {
+            final pageUrl = Uri.parse(
+              '$baseUrl/api/resource/HCP?fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active","profile_last_updated"]&limit_start=$offset&limit_page_length=5000',
+            );
+            final pageResp = await http.get(pageUrl, headers: _headers);
+            if (pageResp.statusCode == 200) {
+              final pageBody = jsonDecode(pageResp.body);
+              final List<dynamic> pageList = (pageBody['data'] is List) ? pageBody['data'] : [];
+              if (pageList.isEmpty) {
+                hasMore = false;
+              } else {
+                allFetched.addAll(pageList);
+                offset += pageList.length;
+                if (pageList.length < 5000) hasMore = false;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+        }
+
+        final list = allFetched.map((json) => Hcp.fromJson(json)).toList();
         _cachedDoctors = list;
-        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        await _writeToCache('doctors_cache.json', jsonEncode(allFetched));
         return list;
       }
     } catch (e) {
@@ -3473,8 +3555,9 @@ class ApiService extends ChangeNotifier {
 
     // Tier 4: Whitelisted client method with explicit fields strictly from HCP DocType
     try {
+      final List<dynamic> allFetched = [];
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_page_length=5000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_page_length=0',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -3482,9 +3565,37 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = (body['message'] is List)
             ? body['message']
             : (body['data'] is List ? body['data'] : []);
-        final list = dataList.map((json) => Hcp.fromJson(json)).toList();
+        allFetched.addAll(dataList);
+
+        if (dataList.length >= 5000) {
+          int offset = dataList.length;
+          bool hasMore = true;
+          while (hasMore) {
+            final pageUrl = Uri.parse(
+              '$baseUrl/api/method/frappe.client.get_list?doctype=HCP&fields=["name","first_name","middle_name","last_name","hcp_full_name","birth_date","hcp_photo","hcp_type","hcp_practice","is_active"]&limit_start=$offset&limit_page_length=5000',
+            );
+            final pageResp = await http.get(pageUrl, headers: _headers);
+            if (pageResp.statusCode == 200) {
+              final pageBody = jsonDecode(pageResp.body);
+              final List<dynamic> pageList = (pageBody['message'] is List)
+                  ? pageBody['message']
+                  : (pageBody['data'] is List ? pageBody['data'] : []);
+              if (pageList.isEmpty) {
+                hasMore = false;
+              } else {
+                allFetched.addAll(pageList);
+                offset += pageList.length;
+                if (pageList.length < 5000) hasMore = false;
+              }
+            } else {
+              hasMore = false;
+            }
+          }
+        }
+
+        final list = allFetched.map((json) => Hcp.fromJson(json)).toList();
         _cachedDoctors = list;
-        await _writeToCache('doctors_cache.json', jsonEncode(dataList));
+        await _writeToCache('doctors_cache.json', jsonEncode(allFetched));
         return list;
       }
     } catch (e) {
@@ -4320,7 +4431,7 @@ class ApiService extends ChangeNotifier {
     }
 
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Account?fields=["*"]&limit_page_length=5000&limit=5000',
+      '$baseUrl/api/resource/HCP%20Account?fields=["*"]&limit_page_length=0',
     );
     try {
       if (_cachedInstitutions.isEmpty) {
@@ -4345,7 +4456,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Account&fields=["*"]&limit_page_length=5000',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Account&fields=["*"]&limit_page_length=0',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -4471,7 +4582,7 @@ class ApiService extends ChangeNotifier {
     const submissionFields = '["name","owner","creation","modified","docstatus","workflow_state","profile_action","application_status","rejection_reason","hcp_name","hcp_full_name","first_name","middle_name","last_name","hcp_type","hcp_practice","account_or_program","territory","sales_person","user_id","submission_date","hcp_photo","consent_photo","consent_signature","consent_privacy_understood"]';
     final encodedFields = Uri.encodeQueryComponent(submissionFields);
     final url = Uri.parse(
-      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit_page_length=5000&limit=5000&order_by=creation%20desc',
+      '$baseUrl/api/resource/HCP%20Profile%20Submission?fields=$encodedFields&limit_page_length=0&order_by=creation%20desc',
     );
     try {
       final response = await http.get(url, headers: _headers);
@@ -4575,7 +4686,7 @@ class ApiService extends ChangeNotifier {
     // Fallback via client method using fields=["*"]
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=["*"]&limit_page_length=5000&order_by=creation%20desc',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=HCP%20Profile%20Submission&fields=["*"]&limit_page_length=0&order_by=creation%20desc',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {

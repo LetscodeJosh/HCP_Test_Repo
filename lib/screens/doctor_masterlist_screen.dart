@@ -1529,7 +1529,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                                       ),
                                       Container(width: 1, color: Colors.white38, margin: const EdgeInsets.symmetric(horizontal: 6)),
                                       SizedBox(
-                                        width: 45,
+                                        width: 80,
                                         child: Text(
                                           '${_filteredDoctors.length} of ${_allDoctors.length}',
                                           style: const TextStyle(color: Colors.white70, fontSize: 11),

@@ -12,6 +12,11 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
   - Resolved an issue in `fetchDoctors()`, `fetchHcpAccounts()`, and `fetchSubmissions()` where empty dataset responses (`{"data": []}`) were conflated with network failures due to `if (dataList.isNotEmpty)`.
   - Every network tier now treats an `HTTP 200 OK` response from ERPNext as authoritative, immediately updating in-memory cache and overwriting local disk cache (`doctors_cache.json`, `hcp_accounts_cache.json`, `submissions_cache.json`) with the live record set.
   - Offline cache fallback is strictly gated to execute only when live network requests genuinely fail (timeout, DNS failure, 5xx server errors, or true offline mode).
+- **Universal Masterlist Limitless Auto-Pagination & Scalability**:
+  - Replaced legacy 5,000-record query limitations with `limit_page_length=0` and intelligent automatic offset pagination across `fetchDoctors()`, `fetchHcpAccounts()`, `fetchSubmissions()`, and `fetchInstitutions()`.
+  - Seamlessly ingests the full ERPNext universal doctor directory (6,135+ doctors) without truncating or omitting any records.
+  - Expanded Doctor Directory header count box width in `doctor_account_screen.dart` ensuring high doctor counts (`6135 of 6135`) render crisply with zero visual clipping or wrapping.
+  - Successfully resolved and purged targeted profile submission records in ERPNext v15.
 
 ### 🏥 MedRep Institution Certification & ERPNext DocType XLSX Export Reflection
 - **Conditional Visibility for Certification Checkbox**:
