@@ -28,6 +28,8 @@
 	<string>PIMS HCP needs location access to geotag profiling records.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>PIMS HCP needs camera access to capture geotagged photos.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>PIMS HCP needs photo library access to select physician profile and consent images.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>PIMS HCP requires Face ID access for quick and secure biometric login.</string>
 	<key>UIFileSharingEnabled</key>
