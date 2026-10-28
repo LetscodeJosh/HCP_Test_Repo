@@ -5,6 +5,21 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.8.2] - 2026-10-28
+
+### 🛠️ Zero-Blank-Data Guarantee & Instant Institution Masterlist Hydration in Territory Reconfiguration Web App
+- **Embedded 1,328-Record Baseline Institution Masterlist (`BASELINE_INSTITUTIONS_COMPACT`)**:
+  - Embedded all 1,328 ERPNext `Institution` records (`INST-00001` through `INST-09341`) directly inside `docs/territory_reconfiguration_portal.html` so the **Institution Approvals** (`#tab-institutions`) workbench populates 1,328 records instantaneously on load (`0ms` wait, zero possibility of empty/blank table on container restarts or network drops).
+- **Fixed `Draft` -> `Pending Approval` Workflow State Mapping**:
+  - Restored `normalizeInstitutionRecord()` so unapproved ERPNext `Draft` / `Pending Approval` records (`docstatus == 0`) map directly to `Pending SFE Review` (`1,328`), transitioning to `Approved Directory` (`Approved`) or `Pending DSM` (`Pending DSM Approval`) when SFE approves via the **`Actions ⌄`** dropdown menu.
+- **Fixed Cascading PSGC City/Municipality Lookup & ERPNext Schema Field Alignment**:
+  - Updated `initPsgcLookupIndex()` to match both `'City'` and `'City / Municipality'` across all 1,655 Philippine cities/municipalities and handle trailing suffix codes (e.g., `1381400000C` -> `San Juan City`).
+  - Updated fallback `Institution` REST queries and `PUT` payloads to use exact ERPNext columns (`street_address`, `barangay_name`, `ownership`, `institution_type`, `service_capability`), eliminating HTTP 417 `Field not permitted in query` errors.
+- **Hardened Streamlit Session Opener & Non-Destructive Auto-Sync (`app.py`)**:
+  - Added `get_safe_secret()` in `installers/Streamlit_Deployment/app.py` to prevent `StreamlitSecretNotFoundError` when `.streamlit/secrets.toml` is absent, added `@st.cache_resource` opener recovery across WebSocket reconnects, and preserved local SFE governance overrides (`pims_sfe_inst_overrides_v3`) across background auto-sync cycles.
+
+---
+
 ## [v.0.8.1] - 2026-10-28
 
 ### ✨ Minimalist SFE Institution Approval UI & Unified Row Actions Popover
