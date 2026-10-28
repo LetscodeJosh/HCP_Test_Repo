@@ -1,0 +1,13 @@
+{
+  "version": "v.0.8.1",
+  "build_number": 52,
+  "release_date": "2026-10-28",
+  "apk_file": "HCP_Profiling_V.0.8.1.apk",
+  "web_installer_exe": "Territory_Reconfiguration_Setup.exe",
+  "web_installer_zip": "Territory_Reconfiguration_Setup.zip",
+  "highlights": [
+    "Minimalist SFE Institution Approval UI (removed header subtitle, decorative icons, and badge emojis)",
+    "Unified Actions dropdown popover (#instRowActionsMenu) matching Reconfiguration Editor row actions",
+    "Zero-touch 15-second silent background auto-sync (removed manual Sync Live button and warning toast)"
+  ]
+}
