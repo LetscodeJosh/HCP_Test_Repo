@@ -66,8 +66,8 @@ ACTIVE_OPENER = urllib.request.build_opener(
 
 def renew_active_opener():
     global ACTIVE_OPENER, ACTIVE_COOKIE_JAR
-    svc_user = os.environ.get('PIMS_SERVICE_USER', 'lesantos@pims-marketing.com')
-    svc_pwd = os.environ.get('PIMS_SERVICE_PASSWORD', 'pims@admin')
+    svc_user = os.environ.get('PIMS_SERVICE_USER', '')
+    svc_pwd = os.environ.get('PIMS_SERVICE_PASSWORD', '')
     ACTIVE_COOKIE_JAR = http.cookiejar.CookieJar()
     ACTIVE_OPENER = urllib.request.build_opener(
         urllib.request.HTTPCookieProcessor(ACTIVE_COOKIE_JAR),
@@ -268,7 +268,10 @@ def authenticate_erpnext_user(usr, pwd, client_ip=""):
     is_admin = usr.lower() in ['administrator', 'admin'] or any(k in all_roles_str for k in ['system manager', 'administrator'])
     is_sfe = any(k in all_roles_str for k in ['sales force effectiveness', 'sales manager', 'sales master manager', 'sfe', 'territory manager', 'district sales manager', 'dsm', 'sales user', 'medical representative', 'medrep', 'employee'])
 
-    # Success! Reset failed attempts for this identifier
+    # Success! Bind authenticated session opener and reset failed attempts
+    global ACTIVE_OPENER, ACTIVE_COOKIE_JAR
+    ACTIVE_OPENER = opener
+    ACTIVE_COOKIE_JAR = isolated_jar
     clear_server_failed_attempts(identifier)
     role_title = 'Administrator' if is_admin else ('SFE Lead' if is_sfe else (role_profile or 'Enterprise User'))
     server_host = urllib.parse.urlparse(erp_url).netloc or 'dev.pmii-marketing.com'

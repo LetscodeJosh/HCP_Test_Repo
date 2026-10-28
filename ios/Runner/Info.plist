@@ -33,9 +33,9 @@
 	<key>NSFaceIDUsageDescription</key>
 	<string>PIMS HCP requires Face ID access for quick and secure biometric login.</string>
 	<key>UIFileSharingEnabled</key>
-	<true/>
+	<false/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 

@@ -7,7 +7,6 @@ import 'components/app_drawer.dart';
 import 'components/institution_audit_trail_dialog.dart';
 import 'components/propose_institution_dialog.dart';
 import 'components/remap_institution_dialog.dart';
-import 'sfe_institution_dashboard_screen.dart';
 
 class InstitutionApprovalsScreen extends StatefulWidget {
   const InstitutionApprovalsScreen({Key? key}) : super(key: key);
@@ -1072,10 +1071,7 @@ class _InstitutionApprovalsScreenState extends State<InstitutionApprovalsScreen>
   Widget build(BuildContext context) {
     final apiService = Provider.of<ApiService>(context);
 
-    // If SFE user, immediately render dedicated SFE Approval Hub
-    if (apiService.isSfe) {
-      return const SfeInstitutionDashboardScreen();
-    }
+    // SFE Institution Approvals are centralized in the Territory Reconfiguration Web App (Desktop/Laptop)
 
     // For MedRep / Sales User / Manager
     final isManager = apiService.isManager || apiService.isAdmin;

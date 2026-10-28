@@ -6,7 +6,6 @@ import '../submission_history_screen.dart';
 import '../login_screen.dart';
 import '../doctor_account_screen.dart';
 import '../institution_approvals_screen.dart';
-import '../sfe_institution_dashboard_screen.dart';
 import '../institution_directory_screen.dart';
 import '../../constants/app_version.dart';
 
@@ -370,7 +369,7 @@ class AppDrawer extends StatelessWidget {
                       context,
                       icon: Icons.domain_verification_rounded,
                       title: 'Institution Submission',
-                      subtitle: (apiService.isSfe || apiService.isAdmin) ? 'SFE Approval Hub' : 'Track & Resubmit',
+                      subtitle: 'Track & Resubmit',
                       badge: (apiService.isSfe || apiService.isAdmin)
                           ? (apiService.pendingInstitutionApprovalsCount > 0
                               ? '${apiService.pendingInstitutionApprovalsCount} Pending'
@@ -384,9 +383,7 @@ class AppDrawer extends StatelessWidget {
                         if (currentItem != DrawerItem.institutionApprovals) {
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute(
-                              builder: (_) => (apiService.isSfe || apiService.isAdmin)
-                                  ? const SfeInstitutionDashboardScreen()
-                                  : const InstitutionApprovalsScreen(),
+                              builder: (_) => const InstitutionApprovalsScreen(),
                             ),
                           );
                         }

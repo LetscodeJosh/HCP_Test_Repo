@@ -58,9 +58,19 @@ class AppLogger {
   static final Queue<LogEntry> _logBuffer = Queue<LogEntry>();
   static bool enableDiagnosticsInRelease = false;
 
-  /// Sensitive keywords that are sanitized automatically.
+  /// Sensitive keywords that are sanitized automatically (query/form, JSON, and header formats).
   static final RegExp _sensitivePattern = RegExp(
-    r'(password|pwd|secret|token|api_secret|usr_pwd)=[^&,\s]+',
+    r'(password|pwd|secret|token|api_secret|usr_pwd|sid)=[^&,\s;"]+',
+    caseSensitive: false,
+  );
+
+  static final RegExp _sensitiveJsonPattern = RegExp(
+    r'"(password|pwd|secret|token|api_secret|usr_pwd|sid|csrf_token)"\s*:\s*"[^"]*"',
+    caseSensitive: false,
+  );
+
+  static final RegExp _sensitiveAuthHeaderPattern = RegExp(
+    r'\b(Bearer|token)\s+[A-Za-z0-9_\-\.:~]+',
     caseSensitive: false,
   );
 
@@ -71,10 +81,18 @@ class AppLogger {
     Object? error,
     StackTrace? stackTrace,
   }) {
-    // Sanitize message from sensitive credentials
-    final sanitizedMessage = message.replaceAllMapped(
+    // Sanitize message from sensitive credentials across query, JSON, and header formats
+    var sanitizedMessage = message.replaceAllMapped(
       _sensitivePattern,
       (match) => '${match.group(1)}=[REDACTED]',
+    );
+    sanitizedMessage = sanitizedMessage.replaceAllMapped(
+      _sensitiveJsonPattern,
+      (match) => '"${match.group(1)}":"[REDACTED]"',
+    );
+    sanitizedMessage = sanitizedMessage.replaceAllMapped(
+      _sensitiveAuthHeaderPattern,
+      (match) => '${match.group(1)} [REDACTED]',
     );
 
     final entry = LogEntry(

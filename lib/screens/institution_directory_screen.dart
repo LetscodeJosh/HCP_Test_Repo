@@ -5,7 +5,6 @@ import '../models/lookup_models.dart';
 import '../services/api_service.dart';
 import 'components/app_drawer.dart';
 import 'institution_approvals_screen.dart';
-import 'sfe_institution_dashboard_screen.dart';
 
 class InstitutionDirectoryScreen extends StatefulWidget {
   const InstitutionDirectoryScreen({Key? key}) : super(key: key);
@@ -192,16 +191,7 @@ class _InstitutionDirectoryScreenState extends State<InstitutionDirectoryScreen>
             tooltip: 'Refresh Directory',
             onPressed: _loadData,
           ),
-          if (apiService.isSfe || apiService.isAdmin)
-            IconButton(
-              icon: const Icon(Icons.domain_verification_rounded, color: Color(0xFF38BDF8)),
-              tooltip: 'Go to SFE Approval Hub',
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SfeInstitutionDashboardScreen()),
-                );
-              },
-            ),
+
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(

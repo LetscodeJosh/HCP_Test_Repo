@@ -6,11 +6,11 @@ import '../models/hcp_account.dart';
 import '../models/lookup_models.dart';
 import '../models/submission.dart';
 import '../services/api_service.dart';
+import '../services/app_logger.dart';
 import 'components/app_drawer.dart';
 import 'doctor_masterlist_screen.dart';
 import 'doctor_account_screen.dart';
 import 'hcp_wizard_screen.dart';
-import 'sfe_institution_dashboard_screen.dart';
 import 'institution_approvals_screen.dart';
 
 class HcpDashboardScreen extends StatefulWidget {
@@ -167,7 +167,7 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
         });
       }
     } catch (e) {
-      print('Error loading dashboard data: $e');
+      AppLogger.d('HcpDashboard', 'Error loading dashboard data: $e');
       if (mounted) {
         setState(() => _isLoading = false);
       }
@@ -675,15 +675,13 @@ class _HcpDashboardScreenState extends State<HcpDashboardScreen> {
                 ),
                 _buildActionButton(
                   icon: Icons.domain_verification_rounded,
-                  label: 'Institution Submission',
-                  subtitle: (apiService.isSfe || apiService.isAdmin) ? 'SFE Approval Hub' : 'Track & Resubmit',
+                  label: 'Institution Submissions',
+                  subtitle: 'Track & Resubmit',
                   color: const Color(0xFFF59E0B),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => (apiService.isSfe || apiService.isAdmin)
-                            ? const SfeInstitutionDashboardScreen()
-                            : const InstitutionApprovalsScreen(),
+                        builder: (_) => const InstitutionApprovalsScreen(),
                       ),
                     );
                   },

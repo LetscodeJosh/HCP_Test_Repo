@@ -9,6 +9,7 @@ import '../models/hcp_account.dart';
 import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../services/api_service.dart';
+import '../services/app_logger.dart';
 import '../services/data_sanitizer.dart';
 import 'doctor_account_screen.dart';
 import 'components/propose_institution_dialog.dart';
@@ -329,7 +330,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
       try {
         fullDoctor = await apiService.fetchDoctorDetail(doctor.name!);
       } catch (e) {
-        print('Error fetching doctor detail: $e');
+        AppLogger.d('HcpWizard', 'Error fetching doctor detail: $e');
       }
     }
 
@@ -672,7 +673,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           });
         }
       } catch (e) {
-        debugPrint('Error picking image: $e');
+        AppLogger.d('HcpWizard', 'Error picking image: $e');
       }
     }
   }
@@ -1021,7 +1022,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           doctype: 'HCP Profile Submission',
         );
       } catch (e) {
-        debugPrint('Upload consent photo error: $e');
+        AppLogger.d('HcpWizard', 'Upload consent photo error: $e');
       }
     }
 
@@ -1037,7 +1038,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           uploadedDoctorPhotoUrl = docUrl;
         }
       } catch (e) {
-        debugPrint('Upload doctor photo error: $e');
+        AppLogger.d('HcpWizard', 'Upload doctor photo error: $e');
       }
     }
 
@@ -1490,7 +1491,7 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
           );
           await apiService.updateDoctor(effectiveHcpId, updatedDoctor);
         } catch (e) {
-          debugPrint('Error updating master doctor record: $e');
+          AppLogger.d('HcpWizard', 'Error updating master doctor record: $e');
         }
 
         // Also sync HCP Account directly for existing doctor

@@ -6,17 +6,15 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/engagement.dart';
 import '../models/hcp.dart';
 import '../models/submission.dart';
 import '../models/lookup_models.dart';
 import '../models/hcp_account.dart';
-import '../models/corenergy_engage.dart';
 import '../app_config.dart';
-import 'db_helper.dart';
 import 'biometric_service.dart';
 import 'notification_service.dart';
 import 'app_logger.dart';
+import 'territory_web_server.dart';
 
 enum UserPosition {
   admin,
@@ -65,6 +63,9 @@ class ApiService extends ChangeNotifier {
   bool _sfeModeOverride = false;
   bool get sfeModeOverride => _sfeModeOverride;
   void toggleSfeMode() {
+    if (_userPosition != UserPosition.admin && _userPosition != UserPosition.sfe) {
+      return;
+    }
     _sfeModeOverride = !_sfeModeOverride;
     notifyListeners();
   }
@@ -142,11 +143,6 @@ class ApiService extends ChangeNotifier {
     return des;
   }
 
-  void setUserPosition(UserPosition pos) {
-    _userPosition = pos;
-    notifyListeners();
-  }
-
   String selectedProgram = 'COREnergy';
   List<String> availablePrograms = [
     'Abbott Diabetes Care',
@@ -181,31 +177,21 @@ class ApiService extends ChangeNotifier {
   // Offline Mode variables
   bool _isOffline = false;
   bool get isOffline => _isOffline;
-  bool _isSyncing = false;
-  bool get isSyncing => _isSyncing;
 
   Timer? _autoSyncTimer;
-  String? _syncMessage;
-  String? get syncMessage => _syncMessage;
-
-  void clearSyncMessage() {
-    _syncMessage = null;
-  }
 
   void _startAutoSyncTimer() {
     _autoSyncTimer?.cancel();
     _autoSyncTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       try {
         // Always check online status to keep the UI Mode indicator accurate
-        final isOnline = await checkOnlineStatus();
-        if (isOnline) {
-          final pending = await DbHelper.getPendingEngagements();
-          if (pending.isNotEmpty) {
-            await syncOfflineData();
-          }
+        final online = await checkOnlineStatus();
+        // Every 15 seconds, silently synchronize Institution Directory & SFE Web App approvals
+        if (online && isAuthenticated && timer.tick % 3 == 0) {
+          unawaited(fetchInstitutions().catchError((_) => <Institution>[]));
         }
       } catch (e) {
-        print('Auto-sync timer error: $e');
+        AppLogger.d('ApiService', 'Auto-sync timer error: $e');
       }
     });
   }
@@ -231,8 +217,15 @@ class ApiService extends ChangeNotifier {
     }
   }
 
-  // File cache helpers
+  static const String _keyLastCachedUser = 'hcp_last_cached_user_email';
+
+  // File cache helpers (stored in protected Application Support directory)
   Future<File> _getCacheFile(String filename) async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}/$filename');
+  }
+
+  Future<File> _getLegacyCacheFile(String filename) async {
     final dir = await getApplicationDocumentsDirectory();
     return File('${dir.path}/$filename');
   }
@@ -241,8 +234,12 @@ class ApiService extends ChangeNotifier {
     try {
       final file = await _getCacheFile(filename);
       await file.writeAsString(content);
+      final legacyFile = await _getLegacyCacheFile(filename);
+      if (legacyFile.path != file.path && await legacyFile.exists()) {
+        await legacyFile.delete();
+      }
     } catch (e) {
-      print('Error writing to cache $filename: $e');
+      AppLogger.w('ApiService', 'Error writing to cache $filename: $e');
     }
   }
 
@@ -252,254 +249,48 @@ class ApiService extends ChangeNotifier {
       if (await file.exists()) {
         return await file.readAsString();
       }
+      final legacyFile = await _getLegacyCacheFile(filename);
+      if (legacyFile.path != file.path && await legacyFile.exists()) {
+        final content = await legacyFile.readAsString();
+        await file.writeAsString(content);
+        await legacyFile.delete();
+        return content;
+      }
     } catch (e) {
-      print('Error reading from cache $filename: $e');
+      AppLogger.w('ApiService', 'Error reading from cache $filename: $e');
     }
     return null;
   }
 
-  // Pending offline edits helpers (using SQLite)
-  Future<List<COREnergyEngage>> _readPendingCreates() async {
+  Future<void> _ensureUserCacheIsolation(String userEmail) async {
+    final normalized = userEmail.trim().toLowerCase();
+    if (normalized.isEmpty) return;
     try {
-      final rows = await DbHelper.getPendingEngagements();
-      return rows
-          .where((row) => row['action_type'] == 'CREATE')
-          .map((row) => COREnergyEngage.fromJson(jsonDecode(row['data'])))
-          .toList();
-    } catch (e) {
-      print('Error reading pending creates from SQLite: $e');
-      return [];
-    }
-  }
-
-  Future<void> _addPendingCreate(COREnergyEngage engage) async {
-    try {
-      await DbHelper.insertPendingEngagement(engage, 'CREATE');
-    } catch (e) {
-      print('Error saving pending create to SQLite: $e');
-    }
-  }
-
-  Future<List<COREnergyEngage>> _readPendingUpdates() async {
-    try {
-      final rows = await DbHelper.getPendingEngagements();
-      return rows
-          .where((row) => row['action_type'] == 'UPDATE')
-          .map((row) => COREnergyEngage.fromJson(jsonDecode(row['data'])))
-          .toList();
-    } catch (e) {
-      print('Error reading pending updates from SQLite: $e');
-      return [];
-    }
-  }
-
-  Future<void> _addPendingUpdate(String name, COREnergyEngage engage) async {
-    try {
-      final offlineKey = engage.institutionName ?? name;
-      if (offlineKey.startsWith('OFFLINE-')) {
-        await DbHelper.insertPendingEngagement(engage, 'CREATE');
-      } else {
-        final pending = await DbHelper.getPendingEngagements();
-        final match = pending.where((r) => r['temp_id'] == offlineKey && r['action_type'] == 'CREATE');
-        if (match.isNotEmpty) {
-          await DbHelper.insertPendingEngagement(engage, 'CREATE');
-        } else {
-          await DbHelper.insertPendingEngagement(engage, 'UPDATE');
+      final prefs = await SharedPreferences.getInstance();
+      final lastUser = (prefs.getString(_keyLastCachedUser) ?? '').trim().toLowerCase();
+      if (lastUser.isNotEmpty && lastUser != normalized) {
+        const userScopedCaches = [
+          'employee_profile_cache.json',
+          'hcp_accounts_cache.json',
+          'submissions_cache.json',
+          'frappe_HCP_Account_list.json',
+          'frappe_HCP_Profile_Submission_list.json',
+        ];
+        for (final filename in userScopedCaches) {
+          try {
+            final f1 = await _getCacheFile(filename);
+            if (await f1.exists()) await f1.delete();
+            final f2 = await _getLegacyCacheFile(filename);
+            if (await f2.exists()) await f2.delete();
+          } catch (_) {}
         }
+        _cachedHcpAccounts = [];
+        _cachedSubmissions = [];
+        AppLogger.i('ApiService', 'Purged user-scoped cache files due to user switch.');
       }
+      await prefs.setString(_keyLastCachedUser, normalized);
     } catch (e) {
-      print('Error saving pending update to SQLite: $e');
-    }
-  }
-
-  Future<void> _saveDetailToCache(String name, COREnergyEngage engage) async {
-    final cache = await _readFromCache('engage_details_cache.json');
-    Map<String, dynamic> cacheMap = {};
-    if (cache != null) {
-      try {
-        cacheMap = Map<String, dynamic>.from(jsonDecode(cache));
-      } catch (_) {}
-    }
-    cacheMap[name] = engage.toJson();
-    await _writeToCache('engage_details_cache.json', jsonEncode(cacheMap));
-  }
-
-  Future<void> syncOfflineData() async {
-    if (_isSyncing) return;
-    _isSyncing = true;
-    notifyListeners();
-    bool somethingSynced = false;
-    try {
-      final pendingRows = await DbHelper.getPendingEngagements();
-      if (pendingRows.isEmpty) return;
-
-      for (var row in pendingRows) {
-        final String tempId = row['temp_id'];
-        final String actionType = row['action_type'];
-        final COREnergyEngage engage = COREnergyEngage.fromJson(jsonDecode(row['data']));
-
-        try {
-          if (actionType == 'CREATE') {
-            final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage');
-            final syncEngage = COREnergyEngage(
-              name: engage.name,
-              institutionName: engage.institutionName,
-              hospitalClinic: engage.hospitalClinic,
-              region: engage.region,
-              province: engage.province,
-              cityMunicipality: engage.cityMunicipality,
-              streetAddress: engage.streetAddress,
-              salesRep: engage.salesRep,
-              contacts: engage.contacts,
-              visits: engage.visits,
-              actionItems: engage.actionItems,
-            );
-            final payload = syncEngage.toJson();
-            payload.remove('name'); // Always remove name for CREATE requests to let server assign/determine naming
-            
-            final response = await http.post(
-              url,
-              headers: _headers,
-              body: jsonEncode(payload),
-            ).timeout(const Duration(seconds: 10));
-            
-            if (response.statusCode == 200 || response.statusCode == 201) {
-              final body = jsonDecode(response.body);
-              final created = COREnergyEngage.fromJson(body['data']);
-              await _saveDetailToCache(created.name, created);
-              if (created.institutionName != null) {
-                await _saveDetailToCache(created.institutionName!, created);
-              }
-              somethingSynced = true;
-            } else if (response.statusCode == 409 || 
-                       response.body.contains('already exists') || 
-                       response.body.contains('DuplicateEntryError') || 
-                       response.body.contains('Duplicate')) {
-              // Self-healing: Convert CREATE to UPDATE if the record already exists on the server
-              print('Duplicate COREnergy Engage document detected during sync for ${engage.institutionName}. Falling back to PUT update...');
-              
-              String? serverDocName;
-              try {
-                final searchUrl = Uri.parse(
-                  '$baseUrl/api/resource/COREnergy%20Engage?filters=[["institution_name","=","${engage.institutionName}"]]'
-                );
-                final searchResponse = await http.get(searchUrl, headers: _headers).timeout(const Duration(seconds: 7));
-                if (searchResponse.statusCode == 200) {
-                  final searchBody = jsonDecode(searchResponse.body);
-                  final List<dynamic> searchData = searchBody['data'] ?? [];
-                  if (searchData.isNotEmpty) {
-                    serverDocName = searchData[0]['name'];
-                  }
-                }
-              } catch (e) {
-                print('Error searching for duplicate document name: $e');
-              }
-
-              final targetName = serverDocName ?? engage.name;
-              final updateUrl = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$targetName');
-              final updateResponse = await http.put(
-                updateUrl,
-                headers: _headers,
-                body: jsonEncode(payload),
-              ).timeout(const Duration(seconds: 10));
-              
-              if (updateResponse.statusCode == 200) {
-                final body = jsonDecode(updateResponse.body);
-                final updated = COREnergyEngage.fromJson(body['data']);
-                await _saveDetailToCache(updated.name, updated);
-                if (updated.institutionName != null) {
-                  await _saveDetailToCache(updated.institutionName!, updated);
-                }
-                somethingSynced = true;
-              } else {
-                throw Exception('Sync fallback update failed: ${updateResponse.body}');
-              }
-            } else {
-              throw Exception('Sync create failed: ${response.body}');
-            }
-          } else if (actionType == 'UPDATE') {
-            String targetName = engage.name;
-            if (targetName == engage.institutionName) {
-              // It's the Institution ID, let's search if the server has a COREnergy Engage ID for this institution
-              try {
-                final searchUrl = Uri.parse(
-                  '$baseUrl/api/resource/COREnergy%20Engage?filters=[["institution_name","=","${engage.institutionName}"]]'
-                );
-                final searchResponse = await http.get(searchUrl, headers: _headers).timeout(const Duration(seconds: 7));
-                if (searchResponse.statusCode == 200) {
-                  final searchBody = jsonDecode(searchResponse.body);
-                  final List<dynamic> searchData = searchBody['data'] ?? [];
-                  if (searchData.isNotEmpty) {
-                    targetName = searchData[0]['name'];
-                  }
-                }
-              } catch (e) {
-                print('Error resolving server name for update: $e');
-              }
-            }
-
-            final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$targetName');
-            final payloadMap = engage.toJson();
-            payloadMap.remove('name');
-            final response = await http.put(
-              url,
-              headers: _headers,
-              body: jsonEncode(payloadMap),
-            ).timeout(const Duration(seconds: 10));
-            
-            if (response.statusCode == 200) {
-              final body = jsonDecode(response.body);
-              final updated = COREnergyEngage.fromJson(body['data']);
-              await _saveDetailToCache(updated.name, updated);
-              if (updated.institutionName != null) {
-                await _saveDetailToCache(updated.institutionName!, updated);
-              }
-              somethingSynced = true;
-            } else if (response.statusCode == 404 || 
-                       response.body.contains('DoesNotExistError') || 
-                       response.body.contains('not found')) {
-              print('COREnergy Engage document does not exist during sync for $targetName. Falling back to POST create...');
-              final createUrl = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage');
-              final createResponse = await http.post(
-                createUrl,
-                headers: _headers,
-                body: jsonEncode(payloadMap),
-              ).timeout(const Duration(seconds: 10));
-              
-              if (createResponse.statusCode == 200 || createResponse.statusCode == 201) {
-                final body = jsonDecode(createResponse.body);
-                final created = COREnergyEngage.fromJson(body['data']);
-                await _saveDetailToCache(created.name, created);
-                if (created.institutionName != null) {
-                  await _saveDetailToCache(created.institutionName!, created);
-                }
-                somethingSynced = true;
-              } else {
-                throw Exception('Sync fallback create failed: ${createResponse.body}');
-              }
-            } else {
-              throw Exception('Sync update failed: ${response.body}');
-            }
-          }
-          await DbHelper.deletePendingEngagement(tempId);
-          _syncMessage = 'Sync successful: "${engage.hospitalClinic ?? engage.name}" is now uploaded.';
-          notifyListeners();
-        } catch (e) {
-          print('Sync failed for offline row $tempId: $e');
-          _syncMessage = 'Sync failed for "${engage.hospitalClinic ?? engage.name}": $e';
-          notifyListeners();
-          break; // Stop syncing to avoid data loss
-        }
-      }
-      
-      if (somethingSynced && !_isOffline) {
-        await fetchCOREnergyEngages();
-      }
-    } catch (e) {
-      print('syncOfflineData SQLite error: $e');
-    } finally {
-      _isSyncing = false;
-      notifyListeners();
+      AppLogger.w('ApiService', 'Failed to enforce user cache isolation: $e');
     }
   }
 
@@ -525,7 +316,7 @@ class ApiService extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('Error fetching available programs: $e');
+      AppLogger.d('ApiService', 'Error fetching available programs: $e');
     }
   }
 
@@ -681,7 +472,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Error extracting CSRF token: $e');
+      AppLogger.d('ApiService', 'Error extracting CSRF token: $e');
     }
     return _csrfToken;
   }
@@ -708,6 +499,7 @@ class ApiService extends ChangeNotifier {
         final savedPass = savedCreds['password'] ?? '';
         if (savedUser == inputUser && savedPass == password) {
           loggedInEmail = savedCreds['username']!.trim();
+          await _ensureUserCacheIsolation(loggedInEmail!);
           NotificationService.saveLastActiveUser(loggedInEmail!);
           NotificationService.checkAndNotifyPendingRejections(_cachedInstitutions, userEmail: loggedInEmail);
           if (savedCreds['full_name'] != null && savedCreds['full_name']!.isNotEmpty) {
@@ -752,6 +544,7 @@ class ApiService extends ChangeNotifier {
         if (body['message'] == 'Logged In') {
           // Store username as the logged-in email
           loggedInEmail = username.trim();
+          await _ensureUserCacheIsolation(loggedInEmail!);
           NotificationService.saveLastActiveUser(loggedInEmail!);
           NotificationService.checkAndNotifyPendingRejections(_cachedInstitutions, userEmail: loggedInEmail);
           if (body['full_name'] != null && body['full_name'].toString().isNotEmpty) {
@@ -811,7 +604,7 @@ class ApiService extends ChangeNotifier {
       }
       return false;
     } catch (e) {
-      print('Login error: $e');
+      AppLogger.d('ApiService', 'Login error: $e');
       loginErrorMessage = 'Network or connection error. Please check your internet connection.';
       return false;
     }
@@ -845,7 +638,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Employee query by user_id error: $e');
+      AppLogger.d('ApiService', 'Employee query by user_id error: $e');
     }
 
     // 2. Query Employee by company_email
@@ -864,7 +657,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Employee query by company_email error: $e');
+      AppLogger.d('ApiService', 'Employee query by company_email error: $e');
     }
 
     // 3. Query Employee by personal_email
@@ -883,7 +676,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Employee query by personal_email error: $e');
+      AppLogger.d('ApiService', 'Employee query by personal_email error: $e');
     }
 
     // 4. Whitelisted client RPC method fallback
@@ -902,7 +695,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Employee client method query error: $e');
+      AppLogger.d('ApiService', 'Employee client method query error: $e');
     }
 
     // 5. Cache fallback
@@ -1003,7 +796,7 @@ class ApiService extends ChangeNotifier {
               }
             }
           } catch (e) {
-            print('Non-blocking /app boot role extraction: $e');
+            AppLogger.d('ApiService', 'Non-blocking /app boot role extraction: $e');
           }
 
           // Fallback: Query frappe.client.get_value for role_profile_name if not returned in REST resource
@@ -1081,7 +874,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Error fetching logged in user info: $e');
+      AppLogger.d('ApiService', 'Error fetching logged in user info: $e');
       _applyPositionFromRoleProfile(
         roleProfile: _userRoleProfile,
         roleNames: [],
@@ -1190,8 +983,7 @@ class ApiService extends ChangeNotifier {
         lowerRoleProfile.contains('system master') ||
         lowerRoleProfile.contains('it manager') ||
         lowerRoleProfile.contains('it staff') ||
-        lowerRoleProfile.contains('technical support') ||
-        (lowerEmail.endsWith('@profinsights.biz') && (lowerEmail.contains('josh') || lowerEmail.contains('tan') || lowerEmail.contains('root') || lowerEmail.contains('admin')))) {
+        lowerRoleProfile.contains('technical support')) {
       _userPosition = UserPosition.admin;
       _isRoleAuthorized = true;
       if (_userRoleProfile.isEmpty) _userRoleProfile = 'Administrator';
@@ -1269,8 +1061,10 @@ class ApiService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Log out
+  /// Log out and revoke server-side & local sessions
   void logout() {
+    final activeCookie = _sessionCookie;
+    final wasOffline = _isOffline;
     _sessionCookie = null;
     _csrfToken = null;
     loggedInEmail = null;
@@ -1282,38 +1076,28 @@ class ApiService extends ChangeNotifier {
     employeeDepartment = null;
     employeeBranch = null;
     _userPosition = UserPosition.medRep;
+    _sfeModeOverride = false;
+    _cachedDoctors = [];
+    _cachedHcpAccounts = [];
+    _cachedSubmissions = [];
+    _cachedInstitutions = [];
+    AppLogger.clear();
+    unawaited(TerritoryWebServer.stop());
+    if (!wasOffline && activeCookie != null && activeCookie.isNotEmpty) {
+      unawaited(
+        http
+            .post(
+              Uri.parse('$baseUrl/api/method/logout'),
+              headers: {
+                'Cookie': activeCookie,
+                'Accept': 'application/json',
+              },
+            )
+            .timeout(const Duration(seconds: 5))
+            .catchError((_) => http.Response('', 200)),
+      );
+    }
     notifyListeners();
-  }
-
-  /// Retrieve list of COREnergy engagements
-  Future<List<Engagement>> fetchEngagements() async {
-    if (_isOffline) {
-      final cache = await _readFromCache('engagements_cache.json');
-      if (cache != null) {
-        try {
-          final List<dynamic> dataList = jsonDecode(cache);
-          return dataList.map((json) => Engagement.fromJson(json)).toList();
-        } catch (_) {}
-      }
-      return [];
-    }
-    final url = Uri.parse(
-      '$baseUrl/api/resource/Successful%20COREnergy%20Engagement?fields=["name","unsuccessful_call","company","latitude","longitude","location_accuracy","picture","sales_rep","contact","last_name","position_or_role","email_address","contact_number","date_and_time_of_sales_appointment","decision_maker_or_responsible_person_not_available","reason_for_unsuccessful_call","creation","modified"]&limit=5000',
-    );
-    try {
-      final response = await http.get(url, headers: _headers);
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final List<dynamic> dataList = body['data'] ?? [];
-        await _writeToCache('engagements_cache.json', jsonEncode(dataList));
-        return dataList.map((json) => Engagement.fromJson(json)).toList();
-      } else {
-        throw Exception('Failed to load engagements: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Fetch engagements error: $e');
-      rethrow;
-    }
   }
 
   List<Institution> _cachedInstitutions = [];
@@ -1348,22 +1132,102 @@ class ApiService extends ChangeNotifier {
         _cachedInstitutions = list;
         return list;
       } catch (err) {
-        print('Failed to load local fallback institutions: $err');
+        AppLogger.d('ApiService', 'Failed to load local fallback institutions: $err');
         return [];
       }
     }
-    final url = Uri.parse(
-      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","street_address","workflow_state","rejection_reason","is_resubmission","owner","creation","modified","docstatus","ownership","institution_type","service_capability","requires_dsm_approval","linked_doctor_name"]&order_by=name%20desc&limit_page_length=0',
+    final wildcardUrl = Uri.parse(
+      '$baseUrl/api/resource/Institution?fields=["*"]&order_by=name%20desc&limit_page_length=0',
+    );
+    final coreFallbackUrl = Uri.parse(
+      '$baseUrl/api/resource/Institution?fields=["name","institution_name","region_name","province_name","city_municipality","workflow_state","rejection_reason","owner","creation","modified","docstatus","ownership","institution_type","service_capability"]&order_by=name%20desc&limit_page_length=0',
     );
     try {
-      final response = await http.get(url, headers: _headers);
+      http.Response response = await http.get(wildcardUrl, headers: _headers);
+      if (response.statusCode != 200) {
+        response = await http.get(coreFallbackUrl, headers: _headers);
+      }
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        final List<dynamic> dataList = body['data'] ?? [];
+        final List<dynamic> rawList = body['data'] ?? [];
+        final List<Map<String, dynamic>> dataList = rawList
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList();
+
+        // Hydrate PIMS_META & Audit Trail from Frappe Comment doctype (ensures 100% sync with SFE Web Portal)
+        try {
+          final commentUrl = Uri.parse(
+            '$baseUrl/api/resource/Comment?fields=["name","reference_name","content","comment_by","owner","creation"]&filters=[["reference_doctype","=","Institution"]]&order_by=creation%20asc&limit_page_length=1000',
+          );
+          final commentRes = await http.get(commentUrl, headers: _headers).timeout(const Duration(seconds: 8));
+          if (commentRes.statusCode == 200) {
+            final cBody = jsonDecode(commentRes.body);
+            final List<dynamic> comments = cBody['data'] ?? [];
+            final Map<String, List<Map<String, dynamic>>> commentsByInst = {};
+            for (final c in comments) {
+              if (c is Map) {
+                final ref = (c['reference_name'] ?? '').toString();
+                if (ref.isNotEmpty) {
+                  commentsByInst.putIfAbsent(ref, () => []).add(Map<String, dynamic>.from(c));
+                }
+              }
+            }
+            final metaReg = RegExp(r'<!--PIMS_META:(\{.*?\})-->', dotAll: true);
+            for (final instMap in dataList) {
+              final instId = (instMap['name'] ?? '').toString();
+              final instComments = commentsByInst[instId];
+              if (instComments != null && instComments.isNotEmpty) {
+                final List<Map<String, dynamic>> trail = [];
+                for (final c in instComments) {
+                  final rawContent = (c['content'] ?? '').toString();
+                  final match = metaReg.firstMatch(rawContent);
+                  if (match != null) {
+                    try {
+                      final metaObj = jsonDecode(match.group(1)!) as Map<String, dynamic>;
+                      metaObj.forEach((mk, mv) {
+                        if (mv != null && mv.toString().isNotEmpty && !{'action', 'user', 'role', 'timestamp', 'details'}.contains(mk)) {
+                          instMap[mk] = mv;
+                        }
+                      });
+                      trail.add({
+                        'timestamp': (metaObj['timestamp'] ?? c['creation'] ?? '').toString(),
+                        'user': (metaObj['user'] ?? c['comment_by'] ?? c['owner'] ?? 'SFE Specialist').toString(),
+                        'role': (metaObj['role'] ?? 'SFE Specialist').toString(),
+                        'action': (metaObj['action'] ?? 'Updated').toString(),
+                        'details': (metaObj['details'] ?? rawContent.replaceAll(metaReg, '').replaceAll(RegExp(r'<[^>]*>'), '').trim()).toString(),
+                      });
+                    } catch (_) {}
+                  } else {
+                    final cleanTxt = rawContent.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+                    if (cleanTxt.isNotEmpty) {
+                      if (cleanTxt.toLowerCase().contains('certified by medrep')) {
+                        instMap['is_certified'] = 1;
+                        instMap['certification_note'] = cleanTxt;
+                      }
+                      trail.add({
+                        'timestamp': (c['creation'] ?? '').toString(),
+                        'user': (c['comment_by'] ?? c['owner'] ?? 'User').toString(),
+                        'role': 'User',
+                        'action': 'Comment',
+                        'details': cleanTxt,
+                      });
+                    }
+                  }
+                }
+                if (trail.isNotEmpty) {
+                  instMap['audit_trail'] = trail;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
         await _writeToCache('institutions_cache.json', jsonEncode(dataList));
         final list = dataList.map((json) => Institution.fromJson(json)).toList();
         LocationResolver.registerInstitutions(list);
         _cachedInstitutions = list;
+        _reconcileInstitutionStateAcrossCaches(list);
         NotificationService.checkAndNotifyPendingRejections(list, userEmail: loggedInEmail);
         notifyListeners();
         return list;
@@ -1371,7 +1235,18 @@ class ApiService extends ChangeNotifier {
         throw Exception('Server returned ${response.statusCode}');
       }
     } catch (e) {
-      print('Fetch institutions API error, loading local cached fallback: $e');
+      AppLogger.d('ApiService', 'Fetch institutions API error, loading local cached fallback: $e');
+      final cache = await _readFromCache('institutions_cache.json');
+      if (cache != null) {
+        try {
+          final List<dynamic> dataList = jsonDecode(cache);
+          final list = dataList.map((json) => Institution.fromJson(json)).toList();
+          LocationResolver.registerInstitutions(list);
+          _cachedInstitutions = list;
+          NotificationService.checkAndNotifyPendingRejections(list, userEmail: loggedInEmail);
+          return list;
+        } catch (_) {}
+      }
       try {
         final String localData = await rootBundle.loadString('assets/institutions.json');
         final List<dynamic> dataList = jsonDecode(localData);
@@ -1381,8 +1256,65 @@ class ApiService extends ChangeNotifier {
         NotificationService.checkAndNotifyPendingRejections(list, userEmail: loggedInEmail);
         return list;
       } catch (err) {
-        print('Failed to load local fallback institutions: $err');
+        AppLogger.d('ApiService', 'Failed to load local fallback institutions: $err');
         rethrow;
+      }
+    }
+  }
+
+
+  /// Reconciles SFE Web App institution approvals, normalizations, and rejections across local mobile caches
+  void _reconcileInstitutionStateAcrossCaches(List<Institution> institutions) {
+    if (institutions.isEmpty) return;
+    final Map<String, Institution> byIdOrName = {};
+    for (final inst in institutions) {
+      if (inst.name.isNotEmpty) byIdOrName[inst.name.toLowerCase()] = inst;
+      if (inst.institutionName.isNotEmpty) byIdOrName[inst.institutionName.toLowerCase()] = inst;
+    }
+
+    for (int i = 0; i < _cachedHcpAccounts.length; i++) {
+      final acc = _cachedHcpAccounts[i];
+      final wpKey = (acc.workplaceId ?? '').trim().toLowerCase();
+      final matched = wpKey.isNotEmpty ? byIdOrName[wpKey] : null;
+      if (matched != null) {
+        if (matched.isApproved && !matched.isRejected) {
+          _cachedHcpAccounts[i] = acc.copyWith(
+            workplaceId: matched.institutionName.isNotEmpty ? matched.institutionName : acc.workplaceId,
+            workplaceApprovalNote: 'this institution is now approved',
+            rejectedInstitutionTag: null,
+            rejectionReason: null,
+          );
+        } else if (matched.isRejected) {
+          final tag = matched.rejectionDisplayLabel;
+          _cachedHcpAccounts[i] = acc.copyWith(
+            workplaceApprovalNote: tag,
+            rejectedInstitutionTag: tag,
+            rejectionReason: matched.rejectionReason,
+          );
+        }
+      }
+    }
+
+    for (int i = 0; i < _cachedDoctors.length; i++) {
+      final doc = _cachedDoctors[i];
+      final wpKey = (doc.institution ?? '').trim().toLowerCase();
+      final matched = wpKey.isNotEmpty ? byIdOrName[wpKey] : null;
+      if (matched != null) {
+        if (matched.isApproved && !matched.isRejected) {
+          _cachedDoctors[i] = doc.copyWith(
+            institution: matched.institutionName.isNotEmpty ? matched.institutionName : doc.institution,
+            workplaceApprovalNote: 'this institution is now approved',
+            rejectedInstitutionTag: null,
+            rejectionReason: null,
+          );
+        } else if (matched.isRejected) {
+          final tag = matched.rejectionDisplayLabel;
+          _cachedDoctors[i] = doc.copyWith(
+            workplaceApprovalNote: tag,
+            rejectedInstitutionTag: tag,
+            rejectionReason: matched.rejectionReason,
+          );
+        }
       }
     }
   }
@@ -1539,15 +1471,38 @@ class ApiService extends ChangeNotifier {
           }),
         );
         if (wfRes.statusCode != 200) {
-          print('Submit for Approval workflow transition returned ${wfRes.statusCode}: ${wfRes.body}');
+          AppLogger.d('ApiService', 'Submit for Approval workflow transition returned ${wfRes.statusCode}: ${wfRes.body}');
         }
       } catch (wfErr) {
-        print('Apply Submit for Approval workflow error: $wfErr');
+        AppLogger.d('ApiService', 'Apply Submit for Approval workflow error: $wfErr');
       }
 
-      // If certified, log a Frappe Comment and align custom note on ERPNext DocType so Administrator can view & export to XLSX
-      if (isCertified && note != null && assignedId.isNotEmpty) {
+      // Always log a structured Frappe Comment with PIMS_META so the SFE Web Portal receives 100% of MedRep proposal metadata
+      if (assignedId.isNotEmpty) {
         try {
+          final metaEnvelope = jsonEncode({
+            'institution_name': cleanWp,
+            'region_name': resolvedReg.isNotEmpty ? resolvedReg : (regId.isNotEmpty ? regId : region),
+            'province_name': resolvedProv.isNotEmpty ? resolvedProv : (provId.isNotEmpty ? provId : province),
+            'city_municipality': resolvedCity.isNotEmpty ? resolvedCity : (cityId.isNotEmpty ? cityId : city),
+            if (streetAddress != null && streetAddress.trim().isNotEmpty) 'street_address': streetAddress.trim(),
+            if (ownership != null) 'ownership': ownership,
+            if (institutionType != null) 'institution_type': institutionType,
+            if (serviceCapability != null) 'service_capability': serviceCapability,
+            'workflow_state': 'Pending Approval',
+            'docstatus': 0,
+            'requires_dsm_approval': requiresDsmApproval ? 1 : 0,
+            if (linkedDoctorName != null) 'linked_doctor_name': linkedDoctorName,
+            'is_certified': isCertified ? 1 : 0,
+            if (note != null) 'certification_note': note,
+            'resubmission_count': 0,
+            'owner': loggedInEmail ?? 'MedRep',
+            'action': isCertified ? 'Initial Proposal (Certified)' : 'Initial Proposal',
+            'user': loggedInFullName ?? loggedInEmail ?? 'MedRep',
+            'role': isManager ? 'DSM' : 'MedRep',
+            'timestamp': now.toIso8601String(),
+            'details': 'Proposed new ${institutionType ?? "Facility"} (${ownership ?? "Private"}) at $resolvedCity, $resolvedProv${note != null ? ". $note" : ""}',
+          });
           final commentUrl = Uri.parse('$baseUrl/api/resource/Comment');
           await http.post(
             commentUrl,
@@ -1556,10 +1511,12 @@ class ApiService extends ChangeNotifier {
               'comment_type': 'Comment',
               'reference_doctype': 'Institution',
               'reference_name': assignedId,
-              'content': note,
+              'content': '${note ?? "Proposed new institution for SFE approval."}<!--PIMS_META:$metaEnvelope-->',
             }),
           );
         } catch (_) {}
+      }
+      if (isCertified && note != null && assignedId.isNotEmpty) {
 
         // Attempt direct field persistence on ERPNext DocType for Excel export
         try {
@@ -1747,6 +1704,38 @@ class ApiService extends ChangeNotifier {
               'name': name,
             },
             'action': 'Submit for Approval',
+          }),
+        );
+      } catch (_) {}
+      try {
+        final resubMeta = jsonEncode({
+          'institution_name': cleanWp,
+          'region_name': resolvedReg.isNotEmpty ? resolvedReg : (regId.isNotEmpty ? regId : region),
+          'province_name': resolvedProv.isNotEmpty ? resolvedProv : (provId.isNotEmpty ? provId : province),
+          'city_municipality': resolvedCity.isNotEmpty ? resolvedCity : (cityId.isNotEmpty ? cityId : city),
+          if (ownership != null) 'ownership': ownership,
+          if (institutionType != null) 'institution_type': institutionType,
+          if (serviceCapability != null) 'service_capability': serviceCapability,
+          'workflow_state': requiresDsmApproval ? 'Pending DSM Approval' : 'Pending Approval',
+          'docstatus': 0,
+          'rejection_reason': '',
+          'is_resubmission': 1,
+          'resubmission_count': newCount,
+          'action': 'Resubmitted (Attempt $newCount/2)',
+          'user': loggedInFullName ?? loggedInEmail ?? 'MedRep',
+          'role': isManager ? 'DSM' : 'MedRep',
+          'timestamp': now.toIso8601String(),
+          'details': 'Modified & resubmitted facility (Attempt $newCount/2): $cleanWp ($ownership, $institutionType, $serviceCapability) at $resolvedCity, $resolvedProv',
+        });
+        final commentUrl = Uri.parse('$baseUrl/api/resource/Comment');
+        await http.post(
+          commentUrl,
+          headers: _headers,
+          body: jsonEncode({
+            'comment_type': 'Comment',
+            'reference_doctype': 'Institution',
+            'reference_name': name,
+            'content': 'Modified and resubmitted by MedRep (Attempt $newCount/2): $cleanWp<!--PIMS_META:$resubMeta-->',
           }),
         );
       } catch (_) {}
@@ -2150,7 +2139,7 @@ class ApiService extends ChangeNotifier {
             success = setRes.statusCode == 200;
           } catch (_) {}
           if (!success) {
-            print('approveInstitution workflow failed (${res.statusCode}: ${res.body}) and fallback failed (${putRes.statusCode}: ${putRes.body})');
+            AppLogger.d('ApiService', 'approveInstitution workflow failed (${res.statusCode}: ${res.body}) and fallback failed (${putRes.statusCode}: ${putRes.body})');
           }
         }
       }
@@ -2190,7 +2179,7 @@ class ApiService extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('approveInstitution exception: $e');
+      AppLogger.d('ApiService', 'approveInstitution exception: $e');
       return false;
     }
   }
@@ -2285,7 +2274,7 @@ class ApiService extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('dsmApproveInstitution exception: $e');
+      AppLogger.d('ApiService', 'dsmApproveInstitution exception: $e');
       return false;
     }
   }
@@ -2341,7 +2330,7 @@ class ApiService extends ChangeNotifier {
         throw Exception('Failed to delete institution from server: $errMsg');
       }
     } catch (e) {
-      print('deleteInstitution exception: $e');
+      AppLogger.d('ApiService', 'deleteInstitution exception: $e');
       rethrow;
     }
   }
@@ -2393,7 +2382,7 @@ class ApiService extends ChangeNotifier {
         );
         success = putRes.statusCode == 200;
         if (!success) {
-          print('rejectInstitution workflow failed (${res.statusCode}: ${res.body}) and fallback failed (${putRes.statusCode}: ${putRes.body})');
+          AppLogger.d('ApiService', 'rejectInstitution workflow failed (${res.statusCode}: ${res.body}) and fallback failed (${putRes.statusCode}: ${putRes.body})');
         }
       }
 
@@ -2596,7 +2585,7 @@ class ApiService extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('rejectInstitution exception: $e');
+      AppLogger.d('ApiService', 'rejectInstitution exception: $e');
       return false;
     }
   }
@@ -3071,336 +3060,6 @@ class ApiService extends ChangeNotifier {
     }
   }
 
-  /// Retrieve list of COREnergy Engage logs
-  Future<List<COREnergyEngage>> fetchCOREnergyEngages() async {
-    List<COREnergyEngage> baseList = [];
-    bool fetchedOnline = false;
-
-    if (!_isOffline) {
-      final url = Uri.parse(
-        '$baseUrl/api/resource/COREnergy%20Engage?fields=["name","institution_name","region_name","province_name","city_municipality","street_address","sales_rep","creation","modified"]&limit=5000',
-      );
-      try {
-        final response = await http.get(url, headers: _headers).timeout(const Duration(seconds: 7));
-        if (response.statusCode == 200) {
-          final body = jsonDecode(response.body);
-          final List<dynamic> dataList = body['data'] ?? [];
-          await _writeToCache('corenergy_engages_cache.json', jsonEncode(dataList));
-          baseList = dataList.map((json) => COREnergyEngage.fromJson(json)).toList();
-          fetchedOnline = true;
-        }
-      } catch (e) {
-        print('Fetch COREnergy Engages online failed, reading from cache... error: $e');
-        _isOffline = true;
-        notifyListeners();
-      }
-    }
-
-    if (!fetchedOnline) {
-      final cache = await _readFromCache('corenergy_engages_cache.json');
-      if (cache != null) {
-        try {
-          final List<dynamic> jsonList = jsonDecode(cache);
-          baseList = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
-        } catch (_) {}
-      } else {
-        // Mock fallback if no cache exists yet
-        baseList = [
-          COREnergyEngage(
-            name: 'INST-04249',
-            institutionName: 'INST-04249',
-            hospitalClinic: 'Bayview Hotel Development Corp',
-            region: 'NCR',
-            province: 'Metro Manila-Manila',
-            cityMunicipality: 'Ermita',
-            streetAddress: '123 Roxas Blvd',
-            salesRep: loggedInEmail ?? 'jptan@profinsights.biz',
-            creation: '2026-07-01 10:00:00',
-          ),
-          COREnergyEngage(
-            name: 'INST-04644',
-            institutionName: 'INST-04644',
-            hospitalClinic: 'Dolmar Press Incorporated',
-            region: 'NCR',
-            province: 'Metro Manila-Manila',
-            cityMunicipality: 'Ermita',
-            streetAddress: '456 Taft Ave',
-            salesRep: 'kmtaotao@pims-marketing.com',
-            creation: '2026-07-02 11:30:00',
-          ),
-        ];
-      }
-    }
-
-    // Apply pending updates from SQLite over the baseList
-    final pendingUpdates = await _readPendingUpdates();
-    for (var update in pendingUpdates) {
-      final idx = baseList.indexWhere((e) => e.name == update.name);
-      if (idx != -1) {
-        baseList[idx] = update;
-      }
-    }
-
-    // Apply pending creations from SQLite over the baseList
-    final pendingCreates = await _readPendingCreates();
-    final existingNames = baseList.map((e) => e.name).toSet();
-    for (var create in pendingCreates) {
-      if (!existingNames.contains(create.name)) {
-        baseList.insert(0, create);
-      }
-    }
-
-    return baseList;
-  }
-
-  /// Retrieve full details of a single COREnergy Engage log (including child tables)
-  Future<COREnergyEngage> fetchCOREnergyEngageByName(String name) async {
-    // Check local SQLite queues first (if it's a pending create/update, SQLite details are most current)
-    final pendingCreates = await _readPendingCreates();
-    final matchCreate = pendingCreates.where((e) => e.name == name);
-    if (matchCreate.isNotEmpty) return matchCreate.first;
-
-    final pendingUpdates = await _readPendingUpdates();
-    final matchUpdate = pendingUpdates.where((e) => e.name == name);
-    if (matchUpdate.isNotEmpty) return matchUpdate.first;
-
-    if (_isOffline) {
-      final cache = await _readFromCache('engage_details_cache.json');
-      if (cache != null) {
-        try {
-          final Map<String, dynamic> cacheMap = jsonDecode(cache);
-          if (cacheMap.containsKey(name)) {
-            return COREnergyEngage.fromJson(cacheMap[name]);
-          }
-        } catch (_) {}
-      }
-
-      // Check main list
-      final mainList = await fetchCOREnergyEngages();
-      final matchMain = mainList.where((e) => e.name == name);
-      if (matchMain.isNotEmpty) return matchMain.first;
-
-      throw Exception('COREnergy Engage detail not found in offline cache.');
-    }
-
-    final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$name');
-    try {
-      final response = await http.get(url, headers: _headers).timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final detailedEngage = COREnergyEngage.fromJson(body['data']);
-        await _saveDetailToCache(name, detailedEngage);
-        return detailedEngage;
-      } else {
-        throw Exception('Failed to load COREnergy Engage detail: ${response.statusCode}');
-      }
-    } catch (e) {
-      print('Fetch detail online failed, reading from cache... error: $e');
-      final cache = await _readFromCache('engage_details_cache.json');
-      if (cache != null) {
-        try {
-          final Map<String, dynamic> cacheMap = jsonDecode(cache);
-          if (cacheMap.containsKey(name)) {
-            return COREnergyEngage.fromJson(cacheMap[name]);
-          }
-        } catch (_) {}
-      }
-      throw Exception('COREnergy Engage detail not found in offline cache.');
-    }
-  }
-
-  /// Create a new COREnergy Engage record
-  Future<COREnergyEngage> createCOREnergyEngage(COREnergyEngage engage) async {
-    if (_isOffline) {
-      return _saveCOREnergyEngageOffline(engage, isCreate: true);
-    }
-
-    final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage');
-    final payload = engage.toJson();
-    payload.remove('name'); // Always remove name for CREATE requests to let server assign/determine naming
-    try {
-      final response = await http.post(
-        url,
-        headers: _headers,
-        body: jsonEncode(payload),
-      ).timeout(const Duration(seconds: 7));
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        final created = COREnergyEngage.fromJson(body['data']);
-        await _saveDetailToCache(created.name, created);
-
-        // Update list cache
-        final cache = await _readFromCache('corenergy_engages_cache.json');
-        if (cache != null) {
-          try {
-            final List<dynamic> jsonList = jsonDecode(cache);
-            final list = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
-            if (!list.any((e) => e.name == created.name)) {
-              list.insert(0, created);
-              await _writeToCache('corenergy_engages_cache.json', jsonEncode(list.map((e) => e.toJson()).toList()));
-            }
-          } catch (_) {}
-        }
-
-        return created;
-      } else {
-        throw Exception('Failed to create COREnergy Engage: ${response.body}');
-      }
-    } catch (e) {
-      print('Create COREnergy Engage online failed: $e. Falling back to SQLite offline queue...');
-      _isOffline = true;
-      notifyListeners();
-      return _saveCOREnergyEngageOffline(engage, isCreate: true);
-    }
-  }
-
-  /// Update an existing COREnergy Engage record
-  Future<COREnergyEngage> updateCOREnergyEngage(String name, COREnergyEngage engage) async {
-    if (_isOffline) {
-      return _saveCOREnergyEngageOffline(engage, isCreate: false);
-    }
-
-    final url = Uri.parse('$baseUrl/api/resource/COREnergy%20Engage/$name');
-    final payloadMap = engage.toJson();
-    payloadMap.remove('name');
-    try {
-      final response = await http.put(
-        url,
-        headers: _headers,
-        body: jsonEncode(payloadMap),
-      ).timeout(const Duration(seconds: 7));
-
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final updated = COREnergyEngage.fromJson(body['data']);
-        await _saveDetailToCache(name, updated);
-
-        // Update list cache
-        final cache = await _readFromCache('corenergy_engages_cache.json');
-        if (cache != null) {
-          try {
-            final List<dynamic> jsonList = jsonDecode(cache);
-            final list = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
-            final idx = list.indexWhere((e) => e.name == name);
-            if (idx != -1) {
-              list[idx] = updated;
-              await _writeToCache('corenergy_engages_cache.json', jsonEncode(list.map((e) => e.toJson()).toList()));
-            }
-          } catch (_) {}
-        }
-
-        return updated;
-      } else if (response.statusCode == 404 || 
-                 response.body.contains('DoesNotExistError') || 
-                 response.body.contains('not found')) {
-        print('COREnergy Engage document does not exist online for $name. Falling back to CREATE...');
-        return await createCOREnergyEngage(engage);
-      } else {
-        throw Exception('Failed to update COREnergy Engage: ${response.body}');
-      }
-    } catch (e) {
-      print('Update COREnergy Engage online failed: $e. Falling back to SQLite offline queue...');
-      _isOffline = true;
-      notifyListeners();
-      return _saveCOREnergyEngageOffline(engage, isCreate: false);
-    }
-  }
-
-  Future<COREnergyEngage> _saveCOREnergyEngageOffline(COREnergyEngage engage, {required bool isCreate}) async {
-    final offlineKey = engage.institutionName ?? engage.name;
-    final nowStr = DateTime.now().toIso8601String().replaceFirst('T', ' ').substring(0, 19);
-    final localEngage = COREnergyEngage(
-      name: engage.name.isEmpty ? offlineKey : engage.name,
-      institutionName: offlineKey,
-      hospitalClinic: engage.hospitalClinic,
-      region: engage.region,
-      province: engage.province,
-      cityMunicipality: engage.cityMunicipality,
-      streetAddress: engage.streetAddress,
-      salesRep: engage.salesRep,
-      creation: engage.creation ?? nowStr,
-      modified: nowStr,
-      contacts: engage.contacts,
-      visits: engage.visits,
-      actionItems: engage.actionItems,
-    );
-
-    if (isCreate) {
-      await _addPendingCreate(localEngage);
-    } else {
-      await _addPendingUpdate(offlineKey, localEngage);
-    }
-    await _saveDetailToCache(localEngage.name, localEngage);
-    if (localEngage.institutionName != null && localEngage.institutionName != localEngage.name) {
-      await _saveDetailToCache(localEngage.institutionName!, localEngage);
-    }
-
-    // Update list cache
-    final cache = await _readFromCache('corenergy_engages_cache.json');
-    if (cache != null) {
-      try {
-        final List<dynamic> jsonList = jsonDecode(cache);
-        final list = jsonList.map((json) => COREnergyEngage.fromJson(json)).toList();
-        final idx = list.indexWhere((e) => e.name == localEngage.name || e.institutionName == localEngage.institutionName);
-        if (idx != -1) {
-          list[idx] = localEngage;
-        } else {
-          list.insert(0, localEngage);
-        }
-        await _writeToCache('corenergy_engages_cache.json', jsonEncode(list.map((e) => e.toJson()).toList()));
-      } catch (_) {}
-    }
-
-    return localEngage;
-  }
-
-  /// Create a new engagement record
-  Future<Engagement> createEngagement(Engagement engagement) async {
-    final url = Uri.parse('$baseUrl/api/resource/Successful%20COREnergy%20Engagement');
-    try {
-      final response = await http.post(
-        url,
-        headers: _headers,
-        body: jsonEncode(engagement.toJson()),
-      );
-
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        return Engagement.fromJson(body['data']);
-      } else {
-        throw Exception('Failed to create record: ${response.body}');
-      }
-    } catch (e) {
-      print('Create engagement error: $e');
-      rethrow;
-    }
-  }
-
-  /// Update an existing engagement record
-  Future<Engagement> updateEngagement(String name, Engagement engagement) async {
-    final url = Uri.parse(
-      '$baseUrl/api/resource/Successful%20COREnergy%20Engagement/${Uri.encodeComponent(name)}',
-    );
-    try {
-      final response = await http.put(
-        url,
-        headers: _headers,
-        body: jsonEncode(engagement.toJson()),
-      );
-
-      if (response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        return Engagement.fromJson(body['data']);
-      } else {
-        throw Exception('Failed to update record: ${response.body}');
-      }
-    } catch (e) {
-      print('Update engagement error: $e');
-      rethrow;
-    }
-  }
-
   /// Retrieve list of HCP/Doctors
   /// Retrieve list of HCP/Doctors with multi-tier resilient fallback (permits MedRep & Manager access)
   Future<List<Hcp>> fetchDoctors() async {
@@ -3629,7 +3288,7 @@ class ApiService extends ChangeNotifier {
         return Hcp.fromJson(body['data']);
       }
     } catch (e) {
-      print('Fetch doctor detail direct error: $e');
+      AppLogger.d('ApiService', 'Fetch doctor detail direct error: $e');
     }
 
     // Try fallback via frappe.client.get
@@ -3744,7 +3403,7 @@ class ApiService extends ChangeNotifier {
               payload.remove('photo');
             }
           } catch (e) {
-            print('Could not upload doctor hcp_photo: $e');
+            AppLogger.d('ApiService', 'Could not upload doctor hcp_photo: $e');
             payload.remove('hcp_photo');
             payload.remove('image');
             payload.remove('photo');
@@ -3883,23 +3542,23 @@ class ApiService extends ChangeNotifier {
       }
 
       // Log the payload for debugging
-      print('[createDoctor] Sending payload to /api/resource/HCP');
-      print('[createDoctor] first_name=${payload['first_name']}, last_name=${payload['last_name']}, hcp_type=${payload['hcp_type']}');
-      print('[createDoctor] specialties count=${(payload['hcp_specialty'] as List?)?.length ?? 0}');
-      print('[createDoctor] workplaces count=${(payload['hcp_workplace'] as List?)?.length ?? 0}');
+      AppLogger.d('ApiService', '[createDoctor] Sending payload to /api/resource/HCP');
+      AppLogger.d('ApiService', '[createDoctor] first_name=${payload['first_name']}, last_name=${payload['last_name']}, hcp_type=${payload['hcp_type']}');
+      AppLogger.d('ApiService', '[createDoctor] specialties count=${(payload['hcp_specialty'] as List?)?.length ?? 0}');
+      AppLogger.d('ApiService', '[createDoctor] workplaces count=${(payload['hcp_workplace'] as List?)?.length ?? 0}');
 
       final response = await http.post(
         url,
         headers: _headers,
         body: jsonEncode(payload),
       );
-      print('[createDoctor] POST /api/resource/HCP status=${response.statusCode}');
+      AppLogger.d('ApiService', '[createDoctor] POST /api/resource/HCP status=${response.statusCode}');
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
-        print('[createDoctor] Doctor created: ${body['data']?['name']}');
+        AppLogger.d('ApiService', '[createDoctor] Doctor created: ${body['data']?['name']}');
         return Hcp.fromJson(body['data']);
       } else {
-        print('[createDoctor] POST failed: ${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
+        AppLogger.d('ApiService', '[createDoctor] POST failed: ${response.body.length > 300 ? response.body.substring(0, 300) : response.body}');
         
         // Fallback 1: Try frappe.client.insert RPC method
         final rpcUrl = Uri.parse('$baseUrl/api/method/frappe.client.insert');
@@ -3913,18 +3572,18 @@ class ApiService extends ChangeNotifier {
             }
           }),
         );
-        print('[createDoctor] RPC insert status=${rpcResp.statusCode}');
+        AppLogger.d('ApiService', '[createDoctor] RPC insert status=${rpcResp.statusCode}');
         if (rpcResp.statusCode == 200) {
           final rpcBody = jsonDecode(rpcResp.body);
           final docData = rpcBody['message'] ?? rpcBody['data'];
           if (docData != null && docData is Map<String, dynamic>) {
-            print('[createDoctor] Doctor created via RPC: ${docData['name']}');
+            AppLogger.d('ApiService', '[createDoctor] Doctor created via RPC: ${docData['name']}');
             return Hcp.fromJson(docData);
           }
         }
 
         // Fallback 2: If child table validation failed, try with minimal mandatory fields
-        print('[createDoctor] Retrying with minimal clean fields...');
+        AppLogger.d('ApiService', '[createDoctor] Retrying with minimal clean fields...');
         final minimalPayload = {
           'first_name': payload['first_name'],
           'middle_name': payload['middle_name'] ?? '-',
@@ -3948,7 +3607,7 @@ class ApiService extends ChangeNotifier {
         );
         if (minResp.statusCode == 200) {
           final minBody = jsonDecode(minResp.body);
-          print('[createDoctor] Doctor created via minimal payload: ${minBody['data']?['name']}');
+          AppLogger.d('ApiService', '[createDoctor] Doctor created via minimal payload: ${minBody['data']?['name']}');
           return Hcp.fromJson(minBody['data']);
         }
 
@@ -3966,7 +3625,7 @@ class ApiService extends ChangeNotifier {
           final minRpcBody = jsonDecode(minRpcResp.body);
           final docData = minRpcBody['message'] ?? minRpcBody['data'];
           if (docData != null && docData is Map<String, dynamic>) {
-            print('[createDoctor] Doctor created via minimal RPC: ${docData['name']}');
+            AppLogger.d('ApiService', '[createDoctor] Doctor created via minimal RPC: ${docData['name']}');
             return Hcp.fromJson(docData);
           }
         }
@@ -3974,7 +3633,7 @@ class ApiService extends ChangeNotifier {
         throw Exception('Failed to create doctor. Server response: ${response.statusCode} - ${response.body.length > 200 ? response.body.substring(0, 200) : response.body}');
       }
     } catch (e) {
-      print('[createDoctor] Error: $e');
+      AppLogger.d('ApiService', '[createDoctor] Error: $e');
       rethrow;
     }
   }
@@ -4054,7 +3713,7 @@ class ApiService extends ChangeNotifier {
               payload.remove('photo');
             }
           } catch (e) {
-            print('Could not upload doctor hcp_photo: $e');
+            AppLogger.d('ApiService', 'Could not upload doctor hcp_photo: $e');
             payload.remove('hcp_photo');
             payload.remove('image');
             payload.remove('photo');
@@ -4178,7 +3837,7 @@ class ApiService extends ChangeNotifier {
         throw Exception('Failed to update doctor: ${response.body}');
       }
     } catch (e) {
-      print('Update doctor error: $e');
+      AppLogger.d('ApiService', 'Update doctor error: $e');
       rethrow;
     } finally {
       if (!isAlreadyLocked) {
@@ -4450,7 +4109,7 @@ class ApiService extends ChangeNotifier {
         return processed;
       }
     } catch (e) {
-      print('Fetch HCP Accounts direct error: $e');
+      AppLogger.d('ApiService', 'Fetch HCP Accounts direct error: $e');
     }
 
     // Fallback via client method
@@ -4473,7 +4132,7 @@ class ApiService extends ChangeNotifier {
         return processed;
       }
     } catch (e) {
-      print('Fetch HCP Accounts fallback error: $e');
+      AppLogger.d('ApiService', 'Fetch HCP Accounts fallback error: $e');
     }
 
     // Cache fallback
@@ -4506,7 +4165,7 @@ class ApiService extends ChangeNotifier {
         return _enrichSingleAccountWithMasterData(acc);
       }
     } catch (e) {
-      print('Fetch HCP Account detail direct error: $e');
+      AppLogger.d('ApiService', 'Fetch HCP Account detail direct error: $e');
     }
 
     // Fallback via client method
@@ -4561,7 +4220,7 @@ class ApiService extends ChangeNotifier {
         return matched;
       }
     } catch (e) {
-      print('getAccountForDoctorAndProgram error: $e');
+      AppLogger.d('ApiService', 'getAccountForDoctorAndProgram error: $e');
     }
     return null;
   }
@@ -4677,10 +4336,10 @@ class ApiService extends ChangeNotifier {
         _cachedSubmissions = list;
         return list;
       } else {
-        print('Fetch submissions error: ${response.statusCode} - ${response.body}');
+        AppLogger.d('ApiService', 'Fetch submissions error: ${response.statusCode} - ${response.body}');
       }
     } catch (e) {
-      print('Fetch submissions direct error: $e');
+      AppLogger.d('ApiService', 'Fetch submissions direct error: $e');
     }
 
     // Fallback via client method using fields=["*"]
@@ -4700,7 +4359,7 @@ class ApiService extends ChangeNotifier {
         return list;
       }
     } catch (e) {
-      print('Fetch submissions fallback error: $e');
+      AppLogger.d('ApiService', 'Fetch submissions fallback error: $e');
     }
 
     // Cache fallback
@@ -4751,7 +4410,7 @@ class ApiService extends ChangeNotifier {
         return base;
       }
     } catch (e) {
-      print('Fetch submission detail direct error: $e');
+      AppLogger.d('ApiService', 'Fetch submission detail direct error: $e');
     }
 
     // Fallback via frappe.client.get
@@ -4863,7 +4522,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('uploadFile error: $e');
+      AppLogger.d('ApiService', 'uploadFile error: $e');
     }
     return null;
   }
@@ -4905,7 +4564,7 @@ class ApiService extends ChangeNotifier {
               payload.remove('consent_photo');
             }
           } catch (e) {
-            print('Could not upload consent_photo base64: $e');
+            AppLogger.d('ApiService', 'Could not upload consent_photo base64: $e');
             payload.remove('consent_photo');
           }
         }
@@ -4933,7 +4592,7 @@ class ApiService extends ChangeNotifier {
               payload.remove('hcp_photo');
             }
           } catch (e) {
-            print('Could not upload hcp_photo base64: $e');
+            AppLogger.d('ApiService', 'Could not upload hcp_photo base64: $e');
             payload.remove('hcp_photo');
           }
         }
@@ -5132,7 +4791,7 @@ class ApiService extends ChangeNotifier {
             payload['sales_person'] = resolvedTerritory.territoryManager;
           }
         } catch (e) {
-          print('[SUBMISSION] Territory auto-detection fallback error: $e');
+          AppLogger.d('ApiService', '[SUBMISSION] Territory auto-detection fallback error: $e');
         }
       }
 
@@ -5299,10 +4958,10 @@ class ApiService extends ChangeNotifier {
             }),
           );
           if (wfResp.statusCode != 200) {
-            print('apply_workflow response non-200: ${wfResp.statusCode} - ${wfResp.body}');
+            AppLogger.d('ApiService', 'apply_workflow response non-200: ${wfResp.statusCode} - ${wfResp.body}');
           }
         } catch (e) {
-          print('apply_workflow error: $e');
+          AppLogger.d('ApiService', 'apply_workflow error: $e');
         }
 
         // Direct state alignment via frappe.client.set_value to ensure ERPNext Desk is immediately 100% aligned
@@ -5325,7 +4984,7 @@ class ApiService extends ChangeNotifier {
             }),
           );
         } catch (e) {
-          print('State alignment set_value error: $e');
+          AppLogger.d('ApiService', 'State alignment set_value error: $e');
         }
 
         // Automatic non-destructive masterlist merge & HCP Account sync for Existing HCP
@@ -5333,7 +4992,7 @@ class ApiService extends ChangeNotifier {
           try {
             await processExistingSubmission(HcpProfileSubmission.fromJson(liveDoc.isNotEmpty ? liveDoc : fullDocParam));
           } catch (e) {
-            print('[SUBMISSION] Existing HCP auto-merge notice: $e');
+            AppLogger.d('ApiService', '[SUBMISSION] Existing HCP auto-merge notice: $e');
           }
         }
 
@@ -5365,7 +5024,7 @@ class ApiService extends ChangeNotifier {
       await _updateSubmissionInLocalCache(result);
       return result;
     } catch (e) {
-      print('Create submission error: $e');
+      AppLogger.d('ApiService', 'Create submission error: $e');
       rethrow;
     }
   }
@@ -5759,7 +5418,7 @@ class ApiService extends ChangeNotifier {
 
       return updatedResult;
     } catch (e) {
-      print('Update submission error: $e');
+      AppLogger.d('ApiService', 'Update submission error: $e');
       rethrow;
     }
   }
@@ -5783,20 +5442,20 @@ class ApiService extends ChangeNotifier {
       try {
         liveSubmission = await fetchSubmissionDetail(subName);
       } catch (e) {
-        print('[WORKFLOW] Using provided submission snapshot (live fetch notice: $e)');
+        AppLogger.d('ApiService', '[WORKFLOW] Using provided submission snapshot (live fetch notice: $e)');
       }
 
       // 3. Idempotency Guards: If already in desired terminal state, return immediately
       if (action == 'Approve' && (liveSubmission.workflowState == 'Approved' || liveSubmission.docstatus == 1)) {
-        print('[WORKFLOW] Submission "$subName" is ALREADY approved. Returning current record.');
+        AppLogger.d('ApiService', '[WORKFLOW] Submission "$subName" is ALREADY approved. Returning current record.');
         return liveSubmission;
       }
       if (action == 'Reject' && liveSubmission.workflowState == 'Rejected') {
-        print('[WORKFLOW] Submission "$subName" is ALREADY rejected. Returning current record.');
+        AppLogger.d('ApiService', '[WORKFLOW] Submission "$subName" is ALREADY rejected. Returning current record.');
         return liveSubmission;
       }
       if (liveSubmission.workflowState == 'Processed' && (action == 'Submit for Processing' || action == 'Select for Processing')) {
-        print('[WORKFLOW] Submission "$subName" is ALREADY processed. Returning current record.');
+        AppLogger.d('ApiService', '[WORKFLOW] Submission "$subName" is ALREADY processed. Returning current record.');
         return liveSubmission;
       }
 
@@ -5853,7 +5512,7 @@ class ApiService extends ChangeNotifier {
         try {
           await processExistingSubmission(liveSubmission);
         } catch (e) {
-          print('[WORKFLOW] processExistingSubmission notice: $e');
+          AppLogger.d('ApiService', '[WORKFLOW] processExistingSubmission notice: $e');
         }
       }
 
@@ -5972,7 +5631,7 @@ class ApiService extends ChangeNotifier {
       } catch (e) {
         failureCount++;
         errors.add('$docName: $e');
-        print('[BULK APPROVE ERROR] Failed to approve ${sub.name}: $e');
+        AppLogger.d('ApiService', '[BULK APPROVE ERROR] Failed to approve ${sub.name}: $e');
       }
     }
 
@@ -6176,7 +5835,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Sync HCP Account error: $e');
+      AppLogger.d('ApiService', 'Sync HCP Account error: $e');
       rethrow;
     } finally {
       if (!isAlreadyLocked && hcpId.isNotEmpty) {
@@ -6201,7 +5860,7 @@ class ApiService extends ChangeNotifier {
 
     String effectiveHcpId = (fullSub.hcpName).trim();
     if (effectiveHcpId.isEmpty || effectiveHcpId == 'NEW-HCP') {
-      print('[PROCESS EXISTING] Notice: hcpName is empty, cannot update existing doctor masterlist.');
+      AppLogger.d('ApiService', '[PROCESS EXISTING] Notice: hcpName is empty, cannot update existing doctor masterlist.');
       return;
     }
 
@@ -6277,9 +5936,9 @@ class ApiService extends ChangeNotifier {
         profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
       );
       await updateDoctor(effectiveHcpId, updatedDoctor);
-      print('[PROCESS EXISTING] Universal HCP record $effectiveHcpId updated successfully.');
+      AppLogger.d('ApiService', '[PROCESS EXISTING] Universal HCP record $effectiveHcpId updated successfully.');
     } catch (e) {
-      print('[PROCESS EXISTING] Doctor update notice: $e');
+      AppLogger.d('ApiService', '[PROCESS EXISTING] Doctor update notice: $e');
     }
 
     // 2. Sync Program-Specific HCP Account with Strictly Preferred Data
@@ -6354,9 +6013,9 @@ class ApiService extends ChangeNotifier {
                 ))
             .toList(),
       );
-      print('[PROCESS EXISTING] Program HCP Account synced with single preferred rows for $effectiveHcpId');
+      AppLogger.d('ApiService', '[PROCESS EXISTING] Program HCP Account synced with single preferred rows for $effectiveHcpId');
     } catch (e) {
-      print('[PROCESS EXISTING] syncHcpAccount notice: $e');
+      AppLogger.d('ApiService', '[PROCESS EXISTING] syncHcpAccount notice: $e');
     }
   }
 
@@ -6382,14 +6041,14 @@ class ApiService extends ChangeNotifier {
       HcpProfileSubmission fullSub = submission;
       try {
         fullSub = await fetchSubmissionDetail(subName);
-        print('[APPROVE] Authoritative live submission fetched for $subName: state=${fullSub.workflowState}, hcpName=${fullSub.hcpName}');
+        AppLogger.d('ApiService', '[APPROVE] Authoritative live submission fetched for $subName: state=${fullSub.workflowState}, hcpName=${fullSub.hcpName}');
       } catch (e) {
-        print('[APPROVE] Warning: Could not fetch fresh submission detail: $e. Using local snapshot.');
+        AppLogger.d('ApiService', '[APPROVE] Warning: Could not fetch fresh submission detail: $e. Using local snapshot.');
       }
 
       // Idempotency Verification: If already approved or submitted, no-op immediately
       if (fullSub.workflowState == 'Approved' || fullSub.docstatus == 1) {
-        print('[APPROVE] Submission $subName is ALREADY approved (docstatus=${fullSub.docstatus}). Aborting redundant approval saga.');
+        AppLogger.d('ApiService', '[APPROVE] Submission $subName is ALREADY approved (docstatus=${fullSub.docstatus}). Aborting redundant approval saga.');
         return;
       }
 
@@ -6415,7 +6074,7 @@ class ApiService extends ChangeNotifier {
         _inFlightHcpIds.add(effectiveHcpId);
         lockedHcpId = effectiveHcpId;
       }
-      print('[APPROVE] Starting approval for $subName, hcpName=$effectiveHcpId, isNewDoctor=$isNewDoctor');
+      AppLogger.d('ApiService', '[APPROVE] Starting approval for $subName, hcpName=$effectiveHcpId, isNewDoctor=$isNewDoctor');
 
       // ─────────────────────────────────────────────────────────────
       // PHASE 1: DOCTOR MASTER PROVISIONING (HCP DOCTYPE)
@@ -6437,7 +6096,7 @@ class ApiService extends ChangeNotifier {
                 final List<dynamic> checkData = checkBody['data'] ?? [];
                 if (checkData.isNotEmpty && checkData[0]['name'] != null) {
                   effectiveHcpId = checkData[0]['name'].toString().trim();
-                  print('[APPROVE] Idempotency match: Reusing already provisioned Doctor $effectiveHcpId.');
+                  AppLogger.d('ApiService', '[APPROVE] Idempotency match: Reusing already provisioned Doctor $effectiveHcpId.');
                 }
               }
             }
@@ -6513,10 +6172,10 @@ class ApiService extends ChangeNotifier {
             }
             _inFlightHcpIds.add(effectiveHcpId);
             lockedHcpId = effectiveHcpId;
-            print('[APPROVE] Doctor created successfully in HCP masterlist: $effectiveHcpId');
+            AppLogger.d('ApiService', '[APPROVE] Doctor created successfully in HCP masterlist: $effectiveHcpId');
           } catch (e) {
             // STRICT PHASE 1 FAILURE: Abort immediately (Prevents Dirty Reads)
-            print('[APPROVE] Phase 1 failed (createDoctor): $e');
+            AppLogger.d('ApiService', '[APPROVE] Phase 1 failed (createDoctor): $e');
             throw Exception('Failed to create doctor in HCP masterlist: $e');
           }
         }
@@ -6614,9 +6273,9 @@ class ApiService extends ChangeNotifier {
             profileLastUpdated: DateTime.now().toIso8601String().split('.').first,
           );
           await updateDoctor(effectiveHcpId, updatedDoctor);
-          print('[APPROVE] Doctor $effectiveHcpId updated with non-destructive additive merge.');
+          AppLogger.d('ApiService', '[APPROVE] Doctor $effectiveHcpId updated with non-destructive additive merge.');
         } catch (e) {
-          print('[APPROVE] Doctor update non-blocking warning: $e');
+          AppLogger.d('ApiService', '[APPROVE] Doctor update non-blocking warning: $e');
         }
       }
 
@@ -6667,7 +6326,7 @@ class ApiService extends ChangeNotifier {
             }),
           );
         } catch (e) {
-          print('[APPROVE] Non-blocking submission territory sync notice: $e');
+          AppLogger.d('ApiService', '[APPROVE] Non-blocking submission territory sync notice: $e');
         }
       }
 
@@ -6716,10 +6375,10 @@ class ApiService extends ChangeNotifier {
                   ))
               .toList(),
         );
-        print('[APPROVE] Phase 2 succeeded: HCP Account synced successfully for $effectiveHcpId');
+        AppLogger.d('ApiService', '[APPROVE] Phase 2 succeeded: HCP Account synced successfully for $effectiveHcpId');
       } catch (e) {
         // STRICT PHASE 2 FAILURE: Abort before advancing workflow to Approved! (Prevents Dirty Reads)
-        print('[APPROVE] Phase 2 failed (syncHcpAccount): $e');
+        AppLogger.d('ApiService', '[APPROVE] Phase 2 failed (syncHcpAccount): $e');
         throw Exception('Failed to sync HCP Account: $e. Submission remains Pending Approval.');
       }
 
@@ -6740,11 +6399,11 @@ class ApiService extends ChangeNotifier {
         final midState = (liveDoc['workflow_state'] ?? liveDoc['status'] ?? '').toString();
         final midDocstatus = liveDoc['docstatus'];
         if (midState == 'Rejected' || midDocstatus == 2) {
-          print('[APPROVE] Reread Value conflict: Submission $subName was rejected mid-workflow. Aborting commit.');
+          AppLogger.d('ApiService', '[APPROVE] Reread Value conflict: Submission $subName was rejected mid-workflow. Aborting commit.');
           throw Exception('Aborting approval commit: Submission $subName was rejected mid-workflow by another user.');
         }
         if (midState == 'Approved' || midDocstatus == 1) {
-          print('[APPROVE] Reread Value notice: Submission $subName was already marked Approved mid-workflow. Sealing complete.');
+          AppLogger.d('ApiService', '[APPROVE] Reread Value notice: Submission $subName was already marked Approved mid-workflow. Sealing complete.');
           return;
         }
       }
@@ -6773,7 +6432,7 @@ class ApiService extends ChangeNotifier {
             workflowApplied = true;
           }
         } catch (e) {
-          print('[APPROVE] apply_workflow action="$actionName" notice: $e');
+          AppLogger.d('ApiService', '[APPROVE] apply_workflow action="$actionName" notice: $e');
         }
       }
 
@@ -6873,12 +6532,12 @@ class ApiService extends ChangeNotifier {
       );
       if (svResp.statusCode == 200) {
         workflowApplied = true;
-        print('[REJECT] Successfully rejected and saved rejection_reason via frappe.client.set_value for $submissionName');
+        AppLogger.d('ApiService', '[REJECT] Successfully rejected and saved rejection_reason via frappe.client.set_value for $submissionName');
       } else {
-        print('[REJECT] set_value response: ${svResp.statusCode} - ${svResp.body}');
+        AppLogger.d('ApiService', '[REJECT] set_value response: ${svResp.statusCode} - ${svResp.body}');
       }
     } catch (e) {
-      print('[REJECT] set_value error: $e');
+      AppLogger.d('ApiService', '[REJECT] set_value error: $e');
     }
 
     // 2. Fallback: Official Frappe workflow engine transition with fresh document snapshot
@@ -6912,7 +6571,7 @@ class ApiService extends ChangeNotifier {
         );
         if (wfResp.statusCode == 200) {
           workflowApplied = true;
-          print('[REJECT] Successfully applied workflow action "Reject" for $submissionName');
+          AppLogger.d('ApiService', '[REJECT] Successfully applied workflow action "Reject" for $submissionName');
           try {
             final setValueUrl = Uri.parse('$baseUrl/api/method/frappe.client.set_value');
             await http.post(
@@ -6927,10 +6586,10 @@ class ApiService extends ChangeNotifier {
             );
           } catch (_) {}
         } else {
-          print('[REJECT] apply_workflow fallback response: ${wfResp.statusCode} - ${wfResp.body}');
+          AppLogger.d('ApiService', '[REJECT] apply_workflow fallback response: ${wfResp.statusCode} - ${wfResp.body}');
         }
       } catch (e) {
-        print('[REJECT] apply_workflow fallback error: $e');
+        AppLogger.d('ApiService', '[REJECT] apply_workflow fallback error: $e');
       }
     }
 
@@ -6942,7 +6601,7 @@ class ApiService extends ChangeNotifier {
           content: trimmedRemarks,
         );
       } catch (e) {
-        print('[REJECT] addSubmissionComment notice: $e');
+        AppLogger.d('ApiService', '[REJECT] addSubmissionComment notice: $e');
       }
     }
 
@@ -7016,13 +6675,13 @@ class ApiService extends ChangeNotifier {
         }),
       );
       if (resp.statusCode == 200) {
-        print('[COMMENT] Successfully added comment to $submissionName');
+        AppLogger.d('ApiService', '[COMMENT] Successfully added comment to $submissionName');
         return true;
       } else {
-        print('[COMMENT] add_comment warning: ${resp.statusCode} - ${resp.body}');
+        AppLogger.d('ApiService', '[COMMENT] add_comment warning: ${resp.statusCode} - ${resp.body}');
       }
     } catch (e) {
-      print('[COMMENT] add_comment error: $e');
+      AppLogger.d('ApiService', '[COMMENT] add_comment error: $e');
     }
     return false;
   }
@@ -7097,7 +6756,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('[COMMENT] Fetch via getdoc warning: $e');
+      AppLogger.d('ApiService', '[COMMENT] Fetch via getdoc warning: $e');
     }
 
     // 2. Fallback: Direct Comment resource API (accessible to System Manager / Admin)
@@ -7124,7 +6783,7 @@ class ApiService extends ChangeNotifier {
         }).toList();
       }
     } catch (e) {
-      print('[COMMENT] Fetch via resource/Comment fallback error: $e');
+      AppLogger.d('ApiService', '[COMMENT] Fetch via resource/Comment fallback error: $e');
     }
 
     return [];
@@ -7147,7 +6806,7 @@ class ApiService extends ChangeNotifier {
         final List<dynamic> dataList = jsonDecode(localData);
         return dataList.map((json) => Specialization.fromJson(json)).toList();
       } catch (err) {
-        print('Failed to load local fallback specializations: $err');
+        AppLogger.d('ApiService', 'Failed to load local fallback specializations: $err');
         return [];
       }
     }
@@ -7184,7 +6843,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Fetch specializations online error: $e');
+      AppLogger.d('ApiService', 'Fetch specializations online error: $e');
     }
 
     // Fallback to cache or bundled asset
@@ -7207,7 +6866,7 @@ class ApiService extends ChangeNotifier {
       LocationResolver.registerSpecializations(list);
       return list;
     } catch (err) {
-      print('Failed to load local fallback specializations: $err');
+      AppLogger.d('ApiService', 'Failed to load local fallback specializations: $err');
       return [];
     }
   }
@@ -7249,7 +6908,7 @@ class ApiService extends ChangeNotifier {
         throw Exception('Failed to load PSGC locations: ${response.statusCode}');
       }
     } catch (e) {
-      print('Fetch PSGC locations error: $e');
+      AppLogger.d('ApiService', 'Fetch PSGC locations error: $e');
       final cache = await _readFromCache('psgc_locations_cache.json');
       if (cache != null) {
         try {
@@ -7296,7 +6955,7 @@ class ApiService extends ChangeNotifier {
         throw Exception('Failed to load survey templates: ${response.statusCode}');
       }
     } catch (e) {
-      print('Fetch survey templates error: $e');
+      AppLogger.d('ApiService', 'Fetch survey templates error: $e');
       rethrow;
     }
   }
@@ -7322,7 +6981,7 @@ class ApiService extends ChangeNotifier {
         LocationResolver.registerHcpTypes(list);
         return list;
       } catch (err) {
-        print('Failed to load local fallback HCP types: $err');
+        AppLogger.d('ApiService', 'Failed to load local fallback HCP types: $err');
         final list = [
           HcpType(name: 'HCP-TYPE-01', typeName: 'Consultant', description: 'About this type'),
           HcpType(name: 'HCP-TYPE-02', typeName: 'Resident', description: 'About this type'),
@@ -7365,7 +7024,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Fetch HCP types online error: $e');
+      AppLogger.d('ApiService', 'Fetch HCP types online error: $e');
     }
 
     // Fallback to cache or bundled asset
@@ -7388,7 +7047,7 @@ class ApiService extends ChangeNotifier {
       LocationResolver.registerHcpTypes(list);
       return list;
     } catch (err) {
-      print('Failed to load local fallback HCP types: $err');
+      AppLogger.d('ApiService', 'Failed to load local fallback HCP types: $err');
       final list = [
         HcpType(name: 'HCP-TYPE-01', typeName: 'Consultant', description: 'About this type'),
         HcpType(name: 'HCP-TYPE-02', typeName: 'Resident', description: 'About this type'),
@@ -7433,7 +7092,7 @@ class ApiService extends ChangeNotifier {
           }
         }
       } catch (e) {
-        print('Fetch sales persons error: $e');
+        AppLogger.d('ApiService', 'Fetch sales persons error: $e');
       }
     }
 
@@ -7479,7 +7138,7 @@ class ApiService extends ChangeNotifier {
           }
         }
       } catch (e) {
-        print('Fetch territory infos error: $e');
+        AppLogger.d('ApiService', 'Fetch territory infos error: $e');
       }
     }
 
@@ -7923,7 +7582,7 @@ class ApiService extends ChangeNotifier {
         }
       }
     } catch (e) {
-      print('Fetch programs error: $e');
+      AppLogger.d('ApiService', 'Fetch programs error: $e');
     }
     return availablePrograms;
   }
@@ -8001,7 +7660,7 @@ class FrappeRepository<T> {
         await _api._writeToCache(cacheKey, response.body);
         return parsed;
       } catch (e) {
-        print('FrappeRepository.list parsing notice for $docType: $e');
+        AppLogger.d('ApiService', 'FrappeRepository.list parsing notice for $docType: $e');
       }
     }
 
@@ -8012,16 +7671,16 @@ class FrappeRepository<T> {
         final body = jsonDecode(cached);
         final List<dynamic> dataList = body['data'] ?? [];
         if (dataList.isNotEmpty) {
-          print('[FrappeRepository] Offline resilience active: serving ${dataList.length} cached $docType records.');
+          AppLogger.d('ApiService', '[FrappeRepository] Offline resilience active: serving ${dataList.length} cached $docType records.');
           return dataList.map((json) => fromJson(json)).toList();
         }
       }
     } catch (e) {
-      print('FrappeRepository cache fallback notice for $docType: $e');
+      AppLogger.d('ApiService', 'FrappeRepository cache fallback notice for $docType: $e');
     }
 
     if (lastException != null) {
-      print('FrappeRepository.list network error on $docType: $lastException');
+      AppLogger.d('ApiService', 'FrappeRepository.list network error on $docType: $lastException');
       throw lastException;
     }
     throw Exception('Failed to load list for $docType: ${response?.statusCode ?? 'unreachable'}');
@@ -8053,7 +7712,7 @@ class FrappeRepository<T> {
         await _api._writeToCache(cacheKey, response.body);
         return fromJson(body['data']);
       } catch (e) {
-        print('FrappeRepository.get parsing notice for $docType ($name): $e');
+        AppLogger.d('ApiService', 'FrappeRepository.get parsing notice for $docType ($name): $e');
       }
     }
 
@@ -8063,7 +7722,7 @@ class FrappeRepository<T> {
       if (cached != null && cached.isNotEmpty) {
         final body = jsonDecode(cached);
         if (body['data'] != null) {
-          print('[FrappeRepository] Offline resilience active: serving cached $docType ($name).');
+          AppLogger.d('ApiService', '[FrappeRepository] Offline resilience active: serving cached $docType ($name).');
           return fromJson(body['data']);
         }
       }
@@ -8101,7 +7760,7 @@ class FrappeRepository<T> {
         throw Exception('Failed to create $docType: ${response.body}');
       }
     } catch (e) {
-      print('FrappeRepository.create error on $docType: $e');
+      AppLogger.d('ApiService', 'FrappeRepository.create error on $docType: $e');
       rethrow;
     }
   }
@@ -8134,7 +7793,7 @@ class FrappeRepository<T> {
         throw Exception('Failed to update $docType ($name): ${response.body}');
       }
     } catch (e) {
-      print('FrappeRepository.update error on $docType: $e');
+      AppLogger.d('ApiService', 'FrappeRepository.update error on $docType: $e');
       rethrow;
     }
   }

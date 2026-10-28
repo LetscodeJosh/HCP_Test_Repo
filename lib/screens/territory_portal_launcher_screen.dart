@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../services/territory_web_server.dart';
 import 'components/app_drawer.dart';
+import 'components/local_qr_code_widget.dart';
 
 class TerritoryPortalLauncherScreen extends StatefulWidget {
   const TerritoryPortalLauncherScreen({Key? key}) : super(key: key);
@@ -131,8 +132,6 @@ class _TerritoryPortalLauncherScreenState extends State<TerritoryPortalLauncherS
     );
 
     final baseNetworkUrl = TerritoryWebServer.networkBaseUrl;
-
-    final qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${Uri.encodeComponent(laptopUrl)}';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B192C),
@@ -492,7 +491,7 @@ class _TerritoryPortalLauncherScreenState extends State<TerritoryPortalLauncherS
 
                     const SizedBox(height: 14),
 
-                    // QR Code
+                    // QR Code (Rendered 100% locally on-device with zero external network calls)
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -506,18 +505,9 @@ class _TerritoryPortalLauncherScreenState extends State<TerritoryPortalLauncherS
                           ),
                         ],
                       ),
-                      child: Image.network(
-                        qrImageUrl,
-                        width: 170,
-                        height: 170,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: 170,
-                          height: 170,
-                          color: const Color(0xFFF1F5F9),
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.qr_code_2_rounded, size: 80, color: Color(0xFF0F172A)),
-                        ),
+                      child: LocalQrCodeWidget(
+                        data: laptopUrl,
+                        size: 170,
                       ),
                     ),
                   ],

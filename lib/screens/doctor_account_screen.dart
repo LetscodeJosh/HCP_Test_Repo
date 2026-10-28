@@ -17,7 +17,7 @@ class DoctorAccountScreen extends StatefulWidget {
 class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
   List<HcpAccount> _allAccounts = [];
   List<HcpAccount> _filteredAccounts = [];
-  List<Hcp> _doctors = [];
+  Map<String, Hcp> _doctorsById = {};
   List<HcpType> _hcpTypes = [];
   List<Institution> _institutions = [];
   bool _isLoading = true;
@@ -66,10 +66,17 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
       final types = results[2] as List<HcpType>;
       final insts = results[3] as List<Institution>;
 
+      final docMap = <String, Hcp>{};
+      for (final d in doctorsList) {
+        if (d.name != null && d.name!.isNotEmpty) {
+          docMap[d.name!] = d;
+        }
+      }
+
       if (!mounted) return;
       setState(() {
         _allAccounts = items;
-        _doctors = doctorsList;
+        _doctorsById = docMap;
         _hcpTypes = types;
         _institutions = insts;
         _applyFilters();
@@ -85,25 +92,27 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
     if (account.hcpName != null && account.hcpName!.isNotEmpty && !account.hcpName!.startsWith('HCP-')) {
       return account.hcpName!;
     }
-    final match = _doctors.firstWhere(
-      (d) => d.name == account.hcp,
-      orElse: () => Hcp(firstName: account.hcpName ?? account.hcp ?? 'Joshua Pambuena Tan', lastName: '', hcpType: 'Resident', hcpPractice: 'Dispensing'),
-    );
+    final match = (account.hcp != null ? _doctorsById[account.hcp!] : null) ??
+        Hcp(
+          firstName: account.hcpName ?? account.hcp ?? 'Joshua Pambuena Tan',
+          lastName: '',
+          hcpType: 'Resident',
+          hcpPractice: 'Dispensing',
+        );
     return '${match.firstName} ${match.middleName != null && match.middleName != '-' ? '${match.middleName!} ' : ''}${match.lastName}'.trim();
   }
 
   Hcp _getMatchedDoctor(HcpAccount account) {
-    return _doctors.firstWhere(
-      (d) => d.name == account.hcp,
-      orElse: () => Hcp(
-        name: account.hcp ?? account.name,
-        firstName: _getDoctorFullName(account),
-        lastName: '',
-        hcpType: 'Resident',
-        hcpPractice: 'Dispensing',
-        isActive: true,
-        institution: 'Manila Doctors Hospital',
-      ),
+    final cached = account.hcp != null ? _doctorsById[account.hcp!] : null;
+    if (cached != null) return cached;
+    return Hcp(
+      name: account.hcp ?? account.name,
+      firstName: _getDoctorFullName(account),
+      lastName: '',
+      hcpType: 'Resident',
+      hcpPractice: 'Dispensing',
+      isActive: true,
+      institution: 'Manila Doctors Hospital',
     );
   }
 
@@ -477,14 +486,21 @@ class _DoctorAccountScreenState extends State<DoctorAccountScreen> {
       return true;
     }).toList();
 
+    final idQueryNorm = _idQuery.toLowerCase().trim();
+    final nameQueryNorm = _nameQuery.toLowerCase().trim();
+
     // Helper filter for doctor properties (ID, Name, Type, Practice, IsActive)
     bool matchesDoctorFilters(HcpAccount acc) {
       final doc = _getMatchedDoctor(acc);
       final nameStr = _getDoctorFullName(acc).toLowerCase();
-      final idStr = (acc.name ?? acc.hcp ?? '').toLowerCase();
+      final idStr = '${acc.name ?? ''} ${acc.hcp ?? ''}'.toLowerCase();
 
-      final matchesId = _idQuery.isEmpty || idStr.contains(_idQuery.toLowerCase().trim());
-      final matchesName = _nameQuery.isEmpty || nameStr.contains(_nameQuery.toLowerCase().trim());
+      final matchesId = idQueryNorm.isEmpty || idStr.contains(idQueryNorm);
+      final matchesName = nameQueryNorm.isEmpty ||
+          nameStr.contains(nameQueryNorm) ||
+          (acc.specialty ?? '').toLowerCase().contains(nameQueryNorm) ||
+          (acc.workplaceId ?? '').toLowerCase().contains(nameQueryNorm) ||
+          (acc.territory ?? '').toLowerCase().contains(nameQueryNorm);
       final matchesType = _selectedTypeFilter == null || _selectedTypeFilter == 'All' || doc.hcpType == _selectedTypeFilter;
       final matchesPractice = _selectedPracticeFilter == null || _selectedPracticeFilter == 'All' || doc.hcpPractice == _selectedPracticeFilter;
       final matchesIsActive = !_onlyIsActive || doc.isActive;

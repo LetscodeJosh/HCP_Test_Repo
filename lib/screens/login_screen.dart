@@ -1,11 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../app_config.dart';
 import '../services/api_service.dart';
 import '../services/biometric_service.dart';
 import 'doctor_account_screen.dart';
-import 'list_screen.dart';
 import 'credits_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -103,9 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => AppConfig.mode == AppMode.corenergy
-                ? const ListScreen()
-                : const DoctorAccountScreen(),
+            builder: (_) => const DoctorAccountScreen(),
           ),
         );
       } else {
@@ -168,9 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(
-            builder: (_) => AppConfig.mode == AppMode.corenergy
-                ? const ListScreen()
-                : const DoctorAccountScreen(),
+            builder: (_) => const DoctorAccountScreen(),
           ),
         );
       } else {
@@ -360,7 +354,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const SizedBox(height: 20),
                               // App Title
                               Text(
-                                AppConfig.mode == AppMode.corenergy ? 'PIMS MCP' : 'HCP Profiling App',
+                                'HCP Profiling App',
                                 textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Color(0xFF00458E),

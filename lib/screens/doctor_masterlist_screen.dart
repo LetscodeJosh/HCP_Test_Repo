@@ -7,8 +7,8 @@ import '../models/hcp_account.dart';
 import '../models/lookup_models.dart';
 import '../models/submission.dart';
 import '../services/api_service.dart';
+import '../services/app_logger.dart';
 import 'components/app_drawer.dart';
-import 'detail_screen.dart';
 
 class DoctorMasterlistScreen extends StatefulWidget {
   const DoctorMasterlistScreen({Key? key}) : super(key: key);
@@ -53,7 +53,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
     try {
       final results = await Future.wait([
         apiService.fetchDoctors().catchError((e) {
-          print('Fetch doctors caught error: $e');
+          AppLogger.d('DoctorMasterlist', 'Fetch doctors caught error: $e');
           return <Hcp>[];
         }),
         apiService.fetchInstitutions().catchError((_) => <Institution>[]),
@@ -135,19 +135,45 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       }
     }
 
+    final wsRegex = RegExp(r'\s+');
+    final List<Set<String>> progNameTokenSets = filterByProg
+        ? progDocNames.map((n) => n.split(wsRegex).where((t) => t.length > 1).toSet()).toList()
+        : const [];
+    final idQueryNorm = _idQuery.toLowerCase().trim();
+    final nameQueryNorm = _nameQuery.toLowerCase().trim();
+
     setState(() {
       _filteredDoctors = _allDoctors.where((doctor) {
+        final matchesType = _selectedTypeFilter == null || _selectedTypeFilter == 'All' || doctor.hcpType == _selectedTypeFilter;
+        if (!matchesType) return false;
+        final matchesPractice = _selectedPracticeFilter == null || _selectedPracticeFilter == 'All' || doctor.hcpPractice == _selectedPracticeFilter;
+        if (!matchesPractice) return false;
+        final matchesIsActive = !_onlyIsActive || doctor.isActive;
+        if (!matchesIsActive) return false;
+
+        final idStr = (doctor.name ?? '').toLowerCase();
+        if (idQueryNorm.isNotEmpty && !idStr.contains(idQueryNorm)) return false;
+
+        final nameStr = '${doctor.firstName} ${doctor.middleName ?? ''} ${doctor.lastName}'.toLowerCase();
+        if (nameQueryNorm.isNotEmpty &&
+            !nameStr.contains(nameQueryNorm) &&
+            !(doctor.institution ?? '').toLowerCase().contains(nameQueryNorm)) {
+          return false;
+        }
+
         // 1. Program scoping
         if (filterByProg) {
-          final dId = (doctor.name ?? '').toLowerCase().trim();
+          final dId = idStr.trim();
           final dFull = doctor.fullName.toLowerCase().trim();
           bool belongs = (dId.isNotEmpty && progDocIds.contains(dId)) ||
               (dFull.isNotEmpty && progDocNames.contains(dFull));
           if (!belongs && dFull.isNotEmpty) {
-            final docTokens = dFull.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
-            for (final pName in progDocNames) {
-              final pTokens = pName.split(RegExp(r'\s+')).where((t) => t.length > 1).toList();
-              final matches = docTokens.where((t) => pTokens.contains(t)).length;
+            final docTokens = dFull.split(wsRegex).where((t) => t.length > 1).toList();
+            for (final pTokens in progNameTokenSets) {
+              int matches = 0;
+              for (final t in docTokens) {
+                if (pTokens.contains(t)) matches++;
+              }
               if (matches >= 2 || (docTokens.length == 1 && pTokens.contains(docTokens.first))) {
                 belongs = true;
                 break;
@@ -157,16 +183,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
           if (!belongs) return false;
         }
 
-        final nameStr = '${doctor.firstName} ${doctor.middleName ?? ''} ${doctor.lastName}'.toLowerCase();
-        final idStr = (doctor.name ?? '').toLowerCase();
-
-        final matchesId = _idQuery.isEmpty || idStr.contains(_idQuery.toLowerCase().trim());
-        final matchesName = _nameQuery.isEmpty || nameStr.contains(_nameQuery.toLowerCase().trim());
-        final matchesType = _selectedTypeFilter == null || _selectedTypeFilter == 'All' || doctor.hcpType == _selectedTypeFilter;
-        final matchesPractice = _selectedPracticeFilter == null || _selectedPracticeFilter == 'All' || doctor.hcpPractice == _selectedPracticeFilter;
-        final matchesIsActive = !_onlyIsActive || doctor.isActive;
-
-        return matchesId && matchesName && matchesType && matchesPractice && matchesIsActive;
+        return true;
       }).toList();
 
       _filteredDoctors.sort((a, b) {
@@ -202,12 +219,12 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
       try {
         fullDoctor = await apiService.fetchDoctorDetail(doctor.name!);
       } catch (e) {
-        print('Error fetching doctor detail for masterlist view: $e');
+        AppLogger.d('DoctorMasterlist', 'Error fetching doctor detail for masterlist view: $e');
       }
       try {
         progAccount = await apiService.getAccountForDoctorAndProgram(doctor.name!);
       } catch (e) {
-        print('Error fetching account for masterlist view: $e');
+        AppLogger.d('DoctorMasterlist', 'Error fetching account for masterlist view: $e');
       }
     }
 
@@ -1014,7 +1031,7 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
                           doctype: 'HCP',
                         );
                       } catch (e) {
-                        debugPrint('Photo upload error: $e');
+                        AppLogger.d('DoctorMasterlist', 'Photo upload error: $e');
                       }
                     }
 
@@ -1805,6 +1822,91 @@ class _DoctorMasterlistScreenState extends State<DoctorMasterlistScreen> {
               onPressed: _showAddDoctorDialog,
             )
           : null,
+    );
+  }
+}
+
+
+class SearchableInstitutionPicker extends StatefulWidget {
+  final List<Institution> institutions;
+  final Function(Institution) onSelected;
+
+  const SearchableInstitutionPicker({
+    Key? key,
+    required this.institutions,
+    required this.onSelected,
+  }) : super(key: key);
+
+  @override
+  State<SearchableInstitutionPicker> createState() => _SearchableInstitutionPickerState();
+}
+
+class _SearchableInstitutionPickerState extends State<SearchableInstitutionPicker> {
+  List<Institution> _filteredList = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _filteredList = widget.institutions;
+  }
+
+  void _filter(String query) {
+    setState(() {
+      _filteredList = LocationResolver.fuzzySearchInstitutions(query, widget.institutions);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: MediaQuery.of(context).size.height * 0.75,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(color: const Color(0xFFE5E5EA), borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Select Company / Institution',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1C1C1E)),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            onChanged: _filter,
+            style: const TextStyle(color: Color(0xFF1C1C1E)),
+            decoration: InputDecoration(
+              hintText: 'Search by ID or Name...',
+              hintStyle: const TextStyle(color: Color(0xFF8E8E93)),
+              prefixIcon: const Icon(Icons.search, color: Color(0xFF8E8E93)),
+              filled: true,
+              fillColor: const Color(0xFFF4F6F9),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: _filteredList.isEmpty
+                ? const Center(child: Text('No matching institutions found.', style: TextStyle(color: Color(0xFF8E8E93))))
+                : ListView.builder(
+                    itemCount: _filteredList.length,
+                    itemBuilder: (context, idx) {
+                      final item = _filteredList[idx];
+                      return ListTile(
+                        title: Text(item.institutionName, style: const TextStyle(color: Color(0xFF1C1C1E), fontWeight: FontWeight.w600)),
+                        subtitle: Text(item.name, style: const TextStyle(color: Color(0xFF8E8E93), fontFamily: 'monospace')),
+                        onTap: () {
+                          widget.onSelected(item);
+                          Navigator.pop(context);
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

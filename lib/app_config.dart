@@ -1,6 +1,5 @@
 enum AppMode {
   hcp,
-  corenergy,
 }
 
 enum Environment {

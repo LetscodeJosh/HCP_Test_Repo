@@ -5,6 +5,58 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.8.0] - 2026-10-28
+
+### 🏥 SFE Institution Approval & Masterlist Governance Workbench in Territory Reconfiguration Web App
+- **Dedicated SFE Web Institution Approval Workbench (`#tab-institutions`)**:
+  - Embedded the complete SFE Institution Approval, Normalization, Duplicate Remapping, and Rejection Workbench directly inside the **Territory Reconfiguration Web App** (`docs/territory_reconfiguration_portal.html`, `installers/Territory_Reconfiguration_App/`, and `installers/Streamlit_Deployment/app.py`) so SFE Specialists can govern all MedRep-discovered institutions from their desktop/laptop without requiring a tablet/iPad.
+  - Added 5 interactive KPI cards (`Pending SFE Review`, `Pending DSM Approval`, `Approved Masterlist`, `Rejected Proposals`, `MedRep Certified`), status filter pills, ownership/type filters, multi-field search, and CSV export.
+  - Built 4 governance modals: **Normalize & Standardize Modal** (Proper Case formatter, `Government`/`Private` ownership, `Hospital`/`Clinic` type, dynamic service capabilities, 60-second concurrency edit lease, and cascading 1,772-row official PSGC Region -> Province -> City/Municipality dropdowns), **Reject Institution Modal** (mandatory reason + preset chips), **Remap Duplicate Modal** (searchable canonical `Approved` `INST-XXXXX` picker), and **Audit Trail Modal**.
+- **Seamless Real-Time Bidirectional Sync Between HCP Mobile App & Web Portal**:
+  - Upgraded `ApiService.fetchInstitutions()`, `proposeNewInstitution()`, and `resubmitRejectedInstitution()` in `lib/services/api_service.dart` with schema-resilient `fields=["*"]` queries and `<!--PIMS_META:{...}-->` Frappe `Comment` envelope hydration so 100% of governance attributes sync across Mobile and Web regardless of custom ERPNext column state.
+  - Added 15-second background auto-sync timers to `InstitutionDirectoryScreen` and `InstitutionApprovalsScreen` on the Mobile App and `initSfeInstitutionWorkbench()` on the Web App.
+  - Aligned the Mobile App exclusively for MedRep Institution Discovery, Accuracy Certification, Status Tracking, and Resubmission (up to 2 attempts), while moving SFE Institution Approval & Normalization exclusively to the Territory Reconfiguration Web App.
+
+---
+
+## [v.0.7.2] - 2026-10-27
+
+### ?? Repository Separation & Unused Feature Pruning
+- **Removed Unused Self-Service QR Prototype**:
+  - Removed `lib/screens/self_service_qr_screen.dart` and its orphaned prototype caller `lib/screens/doctor_profile_screen.dart` (which are not part of the active HCP Profiling App roadmap).
+- **Removed Separate MCP COREnergy App Files & Code**:
+  - Removed all files belonging to the separate MCP COREnergy App project (`lib/main_corenergy.dart`, `lib/models/corenergy_engage.dart`, `lib/models/engagement.dart`, `lib/screens/corenergy_engage_detail_screen.dart`, `lib/screens/detail_screen.dart`, `lib/screens/list_screen.dart`, and `lib/services/db_helper.dart`).
+  - Pruned all `COREnergyEngage` and `Successful COREnergy Engagement` methods (`fetchEngagements`, `fetchCOREnergyEngages`, `fetchCOREnergyEngageByName`, `createCOREnergyEngage`, `updateCOREnergyEngage`, `createEngagement`, `updateEngagement`, `syncOfflineData`) from `lib/services/api_service.dart`, `lib/screens/login_screen.dart`, and `lib/app_config.dart`, keeping the codebase 100% dedicated to the HCP Profiling App.
+
+---
+
+## [v.0.7.1] - 2026-10-27
+
+### ??? Enterprise Security Hardening (6 Key Enhancements ? SEC-01 through SEC-08)
+- **SEC-01 ? Protected Local Cache Directory & iOS File Sharing Lockdown**:
+  - Disabled `UIFileSharingEnabled` and `LSSupportsOpeningDocumentsInPlace` (`<false/>`) in `ios/Runner/Info.plist` so cached doctor PII and local SQLite databases cannot be extracted via Finder/iTunes or the iOS Files app.
+  - Migrated local JSON caches in `ApiService` from `getApplicationDocumentsDirectory()` to the protected `getApplicationSupportDirectory()` with automatic seamless fallback migration for existing field devices.
+- **SEC-02 ? Server-Side Session Revocation & Cross-User Cache Isolation**:
+  - Updated `ApiService.logout()` to dispatch `/api/method/logout` to ERPNext v15, stop any active local `TerritoryWebServer` instance, clear in-memory caches (`_cachedDoctors`, `_cachedHcpAccounts`, `_cachedSubmissions`, `_cachedInstitutions`), reset `_sfeModeOverride`, and flush `AppLogger` telemetry.
+  - Added `_ensureUserCacheIsolation()` during login to automatically purge user-scoped cache files whenever a different user logs into a shared mobile device, while preserving full offline resilience when the same user reconnects.
+- **SEC-03 ? Elimination of Hardcoded Service Account Fallback Credentials**:
+  - Removed the hardcoded `'pims@admin'` fallback password from `installers/Streamlit_Deployment/app.py` and `installers/Territory_Reconfiguration_App/server.py`, reading service account credentials strictly from environment variables or `st.secrets` and binding the authenticated user's session opener directly.
+- **SEC-04 ? Local On-Device QR Code Renderer & Territory Web Server Hardening**:
+  - Created a zero-dependency ISO/IEC 18004 QR Code encoder and `CustomPainter` (`LocalQrCodeWidget` in `lib/screens/components/local_qr_code_widget.dart`) to render QR codes 100% offline on-device in `TerritoryPortalLauncherScreen` and `SelfServiceQrScreen`, eliminating third-party transmission of session tokens and doctor/MedRep PII to `api.qrserver.com`.
+  - Replaced wildcard CORS (`Access-Control-Allow-Origin: *`) in `TerritoryWebServer` with strict origin validation, issued an `HttpOnly; SameSite=Strict` session cookie (`pims_portal_token`), and blocked cross-site/foreign-origin requests on `127.0.0.1`.
+- **SEC-05 & SEC-06 ? Strict Role-Based Access Control (RBAC) Guardrails**:
+  - Guarded `ApiService.toggleSfeMode()` so only `UserPosition.admin` and `UserPosition.sfe` can toggle SFE mode, removed the unused `setUserPosition()` mutator, and removed the broad `@profinsights.biz` email substring escalation in `_applyPositionFromRoleProfile()`.
+- **SEC-07 ? Zero Raw `print()` Telemetry & Comprehensive Log Redaction**:
+  - Expanded `AppLogger` redaction patterns to scrub JSON-serialized credentials (`"pwd"`, `"password"`, `"sid"`, `"csrf_token"`, `"api_secret"`) and `Authorization: Bearer/token` headers, and routed all remaining diagnostic `print()` calls across `lib/` through `AppLogger`.
+
+### ? Ultra-Smooth Instant Directory Search Optimization
+- **O(1) Hash Map Doctor Lookup in `DoctorAccountScreen`**:
+  - Replaced repeated $O(N)$ linear scans (`_doctors.firstWhere(...)`) during search filtering and sorting with an $O(1)$ `_doctorsById` hash map lookup, and expanded the search filter to match Doctor Name, Doctor ID, Specialty, Workplace, and Territory instantaneously.
+- **Pre-Tokenized Fast Filtering in `DoctorMasterlistScreen`**:
+  - Pre-computed program doctor token sets outside the per-keystroke filter loop and short-circuited search queries prior to fuzzy token matching, delivering lag-free keystroke responsiveness across 6,135+ doctors.
+
+---
+
 ## [v.0.7.0] - 2026-10-19
 
 ### 🔄 Live ERPNext HCP DocType Synchronization & Cache Resilience

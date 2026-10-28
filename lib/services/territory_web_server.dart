@@ -41,17 +41,50 @@ class TerritoryWebServer {
   /// Network URL for laptop / tablet browsers on the same Wi-Fi (e.g. http://192.168.1.105:8765).
   static String get networkBaseUrl => _localIp != null ? 'http://$_localIp:$_port' : localBaseUrl;
 
+  /// Returns the allowed CORS origin if the request Origin belongs to the local/LAN portal, or localBaseUrl.
+  static String _resolveAllowedOrigin(HttpRequest request) {
+    final origin = (request.headers.value('Origin') ?? '').trim();
+    final allowedOrigins = <String>{
+      localBaseUrl,
+      'http://localhost:$_port',
+      networkBaseUrl,
+    };
+    if (origin.isNotEmpty && allowedOrigins.contains(origin)) {
+      return origin;
+    }
+    return localBaseUrl;
+  }
+
   /// Verifies if a given HTTP request is authorized to query local territory data.
   static bool _isAuthorized(HttpRequest request) {
-    final clientIp = request.connectionInfo?.remoteAddress.address ?? '';
-    // Unconditional allowance for local device loopback
-    if (clientIp == '127.0.0.1' || clientIp == '::1' || clientIp == 'localhost') {
-      return true;
-    }
-    // Remote LAN access requires valid session token
     final tokenQuery = request.uri.queryParameters['token'];
     final tokenHeader = request.headers.value('X-Portal-Token');
-    return (tokenQuery == _sessionToken || tokenHeader == _sessionToken);
+    if (tokenQuery == _sessionToken || tokenHeader == _sessionToken) {
+      return true;
+    }
+
+    // Check HttpOnly session cookie issued when the portal was opened with a valid token
+    final cookieHeader = request.headers.value(HttpHeaders.cookieHeader) ?? '';
+    if (cookieHeader.contains('pims_portal_token=$_sessionToken')) {
+      return true;
+    }
+
+    // For local device loopback, permit same-origin requests while blocking cross-site browser requests
+    final clientIp = request.connectionInfo?.remoteAddress.address ?? '';
+    if (clientIp == '127.0.0.1' || clientIp == '::1' || clientIp == 'localhost') {
+      final origin = (request.headers.value('Origin') ?? '').trim();
+      final secFetchSite = (request.headers.value('Sec-Fetch-Site') ?? '').trim().toLowerCase();
+      if (secFetchSite == 'cross-site') {
+        return false;
+      }
+      if (origin.isEmpty ||
+          origin == localBaseUrl ||
+          origin == 'http://localhost:$_port' ||
+          origin == networkBaseUrl) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Starts the embedded HTTP server if not already running.
@@ -86,14 +119,22 @@ class TerritoryWebServer {
     _server!.listen(
       (HttpRequest request) async {
         try {
-          // Add security & CORS headers restricted to authorized origins
-          final origin = request.headers.value('Origin') ?? '*';
-          request.response.headers.add('Access-Control-Allow-Origin', origin);
+          // Add security & CORS headers restricted strictly to authorized local/LAN portal origins
+          final allowedOrigin = _resolveAllowedOrigin(request);
+          request.response.headers.add('Access-Control-Allow-Origin', allowedOrigin);
           request.response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
           request.response.headers.add('Access-Control-Allow-Headers', 'Origin, Content-Type, Accept, X-Portal-Token');
           request.response.headers.add('Cache-Control', 'no-cache, no-store, must-revalidate');
           request.response.headers.add('X-Content-Type-Options', 'nosniff');
           request.response.headers.add('X-Frame-Options', 'SAMEORIGIN');
+
+          // Bind HttpOnly session cookie when valid token is presented on page load
+          if (request.uri.queryParameters['token'] == _sessionToken) {
+            request.response.headers.add(
+              HttpHeaders.setCookieHeader,
+              'pims_portal_token=$_sessionToken; Path=/; HttpOnly; SameSite=Strict',
+            );
+          }
 
           if (request.method == 'OPTIONS') {
             request.response.statusCode = HttpStatus.ok;

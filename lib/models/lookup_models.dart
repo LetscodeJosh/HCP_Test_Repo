@@ -1,3 +1,4 @@
+import '../services/app_logger.dart';
 import 'dart:convert';
 import 'dart:io' show File;
 import 'package:flutter/services.dart' show rootBundle;
@@ -1464,7 +1465,7 @@ class LocationResolver {
         registerPsgcLocations(list);
       }
     } catch (e) {
-      print('Warning: initializePsgc encountered: $e');
+      AppLogger.w('LocationResolver', 'Warning: initializePsgc encountered: $e');
     }
   }
 
