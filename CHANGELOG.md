@@ -5,6 +5,19 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.8.4] - 2026-10-29
+
+### 🎨 Color-Matched Hover & Active Borderlines Across the 5 Institution Approval Navigation Windows
+- **Theme-Matched Hover & Active Borders (`.sfe-inst-nav-card`)**:
+  - Styled each of the 5 KPI navigation windows in **Institution Approval** (`#sfeInstNavCards`) so both `:hover` and `.active` borderlines and subtle elevation glows match each card's semantic color palette:
+    - **Institution Directory (`Draft`)**: Amber/Gold borderline (`#F59E0B` hover / `#D97706` active).
+    - **Pending DSM Approval**: Royal Blue borderline (`#3B82F6` hover / `#2563EB` active).
+    - **Approved Masterlist**: Emerald Green borderline (`#22C55E` hover / `#16A34A` active).
+    - **Rejected Proposals**: Crimson Red borderline (`#EF4444` hover / `#DC2626` active).
+    - **MedRep Certified**: Slate Navy borderline (`#64748B` hover / `#334155` active).
+
+---
+
 ## [v.0.8.3] - 2026-10-29
 
 ### ✨ Streamlined Institution Approval UI, 5-Window KPI Navigation & ERPNext `Draft` Status Alignment
