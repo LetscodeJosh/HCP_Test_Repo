@@ -5,6 +5,22 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
+## [v.0.8.3] - 2026-10-29
+
+### ✨ Streamlined Institution Approval UI, 5-Window KPI Navigation & ERPNext `Draft` Status Alignment
+- **Header Simplified to `"Institution Approval"`**:
+  - Updated the `#tab-institutions` workbench header title from `SFE Institution Approval & Masterlist Governance Workbench` to **`Institution Approval`**.
+- **Unified 5-Window KPI Card Navigation (Removed Redundant Filter Pill Row)**:
+  - Removed the redundant `#sfeInstStatusPillGroup` pill button row (`Pending SFE Review`, `Pending DSM`, `Approved Directory`, `Rejected`, `All Records`) to eliminate toolbar clutter and prevent UI layout constraints.
+  - Enabled the **5 KPI Windows** (`Institution Directory`, `Pending DSM Approval`, `Approved Masterlist`, `Rejected Proposals`, `MedRep Certified`) with active selection indicators (`.sfe-inst-nav-card.active`) to serve as the primary navigation across the workflow.
+- **Renamed `"Pending SFE Review"` to `"Institution Directory"` & Matched ERPNext `"Draft"` Status**:
+  - Updated the first KPI window label to **`Institution Directory`** (`Available in ERPNext Institution DocType`), reflecting that pre-loaded directory facilities do not require approval even when their ERPNext DocType state is `Draft`.
+  - Updated the table `STATUS` column badge and `normalizeInstitutionRecord()` to display **`Draft`** (matching the ERPNext `Institution` DocType state 1:1) instead of `Pending SFE`.
+- **Removed `"LINKED DOCTOR & SUBMITTER"` Column**:
+  - Removed the `LINKED DOCTOR & SUBMITTER` column from the Institution Approval table and rebalanced the remaining 5 columns (`INST ID & CERTIFICATION`, `FACILITY NAME & CLASSIFICATION`, `OFFICIAL PSGC LOCATION`, `STATUS`, `ACTIONS`) for cleaner readability.
+
+---
+
 ## [v.0.8.2] - 2026-10-28
 
 ### 🛠️ Zero-Blank-Data Guarantee & Instant Institution Masterlist Hydration in Territory Reconfiguration Web App
