@@ -1271,6 +1271,19 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
   Widget _buildDetailTabContent(int tabIdx, HcpProfileSubmission submission) {
     switch (tabIdx) {
       case 0: // Step 1 View
+        final apiService = Provider.of<ApiService>(context, listen: false);
+        final consentCompany = LocationResolver.resolveConsentCompanyDetails(
+          activeProgram: (submission.accountOrProgram != null && submission.accountOrProgram!.trim().isNotEmpty)
+              ? submission.accountOrProgram
+              : apiService.selectedProgram,
+          employeeCompany: apiService.employeeCompany,
+          employeeBranch: apiService.employeeBranch,
+          employeeDepartment: apiService.employeeDepartment,
+        );
+        final fullName = consentCompany['fullName']!;
+        final shortName = consentCompany['shortName']!;
+        final privacyUrl = consentCompany['privacyUrl']!;
+
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1289,20 +1302,20 @@ class _SubmissionHistoryScreenState extends State<SubmissionHistoryScreen> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: const Color(0xFF3F3F46)),
               ),
-              child: const Text(
-                'I agree that PROFESSIONAL INSIGHTS MARKETING SERVICES (PIMS), including its contracted third parties to contact me through the Contact Details that I provided to PIMS and/or its authorized representative(s) and to collect, store, process and share with PIMS contracted third parties, my Contact Details and my Professional Details for any of the following purposes:\n\n'
-                'a. to communicate with me in the manner preferred by PIMS, including through PIMS PROFESSIONAL HEALTH SPECIALISTS REPRESENTATIVES, websites, email, call centers, postal mail, webcasts, and other channels\n\n'
-                'b. to provide me with information that I have requested, including scientific data, promotional and marketing communications and/or other information about PIMS products, services and activities\n\n'
-                'c. to plan and implement PIMS promotional activities directed to me, including identifying topics and activities that may be of interest to me\n\n'
-                'd. to respond to my requests or queries or to seek my views, on PIMS products, services, and activities\n\n'
-                'e. to improve PIMS level of service and the content of its communications\n\n'
-                'f. for PIMS own administrative and quality assurance purposes\n\n'
+              child: Text(
+                'I agree that $fullName, including its contracted third parties to contact me through the Contact Details that I provided to $shortName and/or its authorized representative(s) and to collect, store, process and share with $shortName contracted third parties, my Contact Details and my Professional Details for any of the following purposes:\n\n'
+                'a. to communicate with me in the manner preferred by $shortName, including through $shortName PROFESSIONAL HEALTH SPECIALISTS REPRESENTATIVES, websites, email, call centers, postal mail, webcasts, and other channels\n\n'
+                'b. to provide me with information that I have requested, including scientific data, promotional and marketing communications and/or other information about $shortName products, services and activities\n\n'
+                'c. to plan and implement $shortName promotional activities directed to me, including identifying topics and activities that may be of interest to me\n\n'
+                'd. to respond to my requests or queries or to seek my views, on $shortName products, services, and activities\n\n'
+                'e. to improve $shortName level of service and the content of its communications\n\n'
+                'f. for $shortName own administrative and quality assurance purposes\n\n'
                 'g. any other purpose that is related to the above list of purposes.\n\n'
-                'I further acknowledge that I may obtain more information on the processing by PIMS of my Contact Details and Professional Details by accessing PIMS Privacy Statement at http://pims-marketing.com/privacy\n\n'
+                'I further acknowledge that I may obtain more information on the processing by $shortName of my Contact Details and Professional Details by accessing $shortName Privacy Statement at $privacyUrl\n\n'
                 '1. Contact Details: my name, contact number, email address, office address, and office number\n'
                 '2. Professional Details: such as my PRC number, professional associations, and medical specialties\n\n'
-                'Note: PIMS is registered with the National Privacy Commission. All Data and Personal Details voluntarily provided by data subject are protected under the Data Privacy Act.',
-                style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
+                'Note: $shortName is registered with the National Privacy Commission. All Data and Personal Details voluntarily provided by data subject are protected under the Data Privacy Act.',
+                style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
               ),
             ),
             const SizedBox(height: 16),

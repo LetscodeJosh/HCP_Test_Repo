@@ -3099,66 +3099,13 @@ class _HcpWizardScreenState extends State<HcpWizardScreen> {
         : (apiService.selectedProgram.isNotEmpty && apiService.selectedProgram != 'All'
             ? apiService.selectedProgram
             : '');
-    final lower = prog.trim().toLowerCase();
 
-    String fullName;
-    String shortName;
-    const privacyUrl = 'http://pims-marketing.com/privacy';
-
-    if (lower.contains('abbott') || lower.contains('adc')) {
-      fullName = 'PMII Abbott Diabetic Care (ADC)';
-      shortName = 'PMII Abbott Diabetic Care (ADC)';
-    } else if (lower.contains('bayer')) {
-      fullName = 'PMII Bayer';
-      shortName = 'PMII Bayer';
-    } else if (lower.contains('fonterra') || lower.contains('fon')) {
-      fullName = 'PMI Fonterra';
-      shortName = 'PMI Fonterra';
-    } else if (lower.contains('galderma')) {
-      fullName = 'PMII Galderma';
-      shortName = 'PMII Galderma';
-    } else if (lower.contains('ritemed') || lower.contains('rtmd')) {
-      fullName = 'PMII RiteMed';
-      shortName = 'PMII RiteMed';
-    } else if (lower.contains('taisho')) {
-      fullName = 'PMII Taisho';
-      shortName = 'PMII Taisho';
-    } else if (lower.contains('corenergy')) {
-      fullName = 'PMII COREnergy';
-      shortName = 'PMII COREnergy';
-    } else if (lower.contains('pascual')) {
-      fullName = 'PMII Pascual';
-      shortName = 'PMII Pascual';
-    } else if (lower.contains('biomerieux')) {
-      fullName = 'PMII BioMérieux';
-      shortName = 'PMII BioMérieux';
-    } else if (lower.contains('gsk')) {
-      fullName = 'PMII GSK';
-      shortName = 'PMII GSK';
-    } else if (lower.contains('exeltis')) {
-      fullName = 'PMII Exeltis';
-      shortName = 'PMII Exeltis';
-    } else if (lower.contains('vivaro')) {
-      fullName = 'PMII Vivaro';
-      shortName = 'PMII Vivaro';
-    } else if (prog.isNotEmpty) {
-      if (prog.toUpperCase().startsWith('PMI ') || prog.toUpperCase().startsWith('PMII ')) {
-        fullName = prog.trim();
-        shortName = prog.trim();
-      } else {
-        fullName = 'PMII ${prog.trim()}';
-        shortName = 'PMII ${prog.trim()}';
-      }
-    } else {
-      fullName = 'PROFESSIONAL INSIGHTS MARKETING SERVICES (PIMS)';
-      shortName = 'PIMS';
-    }
-
-    return {
-      'fullName': fullName,
-      'shortName': shortName,
-      'privacyUrl': privacyUrl,
-    };
+    return LocationResolver.resolveConsentCompanyDetails(
+      activeProgram: prog,
+      employeeCompany: apiService.employeeCompany,
+      employeeBranch: apiService.employeeBranch,
+      employeeDepartment: apiService.employeeDepartment,
+    );
   }
 
   void _confirmResetDoctor() {

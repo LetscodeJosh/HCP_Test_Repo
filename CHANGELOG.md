@@ -5,74 +5,23 @@ The project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html
 
 ---
 
-## [v.0.8.4] - 2026-10-29
+## [v.0.8.0] - 2026-10-30
 
-### 🎨 Color-Matched Hover & Active Borderlines Across the 5 Institution Approval Navigation Windows
-- **Theme-Matched Hover & Active Borders (`.sfe-inst-nav-card`)**:
-  - Styled each of the 5 KPI navigation windows in **Institution Approval** (`#sfeInstNavCards`) so both `:hover` and `.active` borderlines and subtle elevation glows match each card's semantic color palette:
-    - **Institution Directory (`Draft`)**: Amber/Gold borderline (`#F59E0B` hover / `#D97706` active).
-    - **Pending DSM Approval**: Royal Blue borderline (`#3B82F6` hover / `#2563EB` active).
-    - **Approved Masterlist**: Emerald Green borderline (`#22C55E` hover / `#16A34A` active).
-    - **Rejected Proposals**: Crimson Red borderline (`#EF4444` hover / `#DC2626` active).
-    - **MedRep Certified**: Slate Navy borderline (`#64748B` hover / `#334155` active).
-
----
-
-## [v.0.8.3] - 2026-10-29
-
-### ✨ Streamlined Institution Approval UI, 5-Window KPI Navigation & ERPNext `Draft` Status Alignment
-- **Header Simplified to `"Institution Approval"`**:
-  - Updated the `#tab-institutions` workbench header title from `SFE Institution Approval & Masterlist Governance Workbench` to **`Institution Approval`**.
-- **Unified 5-Window KPI Card Navigation (Removed Redundant Filter Pill Row)**:
-  - Removed the redundant `#sfeInstStatusPillGroup` pill button row (`Pending SFE Review`, `Pending DSM`, `Approved Directory`, `Rejected`, `All Records`) to eliminate toolbar clutter and prevent UI layout constraints.
-  - Enabled the **5 KPI Windows** (`Institution Directory`, `Pending DSM Approval`, `Approved Masterlist`, `Rejected Proposals`, `MedRep Certified`) with active selection indicators (`.sfe-inst-nav-card.active`) to serve as the primary navigation across the workflow.
-- **Renamed `"Pending SFE Review"` to `"Institution Directory"` & Matched ERPNext `"Draft"` Status**:
-  - Updated the first KPI window label to **`Institution Directory`** (`Available in ERPNext Institution DocType`), reflecting that pre-loaded directory facilities do not require approval even when their ERPNext DocType state is `Draft`.
-  - Updated the table `STATUS` column badge and `normalizeInstitutionRecord()` to display **`Draft`** (matching the ERPNext `Institution` DocType state 1:1) instead of `Pending SFE`.
-- **Removed `"LINKED DOCTOR & SUBMITTER"` Column**:
-  - Removed the `LINKED DOCTOR & SUBMITTER` column from the Institution Approval table and rebalanced the remaining 5 columns (`INST ID & CERTIFICATION`, `FACILITY NAME & CLASSIFICATION`, `OFFICIAL PSGC LOCATION`, `STATUS`, `ACTIONS`) for cleaner readability.
-
----
-
-## [v.0.8.2] - 2026-10-28
-
-### 🛠️ Zero-Blank-Data Guarantee & Instant Institution Masterlist Hydration in Territory Reconfiguration Web App
-- **Embedded 1,328-Record Baseline Institution Masterlist (`BASELINE_INSTITUTIONS_COMPACT`)**:
-  - Embedded all 1,328 ERPNext `Institution` records (`INST-00001` through `INST-09341`) directly inside `docs/territory_reconfiguration_portal.html` so the **Institution Approvals** (`#tab-institutions`) workbench populates 1,328 records instantaneously on load (`0ms` wait, zero possibility of empty/blank table on container restarts or network drops).
-- **Fixed `Draft` -> `Pending Approval` Workflow State Mapping**:
-  - Restored `normalizeInstitutionRecord()` so unapproved ERPNext `Draft` / `Pending Approval` records (`docstatus == 0`) map directly to `Pending SFE Review` (`1,328`), transitioning to `Approved Directory` (`Approved`) or `Pending DSM` (`Pending DSM Approval`) when SFE approves via the **`Actions ⌄`** dropdown menu.
-- **Fixed Cascading PSGC City/Municipality Lookup & ERPNext Schema Field Alignment**:
-  - Updated `initPsgcLookupIndex()` to match both `'City'` and `'City / Municipality'` across all 1,655 Philippine cities/municipalities and handle trailing suffix codes (e.g., `1381400000C` -> `San Juan City`).
-  - Updated fallback `Institution` REST queries and `PUT` payloads to use exact ERPNext columns (`street_address`, `barangay_name`, `ownership`, `institution_type`, `service_capability`), eliminating HTTP 417 `Field not permitted in query` errors.
-- **Hardened Streamlit Session Opener & Non-Destructive Auto-Sync (`app.py`)**:
-  - Added `get_safe_secret()` in `installers/Streamlit_Deployment/app.py` to prevent `StreamlitSecretNotFoundError` when `.streamlit/secrets.toml` is absent, added `@st.cache_resource` opener recovery across WebSocket reconnects, and preserved local SFE governance overrides (`pims_sfe_inst_overrides_v3`) across background auto-sync cycles.
-
----
-
-## [v.0.8.1] - 2026-10-28
-
-### ✨ Minimalist SFE Institution Approval UI & Unified Row Actions Popover
-- **Minimalist Workbench Header & KPI Cards**:
-  - Removed the header subtitle text, header decorative icon, and KPI card icons in `#tab-institutions` (`docs/territory_reconfiguration_portal.html`) for a clean, minimalist layout matching the rest of the Territory Reconfiguration Portal.
-  - Removed decorative emoji icons from table badges (`Government`, `Private`, `MedRep Certified`, `Standard Record`, `Pending SFE`, `Pending DSM`, `Approved`, `Rejected`).
-- **Unified `Actions v` Row Dropdown Menu (Matching Reconfiguration Editor)**:
-  - Replaced the multi-button action cell in the Institution Approvals table with the unified **`Actions ⌄`** trigger button (`.btn-grid-action-trigger`) and dark floating `#instRowActionsMenu` popover (`Approve Facility` / `Route to DSM Approval`, `Normalize & Standardize`, `Remap Duplicate`, `Reject Proposal`, and `Audit Trail`).
-- **Zero-Touch Automatic Background Sync**:
-  - Removed the manual `Sync Live from ERPNext` button and offline fallback toast; the Web App now automatically and silently syncs in the background every 15 seconds across both Streamlit Cloud and Local Desktop environments whenever a MedRep submits or resubmits an institution from the HCP Mobile App.
-
----
-
-## [v.0.8.0] - 2026-10-28
+### 📋 DPA of 2012 Compliant Consent Naming via Employee `Company *` & `Branch` Lookup
+- **Employee `Company *` + `Branch` Consent Entity Formatting (`LocationResolver.resolveConsentCompanyDetails`)**:
+  - Updated `ApiService.fetchEmployeeDesignation()` to fetch and cache the mandatory `company` (`Company *`) field alongside `branch` and `department` from the ERPNext `Employee` DocType.
+  - Updated the Step 1 Privacy Notice and Consent Form (`HcpWizardScreen._getConsentCompanyDetails()` and `SubmissionHistoryScreen`) to format the organization & program identity as **`<Company *> <Branch Acronym>`** (approved by the Compliance Department in accordance with the Data Privacy Act of 2012) instead of `<Company Acronym> <Full Program Name>`:
+    - e.g., **`Professional Insights Marketing Services RTMD`** (instead of `PMII RiteMed`).
+    - e.g., **`Professional Marketing Insights Inc. TPPI - Pedia`** (for `Employee` records under `Company: Professional Marketing Insights Inc.` and `Branch: TPPI - Pedia`).
+    - e.g., **`Professional Marketing Insights Inc. ADC-Detailing`**, **`Professional Marketing Insights Inc. BCH`**, **`Pharmline Medforce Inc. FONTERRA ANMUM`**, **`Pharmline Medforce Inc. GSK HCP`**, and **`Pharmline Medforce Inc. COREnergy`**.
 
 ### 🏥 SFE Institution Approval & Masterlist Governance Workbench in Territory Reconfiguration Web App
 - **Dedicated SFE Web Institution Approval Workbench (`#tab-institutions`)**:
-  - Embedded the complete SFE Institution Approval, Normalization, Duplicate Remapping, and Rejection Workbench directly inside the **Territory Reconfiguration Web App** (`docs/territory_reconfiguration_portal.html`, `installers/Territory_Reconfiguration_App/`, and `installers/Streamlit_Deployment/app.py`) so SFE Specialists can govern all MedRep-discovered institutions from their desktop/laptop without requiring a tablet/iPad.
-  - Added 5 interactive KPI cards (`Pending SFE Review`, `Pending DSM Approval`, `Approved Masterlist`, `Rejected Proposals`, `MedRep Certified`), status filter pills, ownership/type filters, multi-field search, and CSV export.
-  - Built 4 governance modals: **Normalize & Standardize Modal** (Proper Case formatter, `Government`/`Private` ownership, `Hospital`/`Clinic` type, dynamic service capabilities, 60-second concurrency edit lease, and cascading 1,772-row official PSGC Region -> Province -> City/Municipality dropdowns), **Reject Institution Modal** (mandatory reason + preset chips), **Remap Duplicate Modal** (searchable canonical `Approved` `INST-XXXXX` picker), and **Audit Trail Modal**.
+  - Embedded the complete SFE Institution Approval, Normalization, Duplicate Remapping, and Rejection Workbench directly inside the **Territory Reconfiguration Web App** (`docs/territory_reconfiguration_portal.html`, `installers/Territory_Reconfiguration_App/`, and `installers/Streamlit_Deployment/app.py`) with 1,328 pre-hydrated baseline `Institution` records (`INST-00001` through `INST-09341`).
+  - Simplified header to **`Institution Approval`**, unified navigation into the **5 KPI Windows** (`Institution Directory`, `Pending DSM Approval`, `Approved Masterlist`, `Rejected Proposals`, `MedRep Certified`) with theme-matched hover and active borderlines, aligned directory status badges to **`Draft`** matching the ERPNext `Institution` DocType, and unified row actions under the **`Actions ⌄`** dropdown popover.
+  - Built 4 governance modals: **Normalize & Standardize Modal** (Proper Case formatter, `Government`/`Private` ownership, `Hospital`/`Clinic` type, dynamic service capabilities, and cascading 1,772-row official PSGC Region -> Province -> City/Municipality dropdowns), **Reject Institution Modal**, **Remap Duplicate Modal**, and **Audit Trail Modal**.
 - **Seamless Real-Time Bidirectional Sync Between HCP Mobile App & Web Portal**:
-  - Upgraded `ApiService.fetchInstitutions()`, `proposeNewInstitution()`, and `resubmitRejectedInstitution()` in `lib/services/api_service.dart` with schema-resilient `fields=["*"]` queries and `<!--PIMS_META:{...}-->` Frappe `Comment` envelope hydration so 100% of governance attributes sync across Mobile and Web regardless of custom ERPNext column state.
-  - Added 15-second background auto-sync timers to `InstitutionDirectoryScreen` and `InstitutionApprovalsScreen` on the Mobile App and `initSfeInstitutionWorkbench()` on the Web App.
-  - Aligned the Mobile App exclusively for MedRep Institution Discovery, Accuracy Certification, Status Tracking, and Resubmission (up to 2 attempts), while moving SFE Institution Approval & Normalization exclusively to the Territory Reconfiguration Web App.
+  - Upgraded `ApiService.fetchInstitutions()`, `proposeNewInstitution()`, and `resubmitRejectedInstitution()` in `lib/services/api_service.dart` with schema-resilient queries, `<!--PIMS_META:{...}-->` Frappe `Comment` envelope hydration, and 15-second background auto-sync timers across Mobile and Web.
 
 ---
 

@@ -1,14 +1,14 @@
 {
   "version": "v.0.8.0",
   "build_number": 51,
-  "release_date": "2026-10-28",
+  "release_date": "2026-10-30",
   "apk_file": "HCP_Profiling_V.0.8.0.apk",
   "web_installer_exe": "Territory_Reconfiguration_Setup.exe",
   "web_installer_zip": "Territory_Reconfiguration_Setup.zip",
   "highlights": [
-    "Embedded SFE Institution Approval, Normalization, Duplicate Remapping & Rejection Workbench into Territory Reconfiguration Web App (#tab-institutions)",
-    "Cascading 1,772-row official Philippine PSGC Region -> Province -> City/Municipality standardization in Web App",
-    "Real-time 15-second bidirectional sync between MedRep HCP Mobile App and SFE Territory Reconfiguration Web App via ERPNext v15 + PIMS_META Comment hydration",
-    "Aligned Mobile App exclusively for MedRep Institution Proposal, Certification & Resubmission while SFE governs approvals on Desktop/Laptop Web App"
+    "DPA of 2012 Compliant Consent Naming using Employee Company * + Branch acronym (e.g., Professional Insights Marketing Services RTMD, Professional Marketing Insights Inc. TPPI - Pedia)",
+    "SFE Institution Approval Workbench in Territory Reconfiguration Web App with 5 color-matched KPI navigation windows, Institution Directory (Draft) alignment, and unified Actions v menu",
+    "Embedded 1,328-record baseline Institution masterlist and 1,772-row cascading PSGC Region -> Province -> City/Municipality standardization",
+    "Real-time 15-second bidirectional sync between MedRep HCP Mobile App and SFE Territory Reconfiguration Web App"
   ]
 }

@@ -1,0 +1,18 @@
+{
+  "version": "v.0.7.2",
+  "build_number": 50,
+  "release_date": "October 27, 2026",
+  "apk_filename": "HCP_Profiling_V.0.7.2.apk",
+  "apk_size_bytes": 61306428,
+  "size_bytes": 61306428,
+  "size_mb": "58.47 MB",
+  "sha256": "187d5afe96a618124fbfc4d86764ac534654804f494899f5766bd51d256777e2",
+  "features": [
+    "Removed unused Self-Service QR prototype (lib/screens/self_service_qr_screen.dart) and its orphaned caller (lib/screens/doctor_profile_screen.dart)",
+    "Removed all separate MCP COREnergy App files (lib/main_corenergy.dart, lib/models/corenergy_engage.dart, lib/models/engagement.dart, lib/screens/corenergy_engage_detail_screen.dart, lib/screens/detail_screen.dart, lib/screens/list_screen.dart, lib/services/db_helper.dart)",
+    "Pruned all COREnergyEngage and Successful COREnergy Engagement methods from lib/services/api_service.dart, lib/screens/login_screen.dart, and lib/app_config.dart",
+    "Retained all 6 Enterprise Security Enhancements (SEC-01 through SEC-08) and O(1) instant directory search optimizations"
+  ],
+  "apk_sha256": "187d5afe96a618124fbfc4d86764ac534654804f494899f5766bd51d256777e2",
+  "status": "Active Official Release"
+}

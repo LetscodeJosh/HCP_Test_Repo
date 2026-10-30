@@ -57,6 +57,7 @@ class ApiService extends ChangeNotifier {
   String get userDesignation => _userDesignation;
   String? employeeId;
   String? employeeReportsTo;
+  String? employeeCompany;
   String? employeeDepartment;
   String? employeeBranch;
 
@@ -625,7 +626,7 @@ class ApiService extends ChangeNotifier {
     // 1. Query Employee by user_id
     try {
       final empUrl = Uri.parse(
-        '$baseUrl/api/resource/Employee?filters=[["user_id","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","department","branch","reports_to"]&limit=1',
+        '$baseUrl/api/resource/Employee?filters=[["user_id","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","company","department","branch","reports_to"]&limit=1',
       );
       final empResp = await http.get(empUrl, headers: _headers);
       if (empResp.statusCode == 200) {
@@ -644,7 +645,7 @@ class ApiService extends ChangeNotifier {
     // 2. Query Employee by company_email
     try {
       final empUrl = Uri.parse(
-        '$baseUrl/api/resource/Employee?filters=[["company_email","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","department","branch","reports_to"]&limit=1',
+        '$baseUrl/api/resource/Employee?filters=[["company_email","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","company","department","branch","reports_to"]&limit=1',
       );
       final empResp = await http.get(empUrl, headers: _headers);
       if (empResp.statusCode == 200) {
@@ -663,7 +664,7 @@ class ApiService extends ChangeNotifier {
     // 3. Query Employee by personal_email
     try {
       final empUrl = Uri.parse(
-        '$baseUrl/api/resource/Employee?filters=[["personal_email","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","department","branch","reports_to"]&limit=1',
+        '$baseUrl/api/resource/Employee?filters=[["personal_email","=","$userEmail"]]&fields=["name","employee_name","first_name","middle_name","last_name","designation","user_id","company_email","personal_email","company","department","branch","reports_to"]&limit=1',
       );
       final empResp = await http.get(empUrl, headers: _headers);
       if (empResp.statusCode == 200) {
@@ -682,7 +683,7 @@ class ApiService extends ChangeNotifier {
     // 4. Whitelisted client RPC method fallback
     try {
       final clientUrl = Uri.parse(
-        '$baseUrl/api/method/frappe.client.get_list?doctype=Employee&filters=[["user_id","=","$userEmail"]]&fields=["name","employee_name","first_name","last_name","designation","user_id","company_email","department","branch","reports_to"]&limit_page_length=1',
+        '$baseUrl/api/method/frappe.client.get_list?doctype=Employee&filters=[["user_id","=","$userEmail"]]&fields=["name","employee_name","first_name","last_name","designation","user_id","company_email","company","department","branch","reports_to"]&limit_page_length=1',
       );
       final clientResp = await http.get(clientUrl, headers: _headers);
       if (clientResp.statusCode == 200) {
@@ -711,6 +712,19 @@ class ApiService extends ChangeNotifier {
 
   Future<void> fetchLoggedInUserInfo() async {
     if (_isOffline || _sessionCookie == null) {
+      if (employeeCompany == null || employeeBranch == null) {
+        final cachedEmp = await _readFromCache('employee_profile_cache.json');
+        if (cachedEmp != null) {
+          try {
+            final empMap = jsonDecode(cachedEmp) as Map<String, dynamic>;
+            employeeId ??= empMap['name']?.toString();
+            employeeReportsTo ??= empMap['reports_to']?.toString();
+            employeeCompany ??= empMap['company']?.toString();
+            employeeDepartment ??= empMap['department']?.toString();
+            employeeBranch ??= empMap['branch']?.toString();
+          } catch (_) {}
+        }
+      }
       _applyPositionFromRoleProfile(
         roleProfile: _userRoleProfile,
         roleNames: [],
@@ -845,6 +859,7 @@ class ApiService extends ChangeNotifier {
           if (empData != null) {
             employeeId = empData['name']?.toString();
             employeeReportsTo = empData['reports_to']?.toString();
+            employeeCompany = empData['company']?.toString();
             employeeDepartment = empData['department']?.toString();
             employeeBranch = empData['branch']?.toString();
             if (empData['employee_name'] != null && empData['employee_name'].toString().trim().isNotEmpty) {
@@ -1073,6 +1088,7 @@ class ApiService extends ChangeNotifier {
     _userDesignation = '';
     employeeId = null;
     employeeReportsTo = null;
+    employeeCompany = null;
     employeeDepartment = null;
     employeeBranch = null;
     _userPosition = UserPosition.medRep;

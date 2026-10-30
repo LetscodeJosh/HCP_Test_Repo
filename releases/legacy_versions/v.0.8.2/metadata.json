@@ -1,6 +1,0 @@
-{
-  "version": "v.0.8.2",
-  "build_number": 53,
-  "release_date": "2026-10-28",
-  "summary": "Zero-Blank-Data Guarantee (1,328 embedded baseline institutions), Draft -> Pending SFE Review state mapping fix, cascading PSGC 1,655-city lookup fix, exact ERPNext Institution column alignment, and resilient Streamlit background auto-sync."
-}

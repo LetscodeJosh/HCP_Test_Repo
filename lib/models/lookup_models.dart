@@ -3908,4 +3908,321 @@ class LocationResolver {
 
     return a.contains(b) || b.contains(a);
   }
+
+  /// Normalize an ERPNext Company name or acronym to the official full Company * name.
+  static String normalizeCompanyFullName(String? rawCompany) {
+    if (rawCompany == null) return '';
+    final trimmed = rawCompany.trim();
+    if (trimmed.isEmpty || trimmed.toLowerCase() == 'none' || trimmed.toLowerCase() == 'null') {
+      return '';
+    }
+    final upper = trimmed.toUpperCase();
+    if (upper == 'PIMS' || upper.contains('PROFESSIONAL INSIGHTS MARKETING SERVICES')) {
+      return 'Professional Insights Marketing Services';
+    }
+    if (upper == 'PMII' || upper.contains('PROFESSIONAL MARKETING INSIGHTS')) {
+      return 'Professional Marketing Insights Inc.';
+    }
+    if (upper == 'PMI' || upper.contains('PHARMLINE MEDFORCE')) {
+      return 'Pharmline Medforce Inc.';
+    }
+    return trimmed;
+  }
+
+  /// Check whether an Employee branch string is an administrative/corporate unit rather than a field program branch.
+  static bool _isAdminOrCorporateBranch(String? rawBranch) {
+    if (rawBranch == null) return true;
+    final u = rawBranch.trim().toUpperCase();
+    if (u.isEmpty || u == 'NONE' || u == 'NULL' || u == 'ALL') return true;
+    const adminBranches = {
+      'PIMS-ADMIN',
+      'PMII-ADMIN',
+      'PMI-ADMIN',
+      'HUMAN RESOURCE',
+      'FINANCE',
+      'COMPLIANCE',
+      'GENERAL SERVICES',
+      'WAREHOUSE',
+      'LEARNING & DEVELOPMENT',
+      'CORPORATE INNOVATION GROUP',
+      'INTERN',
+    };
+    if (adminBranches.contains(u)) return true;
+    if (u.startsWith('SFE -') || u.endsWith('-ADMIN')) return true;
+    return false;
+  }
+
+  /// Resolve a program or branch string to its official ERPNext Employee (Company *, Branch) pair
+  /// approved by the Compliance Department in accordance with the Data Privacy Act of 2012.
+  /// Target format: "<Company *> <Branch Acronym>"
+  /// Examples:
+  ///   - RiteMed -> "Professional Insights Marketing Services RTMD"
+  ///   - Taisho Pedia -> "Professional Marketing Insights Inc. TPPI - Pedia"
+  static Map<String, String> _resolveProgramToCompanyAndBranch(String? rawProgramOrBranch) {
+    final trimmed = (rawProgramOrBranch ?? '').trim();
+    final lower = trimmed.toLowerCase();
+
+    if (lower.contains('ritemed') || lower == 'rtmd' || lower.startsWith('rtmd')) {
+      final branch = lower.contains('dental') ? 'RITEMED DENTAL' : 'RTMD';
+      return {
+        'company': 'Professional Insights Marketing Services',
+        'branch': branch,
+      };
+    }
+    if (lower.contains('taisho') || lower.contains('tppi')) {
+      String branch = 'TPPI - PCT';
+      if (lower.contains('pedia')) {
+        branch = 'TPPI - Pedia';
+      } else if (lower.contains('mdr')) {
+        branch = 'TPPI - MDR';
+      } else if (lower.contains('merchandising') || lower.contains('tmp')) {
+        branch = 'TPPI - TMP';
+      } else if (lower.contains('pct') || lower.contains('primary') || lower.contains('adult')) {
+        branch = 'TPPI - PCT';
+      }
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': branch,
+      };
+    }
+    if (lower.contains('abbott') || lower == 'adc' || lower.startsWith('adc')) {
+      String branch = 'ADC-Detailing';
+      if (lower.contains('group start')) {
+        branch = 'ADC-Group Start';
+      } else if (lower.contains('nutrition')) {
+        branch = 'Abbott Nutrition Detailing Program';
+      } else if (lower.contains('ensure coordinator')) {
+        branch = 'Abbott Ensure Coordinator';
+      } else if (lower.contains('ensure in-clinic')) {
+        branch = 'Abbott Ensure In-clinic';
+      }
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': branch,
+      };
+    }
+    if (lower.contains('bayer') || lower == 'bch' || lower.startsWith('bch')) {
+      String branch = 'BCH';
+      if (lower.contains('free clinician') || lower.contains('fcp')) {
+        branch = 'Bayer Free Clinician Program';
+      } else if (lower.contains('pharma')) {
+        branch = 'Bayer Pharma';
+      }
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': branch,
+      };
+    }
+    if (lower.contains('fonterra') || lower.contains('anmum') || lower.contains('anlene') || lower.contains('hcap') || lower.startsWith('fon ')) {
+      String branch = 'FONTERRA ANMUM';
+      if (lower.contains('anlene')) {
+        branch = lower.contains('activation') ? 'FON Anlene Activation' : 'FONTERRA ANLENE';
+      }
+      return {
+        'company': 'Pharmline Medforce Inc.',
+        'branch': branch,
+      };
+    }
+    if (lower.contains('gsk')) {
+      final branch = lower.contains('cme') ? 'GSK CME' : 'GSK HCP';
+      return {
+        'company': 'Pharmline Medforce Inc.',
+        'branch': branch,
+      };
+    }
+    if (lower.contains('corenergy') || lower.contains('cor energy')) {
+      return {
+        'company': 'Pharmline Medforce Inc.',
+        'branch': 'COREnergy',
+      };
+    }
+    if (lower.contains('vivaro') || lower == 'vhsi') {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'VIVARO',
+      };
+    }
+    if (lower.contains('biomerieux')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'BIOMERIEUX',
+      };
+    }
+    if (lower.contains('pascual')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'Pascual Dental Program',
+      };
+    }
+    if (lower.contains('exeltis')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'Exeltis (Philippines)',
+      };
+    }
+    if (lower.contains('galderma')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'GALDERMA',
+      };
+    }
+    if (lower.contains('sanofi') || lower == 'san-ope') {
+      String branch = 'San-Ope';
+      if (lower.contains('gem')) {
+        branch = 'SANOFI GEM';
+      } else if (lower.contains('fc') || lower.contains('free clinician')) {
+        branch = 'SANOFI FC';
+      }
+      return {
+        'company': 'Professional Insights Marketing Services',
+        'branch': branch,
+      };
+    }
+    if (lower.contains('kenvue')) {
+      return {
+        'company': 'Professional Insights Marketing Services',
+        'branch': 'KENVUE',
+      };
+    }
+    if (lower.contains('aepd') || lower.contains('epd abbott')) {
+      return {
+        'company': 'Pharmline Medforce Inc.',
+        'branch': 'AEPD',
+      };
+    }
+    if (lower.contains('pbeat')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'PBEAT',
+      };
+    }
+    if (lower.contains('asap')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'ASAP',
+      };
+    }
+    if (lower.contains('i-care') || lower.contains('in-clinic activation')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'i-CARE',
+      };
+    }
+    if (lower.contains('i-grow') || lower.contains('igrow') || lower.contains('pediasure')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'I-Grow',
+      };
+    }
+    if (lower.contains('gena')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'GENA',
+      };
+    }
+    if (lower.contains('pedia complement') || lower.contains('pediatric complement')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'Pedia Complement',
+      };
+    }
+    if (lower == 'nes' || lower.startsWith('nes ')) {
+      return {
+        'company': 'Professional Insights Marketing Services',
+        'branch': 'NES',
+      };
+    }
+    if (lower.contains('nurturemed')) {
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': 'Nurturemed',
+      };
+    }
+    if (lower.contains('pharmabest')) {
+      return {
+        'company': 'Professional Insights Marketing Services',
+        'branch': 'Pharmabest',
+      };
+    }
+
+    if (trimmed.isNotEmpty && trimmed.toLowerCase() != 'all') {
+      final cleaned = trimmed.replaceFirst(RegExp(r'^(PMII|PIMS|PMI)\s+', caseSensitive: false), '').trim();
+      return {
+        'company': 'Professional Marketing Insights Inc.',
+        'branch': cleaned,
+      };
+    }
+
+    return {
+      'company': 'Professional Insights Marketing Services',
+      'branch': '',
+    };
+  }
+
+  /// Resolve DPA of 2012 Compliant Consent Entity Name based on the logged-in Employee's
+  /// mandatory "Company *" field and "Branch" field (or active program selection).
+  /// Format: "<Company *> <Branch>" (e.g., "Professional Insights Marketing Services RTMD",
+  /// "Professional Marketing Insights Inc. TPPI - Pedia").
+  static Map<String, String> resolveConsentCompanyDetails({
+    String? activeProgram,
+    String? employeeCompany,
+    String? employeeBranch,
+    String? employeeDepartment,
+  }) {
+    const privacyUrl = 'http://pims-marketing.com/privacy';
+    final cleanProg = (activeProgram != null && activeProgram.trim().toLowerCase() != 'all')
+        ? activeProgram.trim()
+        : '';
+    final empComp = normalizeCompanyFullName(employeeCompany);
+    final empBr = (employeeBranch ?? '').trim();
+    final empDept = (employeeDepartment ?? '').trim();
+    final hasProgramBranchOnEmp = !_isAdminOrCorporateBranch(empBr);
+
+    final bool empMatchesActiveProgram = cleanProg.isEmpty ||
+        (hasProgramBranchOnEmp && isSameProgram(cleanProg, empBr)) ||
+        (empDept.isNotEmpty && isSameProgram(cleanProg, empDept));
+
+    String resolvedCompany = '';
+    String resolvedBranch = '';
+
+    if (empMatchesActiveProgram && (empComp.isNotEmpty || hasProgramBranchOnEmp)) {
+      final lookupSource = hasProgramBranchOnEmp
+          ? empBr
+          : (cleanProg.isNotEmpty ? cleanProg : empDept);
+      final mapped = _resolveProgramToCompanyAndBranch(lookupSource);
+
+      resolvedCompany = empComp.isNotEmpty ? empComp : (mapped['company'] ?? 'Professional Insights Marketing Services');
+
+      if (hasProgramBranchOnEmp) {
+        final mappedFromBr = _resolveProgramToCompanyAndBranch(empBr);
+        resolvedBranch = (mappedFromBr['branch'] != null && mappedFromBr['branch']!.isNotEmpty)
+            ? mappedFromBr['branch']!
+            : empBr;
+      } else {
+        resolvedBranch = mapped['branch'] ?? '';
+      }
+    } else if (cleanProg.isNotEmpty) {
+      final mapped = _resolveProgramToCompanyAndBranch(cleanProg);
+      resolvedCompany = mapped['company'] ?? 'Professional Marketing Insights Inc.';
+      resolvedBranch = mapped['branch'] ?? cleanProg;
+    } else if (empComp.isNotEmpty) {
+      resolvedCompany = empComp;
+      resolvedBranch = hasProgramBranchOnEmp ? empBr : '';
+    } else {
+      resolvedCompany = 'Professional Insights Marketing Services';
+      resolvedBranch = '';
+    }
+
+    final combinedLabel = resolvedBranch.isNotEmpty
+        ? '$resolvedCompany $resolvedBranch'.trim()
+        : resolvedCompany.trim();
+
+    return {
+      'company': resolvedCompany,
+      'branch': resolvedBranch,
+      'fullName': combinedLabel,
+      'shortName': combinedLabel,
+      'privacyUrl': privacyUrl,
+    };
+  }
 }

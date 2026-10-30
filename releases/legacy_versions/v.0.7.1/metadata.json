@@ -1,0 +1,21 @@
+{
+  "version": "v.0.7.1",
+  "build_number": 49,
+  "release_date": "October 27, 2026",
+  "apk_filename": "HCP_Profiling_V.0.7.1.apk",
+  "apk_size_bytes": 61978750,
+  "size_bytes": 61978750,
+  "size_mb": "59.11 MB",
+  "sha256": "ad223fb045420910cd506d642fde152c2d0a1827c8ebce42d74898c3ab08e536",
+  "features": [
+    "SEC-01: Disabled UIFileSharingEnabled and LSSupportsOpeningDocumentsInPlace in iOS Info.plist and migrated local JSON caches to ApplicationSupportDirectory with seamless fallback migration",
+    "SEC-02: Server-side session revocation (/api/method/logout), local TerritoryWebServer shutdown, in-memory cache teardown on logout, and cross-user cache isolation on user switch",
+    "SEC-03: Removed hardcoded pims@admin service account fallback password in Streamlit and desktop web portal servers",
+    "SEC-04: Zero-dependency on-device ISO/IEC 18004 QR Code encoder & CustomPainter (LocalQrCodeWidget) eliminating third-party api.qrserver.com calls, plus strict CORS and HttpOnly cookie hardening on TerritoryWebServer",
+    "SEC-05 & SEC-06: Strict RBAC guard on toggleSfeMode(), removal of unused setUserPosition(), and removal of broad email substring Admin escalation",
+    "SEC-07: Comprehensive AppLogger redaction for JSON credentials, sid cookies, and Bearer headers, with zero raw print() calls across lib/",
+    "Ultra-Smooth O(1) Directory Search Optimization in DoctorAccountScreen (_doctorsById map lookup) and pre-tokenized fast filtering in DoctorMasterlistScreen"
+  ],
+  "apk_sha256": "ad223fb045420910cd506d642fde152c2d0a1827c8ebce42d74898c3ab08e536",
+  "status": "Active Official Release"
+}
